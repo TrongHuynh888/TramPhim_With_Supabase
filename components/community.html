@@ -1,0 +1,310 @@
+<section class="page container" id="communityPage">
+  <div class="community-wrapper">
+      
+      <!-- CỘT 1: NAV SIDEBAR (Luôn hiển thị) -->
+      <aside class="comm-left-sidebar">
+          <a class="comm-nav-item active" onclick="switchCommView('feed')">
+              <i class="fas fa-home"></i>
+              <span>Trang chủ</span>
+          </a>
+          <a class="comm-nav-item" onclick="switchCommView('chat')">
+              <i class="fas fa-comment-dots"></i>
+              <span>CineChat</span>
+          </a>
+          <a class="comm-nav-item" onclick="switchCommView('friends')">
+              <i class="fas fa-user-friends"></i>
+              <span>Bạn bè</span>
+          </a>
+          <a class="comm-nav-item" onclick="switchCommView('profile')">
+              <i class="fas fa-user-circle"></i>
+              <span>Trang cá nhân</span>
+          </a>
+
+          <h4 class="comm-section-title">Xu hướng</h4>
+          <div class="comm-tags-list">
+              <span class="comm-tag">#Reviews</span>
+              <span class="comm-tag">#WatchParty</span>
+              <span class="comm-tag">#Marvel</span>
+              <span class="comm-tag">#TìmPhim</span>
+          </div>
+      </aside>
+
+      <!-- VÙNG NỘI DUNG CHÍNH (Thay đổi theo View) -->
+      <div class="comm-content-area">
+          
+          <!-- LAYOUT: TRANG CHỦ (FEED) -->
+          <div class="comm-layout-view" id="commFeedView" style="display: grid;">
+              <!-- CỘT 2: MAIN FEED -->
+              <main class="comm-main-feed">
+                  <!-- Banner / Tabs -->
+                  <div class="comm-feed-tabs">
+                      <button class="comm-tab active">Tất cả bài viết</button>
+                      <button class="comm-tab">Đang theo dõi</button>
+                      <button class="comm-tab">Thịnh hành</button>
+                  </div>
+
+                  <!-- Composer (Khung đăng trạng thái) -->
+                  <div class="comm-composer">
+                      <div class="comm-composer-top">
+                          <img src="https://ui-avatars.com/api/?name=Guest" id="commUserAvatar" class="comm-composer-avatar" alt="User" onclick="renderMyProfile()" style="cursor: pointer;">
+                          <textarea id="commPostContent" class="comm-composer-input" placeholder="Bạn đang xem bộ phim nào? Hãy chia sẻ cảm nghĩ..."></textarea>
+                      </div>
+                      <div class="comm-composer-bottom">
+                          <div class="comm-composer-actions">
+                              <button class="comm-action-btn" title="Thêm ảnh"><i class="fas fa-image"></i></button>
+                              <button class="comm-action-btn" title="Gắn thẻ thẻ phim"><i class="fas fa-film"></i></button>
+                              <button class="comm-action-btn" title="Hashtag"><i class="fas fa-hashtag"></i></button>
+                          </div>
+                          <button class="comm-btn-post" onclick="submitPost()">Đăng bài</button>
+                      </div>
+                  </div>
+
+                  <!-- Nơi render Feed -->
+                  <div id="commFeedContainer">
+                      <!-- Placeholder Loading -->
+                      <div style="text-align: center; color: var(--text-muted); padding: 40px;">
+                          <div class="loading-spinner"></div>
+                          <p>Đang tải bảng tin...</p>
+                      </div>
+                  </div>
+              </main>
+
+              <!-- CỘT 3: RIGHT SIDEBAR -->
+              <aside class="comm-right-sidebar">
+                  <div class="comm-widget">
+                      <div class="comm-chat-header" style="padding: 0; margin-bottom: 15px; border-bottom: none;">
+                          <input type="text" class="comm-chat-search" id="commSearchUserInput" placeholder="Tìm người dùng qua tên..." onkeyup="searchCommunityUsers(event)">
+                      </div>
+                      <div class="comm-user-list" id="commSearchResults" style="display: none; margin-bottom: 15px;">
+                          <!-- Kết quả tìm kiếm sẽ hiển thị ở đây -->
+                      </div>
+                  </div>
+
+                  <div class="comm-widget">
+                      <h3>Lời mời kết bạn</h3>
+                      <div class="comm-user-list" id="commFriendRequests">
+                          <p class="text-muted" style="font-size: 0.85rem" style="text-align: center;">Chưa có lời mời nào</p>
+                      </div>
+                  </div>
+
+                  <div class="comm-widget">
+                      <h3>Gợi ý kết bạn</h3>
+                      <div class="comm-user-list" id="commSuggestedFriends">
+                          <p class="text-muted" style="font-size: 0.85rem">Đang tải...</p>
+                      </div>
+                  </div>
+
+                  <div class="comm-widget">
+                      <h3>Phim đang hot</h3>
+                      <div class="comm-user-list" id="commTrendingMovies">
+                      </div>
+                  </div>
+              </aside>
+          </div>
+
+          <!-- LAYOUT: CINE CHAT -->
+          <div class="comm-layout-view comm-chat-layout" id="commChatView" style="display: none;">
+              <!-- Sidebar list chat -->
+              <aside class="comm-chat-sidebar">
+                  <div class="comm-chat-header">
+                      <h2>CineChat</h2>
+                      <input type="text" class="comm-chat-search" placeholder="Tìm kiếm bạn bè...">
+                  </div>
+                  <div class="comm-chat-list" id="commChatList">
+                      <!-- Render tin nhắn -->
+                  </div>
+              </aside>
+
+              <!-- Box Chat chính -->
+              <main class="comm-chat-box">
+                  <!-- Màn hình chào mừng khi chưa chọn chat -->
+                  <div id="commChatWelcome" class="comm-chat-welcome">
+                      <div class="comm-welcome-content">
+                          <img src="images/cinechat_welcome.png" alt="CineChat Welcome" class="comm-welcome-img">
+                          <h3>Chào mừng tới CineChat!</h3>
+                          <p>Hãy chọn một người bạn từ danh sách bên trái hoặc sử dụng ô tìm kiếm để bắt đầu cuộc trò chuyện.</p>
+                          <div class="comm-welcome-stats">
+                              <span><i class="fas fa-film"></i> Chia sẻ phim hay</span>
+                              <span><i class="fas fa-comments"></i> Thảo luận sôi nổi</span>
+                              <span><i class="fas fa-users"></i> Kết nối đam mê</span>
+                          </div>
+                      </div>
+                  </div>
+
+                  <!-- Nội dung chat (Sẽ ẩn mặc định khi chưa chọn chat) -->
+                  <div id="commChatContent" style="display: none; flex-direction: column; height: 100%;">
+                      <div class="comm-chat-box-header" id="chatBoxHeader">
+                          <div class="comm-chat-box-info">
+                              <img src="https://via.placeholder.com/40" id="commChatTargetAvatar" alt="">
+                              <div>
+                                  <div class="comm-chat-box-name" id="commChatTargetName">Chọn người chat</div>
+                                  <div class="comm-chat-box-status"></div>
+                              </div>
+                          </div>
+                          <div class="comm-chat-actions">
+                              <button title="Gọi thoại" onclick="startCall(false)"><i class="fas fa-phone-alt"></i></button>
+                              <button title="Gọi video" onclick="startCall(true)"><i class="fas fa-video"></i></button>
+                              <button title="Thông tin"><i class="fas fa-info-circle"></i></button>
+                          </div>
+                      </div>
+
+                      <div class="comm-chat-messages" id="commChatMessages">
+                          <!-- Tin nhắn sẽ load ở đây -->
+                      </div>
+
+                      <div class="comm-chat-input-area">
+                          <button class="comm-action-btn"><i class="fas fa-paperclip"></i></button>
+                          <input type="text" id="commChatInputMessage" placeholder="Nhập tin nhắn...">
+                          <button class="comm-btn-send" onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
+                      </div>
+                  </div>
+              </main>
+
+              <!-- Info Sidebar -->
+              <aside class="comm-chat-sidebar comm-chat-info-sidebar" style="padding: 20px;">
+                  <h3 style="font-size: 1rem; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Phim đang quan tâm</h3>
+                  <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                      <img src="https://placehold.co/80x120" style="border-radius: 8px; width: 60px;">
+                      <div>
+                          <h4 style="font-size: 0.9rem; font-weight: 600;">Dune: Part Two</h4>
+                          <p style="font-size: 0.75rem; color: var(--text-muted);">Khoa học viễn tưởng</p>
+                      </div>
+                  </div>
+              </aside>
+          </div>
+
+  <!-- LAYOUT: CÁ NHÂN (USER PROFILE - MOVIEBUFF CLONE) -->
+  <div class="comm-profile-layout" id="commProfileView">
+      <div class="comm-profile-header">
+          <div class="comm-profile-cover" id="commProfileCover" style="background-image: url('https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80');">
+              <div class="comm-cover-actions">
+                  <button onclick="interactProfile('cover', 'like')"><i class="far fa-heart"></i> <span id="commCoverLikes">0</span></button>
+                  <button onclick="showProfileComments('cover')"><i class="far fa-comment"></i> <span id="commCoverComments">0</span></button>
+              </div>
+          </div>
+          <div class="comm-profile-user-info">
+              <div class="comm-profile-avatar-wrapper">
+                  <img src="https://ui-avatars.com/api/?name=User" id="commProfileAvatar" class="comm-profile-avatar" alt="User Avatar">
+                  <div class="comm-avatar-actions">
+                      <button class="mini-action-btn" onclick="interactProfile('avatar', 'like')"><i class="fas fa-heart"></i> <span id="commAvatarLikes">0</span></button>
+                      <button class="mini-action-btn" onclick="showProfileComments('avatar')"><i class="fas fa-comment"></i> <span id="commAvatarComments">0</span></button>
+                  </div>
+              </div>
+              <h2 id="commProfileName">Đang tải...</h2>
+              <p id="commProfileBio" style="color: var(--text-muted); margin-top: 5px;">Người yêu điện ảnh</p>
+          </div>
+      </div>
+
+      <!-- Nút hành động (Sẽ ẩn/hiện nút phù hợp bằng JS) -->
+      <div style="display: flex; justify-content: flex-end; gap: 15px; margin-top: -30px; padding-right: 20px;" id="profileActionBtns">
+          <button id="btnEditProfile" class="comm-btn-post" style="background: rgba(255,255,255,0.1); border: 1px solid var(--border-color); color: #fff;" onclick="openEditProfileModal()"><i class="fas fa-edit"></i> Chỉnh sửa</button>
+          <button id="btnMessageUser" class="comm-btn-post" style="background: transparent; border: 1px solid var(--border-color); color: #fff;"><i class="fas fa-envelope"></i> Nhắn tin</button>
+          <button id="btnFollowUser" class="comm-btn-post"><i class="fas fa-user-plus"></i> Theo dõi</button>
+      </div>
+
+      <div class="comm-profile-stats">
+          <div class="comm-stat-box">
+              <div class="comm-stat-number" id="commStatPosts">0</div>
+              <div class="comm-stat-label">Bài viết</div>
+          </div>
+          <div class="comm-stat-box">
+              <div class="comm-stat-number" id="commStatFollowers">0</div>
+              <div class="comm-stat-label">Người theo dõi</div>
+          </div>
+          <div class="comm-stat-box">
+              <div class="comm-stat-number" id="commStatFollowing">0</div>
+              <div class="comm-stat-label">Đang theo dõi</div>
+          </div>
+      </div>
+
+      <div class="comm-profile-content">
+          <div class="comm-main-feed" id="profileFeedContainer">
+              <!-- Render bài viết của chính người này -->
+              <p class="text-center text-muted">Chưa có bài viết nào.</p>
+          </div>
+          <aside class="comm-right-sidebar">
+              <div class="comm-widget">
+                  <h3>Thành tích</h3>
+                  <div style="display: flex; gap: 10px;">
+                      <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--accent-primary); display: flex; align-items: center; justify-content: center; color: white;" title="Người mới"><i class="fas fa-star"></i></div>
+                  </div>
+              </div>
+          </aside>
+      </div>
+      </div>
+  </div>
+
+  <!-- MODAL: CHỈNH SỬA TRANG CÁ NHÂN -->
+  <div id="editProfileModal" class="comm-modal" style="display: none;">
+      <div class="comm-modal-content">
+          <div class="comm-modal-header">
+              <h3>Chỉnh sửa hồ sơ</h3>
+              <button class="comm-modal-close" onclick="closeEditProfileModal()">&times;</button>
+          </div>
+          <div class="comm-modal-body">
+              <div class="comm-form-group">
+                  <label>Tiểu sử (Bio)</label>
+                  <textarea id="editProfileBio" placeholder="Giới thiệu ngắn gọn về bản thân..."></textarea>
+              </div>
+               <div class="comm-form-group">
+                   <label>Link ảnh đại diện (Avatar URL)</label>
+                   <input type="text" id="editProfileAvatar" placeholder="https://example.com/avatar.jpg">
+               </div>
+               <div class="comm-form-group">
+                   <label>Link ảnh bìa (Cover URL)</label>
+                   <input type="text" id="editProfileCover" placeholder="https://example.com/cover.jpg">
+               </div>
+              <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 10px;">Lưu ý: Bạn có thể lấy link ảnh từ Unsplash hoặc các nguồn ảnh công khai.</p>
+          </div>
+          <div class="comm-modal-footer">
+              <button class="comm-btn-cancel" onclick="closeEditProfileModal()">Hủy</button>
+              <button class="comm-btn-save" onclick="saveProfileChanges()">Lưu thay đổi</button>
+          </div>
+          </div>
+      </div>
+  </div>
+
+  <!-- MODAL: CHỈNH SỬA BÀI VIẾT -->
+  <div id="editPostModal" class="comm-modal" style="display: none;">
+      <div class="comm-modal-content">
+          <div class="comm-modal-header">
+              <h3>Chỉnh sửa bài viết</h3>
+              <button class="comm-modal-close" onclick="closeEditPostModal()">&times;</button>
+          </div>
+          <div class="comm-modal-body">
+              <div class="comm-form-group">
+                  <label>Nội dung bài viết</label>
+                  <textarea id="editPostContent" style="min-height: 150px;"></textarea>
+              </div>
+          </div>
+          <div class="comm-modal-footer">
+              <button class="comm-btn-cancel" onclick="closeEditPostModal()">Hủy</button>
+              <button class="comm-btn-save" onclick="updatePost()">Cập nhật</button>
+          </div>
+      </div>
+  </div>
+
+  <!-- MODAL: BÌNH LUẬN TRÊN PROFILE (Avatar/Cover) -->
+  <div id="profileCommentsModal" class="comm-modal" style="display: none;">
+      <div class="comm-modal-content modal-lg">
+          <div class="comm-modal-header">
+              <h3 id="profileCommentsTitle">Bình luận</h3>
+              <button class="comm-modal-close" onclick="closeProfileComments()">&times;</button>
+          </div>
+          <div class="comm-modal-body">
+              <div id="profileCommentsList">
+                  <!-- Bình luận nạp ở đây -->
+              </div>
+              <div class="comm-comment-input-area" style="display: flex; gap: 10px;">
+                  <input type="text" id="profileCommentInput" placeholder="Viết bình luận..." style="flex: 1; background: var(--bg-primary); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 8px;">
+                  <button onclick="submitProfileComment()" class="comm-btn-save" style="padding: 10px 20px;">Gửi</button>
+              </div>
+          </div>
+      </div>
+  </div>
+
+</section>
+  </div>
+
+</section>
+</section>

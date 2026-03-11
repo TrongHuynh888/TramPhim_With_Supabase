@@ -8,9 +8,10 @@
     <link rel="stylesheet" href="css/components.css?v=18" />
     <link rel="stylesheet" href="css/layout.css?v=5" />
     <link rel="stylesheet" href="css/admin.css?v=3" />
-    <link rel="stylesheet" href="css/responsive.css?v=158" />
+    <link rel="stylesheet" href="css/responsive.css?v=159" />
     <link rel="stylesheet" href="css/detail-redesign.css?v=3" />
     <link rel="stylesheet" href="css/intro.css?v=3" />
+    <link rel="stylesheet" href="css/community.css?v=3.6" />
     
     <!-- Preload Critical Assets -->
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" as="style">
@@ -911,6 +912,52 @@
         <p>&copy; 2026 Trạm Phim. Powered by Blockchain Technology.</p>
       </div>
     </footer>
+    
+    <!-- MODAL: CUỘC GỌI ĐẾN (INCOMING CALL) -->
+    <div id="incomingCallModal" class="comm-modal incoming-call-modal" style="display: none;">
+        <div class="comm-modal-content text-center call-modal-content">
+            <div class="call-avatar-wrapper">
+                <img src="https://ui-avatars.com/api/?name=User" id="incomingCallAvatar" alt="Caller">
+                <div class="call-ring-wave"></div>
+                <div class="call-ring-wave"></div>
+            </div>
+            <h3 id="incomingCallName" style="color:white; margin-bottom:5px;">Tên người gọi</h3>
+            <p id="incomingCallDesc" class="text-muted">Đang gọi Video cho bạn...</p>
+            <div class="call-actions-group">
+                <button class="btn-call-decline" onclick="declineCall()"><i class="fas fa-phone-slash"></i> Từ chối</button>
+                <button class="btn-call-accept" onclick="acceptCall()"><i class="fas fa-phone"></i> Chấp nhận</button>
+            </div>
+        </div>
+    </div>
+  
+    <!-- CỬA SỔ PEERJS CALL (PICTURE-IN-PICTURE) -->
+    <div id="activeCallWindow" class="active-call-window" style="display: none;">
+        <div class="call-window-header" id="activeCallHeader">
+            <span id="activeCallStatus">Đang gọi...</span>
+            <button class="btn-minimize-call" onclick="toggleMinimizeCall()"><i class="fas fa-compress-alt"></i></button>
+        </div>
+        <div class="call-window-body">
+            <!-- Video hoặc Avatar sóng âm -->
+            <div class="call-video-container">
+                <video id="remoteVideo" class="call-video remote-video" autoplay playsinline></video>
+                <video id="localVideo" class="call-video local-video" autoplay playsinline muted></video>
+                
+                <!-- Placeholder khi chỉ gọi Audio hoặc khi tắt cam -->
+                <div id="audioCallPlaceholder" class="audio-call-placeholder" style="display: none;">
+                    <img src="https://ui-avatars.com/api/?name=User" id="activeCallAvatar" alt="Avatar">
+                    <div class="audio-wave-animation">
+                        <span></span><span></span><span></span><span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="call-window-controls">
+            <button id="btnToggleMic" class="call-ctrl-btn" onclick="toggleCallMic()"><i class="fas fa-microphone"></i></button>
+            <button id="btnToggleCam" class="call-ctrl-btn" onclick="toggleCallCam()"><i class="fas fa-video"></i></button>
+            <button class="call-ctrl-btn btn-end-call" onclick="endCall()"><i class="fas fa-phone-slash"></i></button>
+        </div>
+    </div>
+    
     <div id="modals-container"></div>
 
     <!-- PeerJS for WebRTC -->
@@ -927,6 +974,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/supabase-config.js?v=2"></script>
     
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="js/globals.js?v=2"></script>
     <script src="js/utils.js?v=2"></script>
     <script src="js/data.js?v=2"></script>
@@ -941,6 +989,7 @@
     <script src="js/upgrade.js?v=2"></script>
     <script src="js/intro.js?v=2"></script>
     <script src="js/watch-party.js?v=5"></script>
+    <script src="js/community.js?v=4.4"></script>
     <script src="js/series-movies.js?v=2"></script>
     <script src="js/single-movies.js?v=2"></script>
     <script src="js/banner-slider.js?v=2"></script>

@@ -276,6 +276,9 @@ function showPage(pageName, addToHistory = true) {
     page.classList.remove("active");
   });
 
+  // [FIX] Khôi phục cuộn trang (Xóa sạch các class gây khóa body từ các tính năng khác)
+  document.body.classList.remove("comm-chat-active", "watch-party-active", "has-pseudo-fullscreen", "modal-open");
+
   // 2. Hiện trang cần đến
   const targetPage = document.getElementById(`${pageName}Page`);
   if (targetPage) {

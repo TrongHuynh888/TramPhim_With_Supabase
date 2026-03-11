@@ -1943,23 +1943,75 @@ function initCustomControls(video) {
             } else if (video) {
                 video.currentTime = time;
             }
+            // Thả focus để nhường lại các phím tắt bàn phím (Space, ArrowLeft, ArrowRight) cho document
+            e.target.blur(); 
+        });
+    }
+
+    // [FIX] Sửa lỗi click mốc thời gian bị lệch: Xử lý click/touch trực tiếp trên thanh gộp
+    const progressContainer = document.getElementById("progressContainer");
+    if (progressContainer) {
+        const handleProgressSeek = (e) => {
+            // Ngăn chặn hành vi cuộn hoặc nhấp nháy trên mobile khi vuốt thanh tiến trình
+            if (e.type === 'touchstart' || e.type === 'touchmove') e.preventDefault(); 
+            
+            const rect = progressContainer.getBoundingClientRect();
+            // Xác định tọa độ X dựa trên click chuột hay touch
+            const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+            
+            // Tính chính xác vị trí click thay vì dựa vào value của thẻ input
+            let pos = (clientX - rect.left) / rect.width;
+            if (pos < 0) pos = 0;
+            if (pos > 1) pos = 1;
+            
+            const total = (currentVideoType === 'youtube' && window.ytPlayer) ? window.ytPlayer.getDuration() : video.duration;
+            if (total > 0) {
+                const time = pos * total;
+                // Cập nhật giao diện (kéo đến đâu sáng đến đó)
+                if (slider) slider.value = time;
+                document.getElementById("progressBar").style.width = `${pos * 100}%`;
+                document.getElementById("currentTime").textContent = formatTime(time);
+                
+                // Nếu là đang kéo (touchmove/input) thì tạm thời đánh dấu isDragging
+                if (e.type === 'touchmove') {
+                    isDragging = true;
+                    return; // Chưa seek vội khi đang vuốt cho mượt
+                }
+                
+                // Khi nhấc tay lên hoặc click (touchend/click) mới thực hiện Tua phim
+                isDragging = false;
+                if (currentVideoType === 'youtube' && window.ytPlayer && typeof window.ytPlayer.seekTo === 'function') {
+                    window.ytPlayer.seekTo(time, true);
+                } else if (video) {
+                    video.currentTime = time;
+                }
+            }
+        };
+
+        progressContainer.addEventListener("click", handleProgressSeek);
+        progressContainer.addEventListener("touchstart", handleProgressSeek, { passive: false });
+        progressContainer.addEventListener("touchmove", handleProgressSeek, { passive: false });
+        progressContainer.addEventListener("touchend", (e) => {
+             // Phát lại bình thường sau khi vuốt xong trên mobile
+             isDragging = false; 
         });
     }
 
     // Handle Tooltip (Hover Progress)
-    const progressContainer = document.getElementById("progressContainer");
     const tooltip = document.getElementById("progressTooltip");
-    progressContainer.addEventListener("mousemove", (e) => {
-        const rect = progressContainer.getBoundingClientRect();
-        const pos = (e.clientX - rect.left) / rect.width;
-        const time = pos * video.duration;
-        tooltip.style.left = `${e.clientX - rect.left}px`;
-        tooltip.textContent = formatTime(time);
-        tooltip.style.display = "block";
-    });
-    progressContainer.addEventListener("mouseleave", () => {
-        tooltip.style.display = "none";
-    });
+    if (progressContainer) {
+        progressContainer.addEventListener("mousemove", (e) => {
+            const rect = progressContainer.getBoundingClientRect();
+            const pos = (e.clientX - rect.left) / rect.width;
+            const time = pos * video.duration;
+            tooltip.style.left = `${e.clientX - rect.left}px`;
+            tooltip.textContent = formatTime(time);
+            tooltip.style.display = "block";
+        });
+        progressContainer.addEventListener("mouseleave", () => {
+            tooltip.style.display = "none";
+        });
+    }
 
     // Play/Pause Icon Update & Container State
     video.addEventListener("play", () => {
@@ -1993,10 +2045,17 @@ function initCustomControls(video) {
 
     // Volume Slider
     const volSlider = document.getElementById("volumeSlider");
-    volSlider.addEventListener("input", (e) => {
-        video.volume = e.target.value;
-        updateVolumeIcon(video.volume);
-    });
+    if (volSlider) {
+        volSlider.addEventListener("input", (e) => {
+            video.volume = e.target.value;
+            updateVolumeIcon(video.volume);
+        });
+        
+        // Nhả focus để trả quyền điều khiển phím tắt cho thẻ document
+        volSlider.addEventListener("change", (e) => {
+            e.target.blur();
+        });
+    }
 
     // Show/Hide Controls on Hover/Activity
     container.addEventListener("mousemove", () => {
@@ -4946,10 +5005,23 @@ window.enableMiniPlayer = function() {
     window.isMiniPlayerActive = true;
     
     // Cập nhật DOM (chuyển video sang mini player)
+    // Việc appendChild sẽ làm thẻ <video> bị ngắt quãng ngắn (mobile/safari tự động pause)
     if (isIframeVisible) {
         miniWrapper.appendChild(iframe);
     } else if (isHtml5Visible) {
         miniWrapper.appendChild(html5);
+        // [FIX] Khôi phục trạng thái phát trên Mobile/Tablet sau khi move DOM
+        if (isPlaying) {
+            setTimeout(() => {
+                const playPromise = html5.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.log("Auto-play prevented after moving to mini player on mobile:", error);
+                        if (typeof updateDetailPlayButtonState === 'function') updateDetailPlayButtonState("paused");
+                    });
+                }
+            }, 50); // Delay nhỏ để trình duyệt gắn DOM và sẵn sàng
+        }
     }
     
     // Cập nhật Title
@@ -4986,6 +5058,17 @@ window.disableMiniPlayer = function(resumeToWatchPage = false) {
     const html5 = document.getElementById("html5Player");
     const miniContainer = document.getElementById("miniPlayerContainer");
     
+    // [NEW] Kiểm tra trạng thái phát hiện tại TRƯỚC KHI chuyển DOM
+    const isIframeVisible = iframe && !iframe.classList.contains("hidden") && iframe.src;
+    const isHtml5Visible = html5 && !html5.classList.contains("hidden") && html5.src;
+    
+    let isPlaying = false;
+    if (isHtml5Visible) {
+        isPlaying = !html5.paused && !html5.ended && html5.readyState > 2;
+    } else if (isIframeVisible && window.ytPlayer && typeof window.ytPlayer.getPlayerState === 'function') {
+        isPlaying = window.ytPlayer.getPlayerState() === 1; // 1 = playing
+    }
+    
     // Trả video về vị trí cũ (ngay sau thẻ error hoặc đầu container)
     const errOverlay = document.getElementById("videoError");
     if (errOverlay && errOverlay.parentNode === videoContainer) {
@@ -4994,6 +5077,19 @@ window.disableMiniPlayer = function(resumeToWatchPage = false) {
     } else if (videoContainer) {
         if (iframe && iframe.parentNode !== videoContainer) videoContainer.appendChild(iframe);
         if (html5 && html5.parentNode !== videoContainer) videoContainer.appendChild(html5);
+    }
+    
+    // [FIX] Khôi phục trạng thái phát sau khi trả video về DOM cũ
+    if (isHtml5Visible && isPlaying) {
+        setTimeout(() => {
+            const playPromise = html5.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.log("Auto-play prevented after restoring from mini player on mobile:", error);
+                    if (typeof updateDetailPlayButtonState === 'function') updateDetailPlayButtonState("paused");
+                });
+            }
+        }, 50);
     }
     
     // Ẩn Mini Player

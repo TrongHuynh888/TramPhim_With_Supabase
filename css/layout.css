@@ -893,6 +893,10 @@
     cursor: pointer;
     z-index: 3;
     margin: 0;
+    padding: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
 }
 
 /* Tooltip */

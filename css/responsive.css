@@ -1981,14 +1981,16 @@ body[data-theme="light"] .chat-msg .author {
       background: rgba(124, 58, 237, 0.1) !important;
     }
     #chatMessages,
+    #commChatMessages,
     #memberList {
       flex: 1 !important;
       overflow-y: auto !important;
       padding: 10px !important;
       min-height: 0 !important; /* Quan trọng: cho phép co lại trong flex */
     }
-    /* Ô nhập tin nhắn - CỐ ĐỊNH DƯớI MÀN HÌNH MOBILE */
-    .chat-input-area {
+    /* Ô nhập tin nhắn - CỐ ĐỊNH DƯỚI MÀN HÌNH MOBILE */
+    .chat-input-area,
+    .comm-chat-input-area {
       position: fixed !important;
       bottom: 0 !important;
       left: 0 !important;
@@ -2179,7 +2181,8 @@ body[data-theme="light"] .chat-msg .author {
       display: flex !important;
       align-items: center !important;
     }
-    #chatMessages {
+    #chatMessages,
+    #commChatMessages {
       font-size: 11px !important;
       flex: 1 !important;
       overflow-y: auto !important;
@@ -2187,7 +2190,8 @@ body[data-theme="light"] .chat-msg .author {
     }
 
     /* Chat input - TRONG SIDEBAR, KHÔNG FIXED */
-    .chat-input-area {
+    .chat-input-area,
+    .comm-chat-input-area {
       position: static !important;
       padding: 8px !important;
       background: var(--bg-secondary) !important;
