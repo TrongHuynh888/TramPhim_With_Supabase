@@ -18,6 +18,10 @@ const IMGBB_API_KEY = '82e6c87383e2d42e3dbcb62a798eca36';
 let pendingImages = []; // Mảng chứa các đối tượng {blob, previewUrl} đang chờ gửi
 let currentLightboxImages = []; // Danh sách toàn bộ ảnh trong hội thoại hiện tại
 let currentLightboxIndex = -1;  // Index ảnh đang xem
+let currentLightboxRotation = 0; // Trạng thái xoay (độ)
+let currentLightboxZoom = 1;     // Trạng thái thu phóng
+let isDraggingLightbox = false;
+let startX, startY, scrollLeft, scrollTop;
 
 /**
  * Điều khiển Dropdown Menu Chat - ĐƯA LÊN ĐẦU ĐỂ TRÁNH REFERENCE ERROR
@@ -202,6 +206,9 @@ async function initCommunity() {
     if (typeof initEmojiPicker === 'function') {
         initEmojiPicker();
     }
+
+    // Khởi tạo tính năng kéo cho Lightbox
+    initLightBoxDrag();
 }
 
 // Global Init cho PeerJS ngay khi file script được load (Nếu đã login)
@@ -668,14 +675,19 @@ async function uploadToImgBB(blob) {
 }
 
 /**
- * Xử lý khi người dùng chọn nhiều ảnh - Hiển thị Preview Grid
+ * Xử lý khi người dùng chọn nhiều ảnh hoặc dán ảnh - Hiển thị Preview Grid
+ * @param {Event|File[]} input - Có thể là event từ input file hoặc mảng File[]
  */
-async function handleImageSelect(event) {
-    const files = Array.from(event.target.files);
-    if (files.length === 0) return;
+async function handleImageSelect(input) {
+    let files = [];
+    if (input instanceof Event) {
+        files = Array.from(input.target.files);
+        input.target.value = ''; // Reset input file
+    } else if (Array.isArray(input)) {
+        files = input;
+    }
 
-    // Hiển thị trạng thái đang xử lý
-    showNotification(`Đang xử lý ${files.length} ảnh...`, "info");
+    if (files.length === 0) return;
     
     try {
         for (const file of files) {
@@ -694,8 +706,6 @@ async function handleImageSelect(event) {
         
     } catch (error) {
         showNotification("Xử lý ảnh thất bại: " + error.message, "error");
-    } finally {
-        event.target.value = ''; // Reset input
     }
 }
 
@@ -765,7 +775,7 @@ async function confirmSendImage() {
     const total = pendingImages.length;
     let successCount = 0;
 
-    showNotification(`Đang tải lên ${total} ảnh...`, "info");
+    // showNotification(`Đang tải lên ${total} ảnh...`, "info");
 
     try {
         // Gửi tuần tự để tránh quá tải API và đảm bảo thứ tự
@@ -898,7 +908,7 @@ function parseMessageContent(content) {
     if (imageMatch) {
         const url = imageMatch[1].trim();
         return `<img src="${escapeHtml(url)}" class="comm-msg-image-content" alt="image" 
-                     style="max-width:280px; max-height:400px; border-radius:12px; display:block; cursor:pointer; object-fit: cover;" 
+                     style="max-width:220px; max-height:320px; border-radius:12px; display:block; cursor:pointer; object-fit: cover;" 
                      onclick="openImageViewer('${escapeHtml(url)}')">`;
     }
 
@@ -2190,6 +2200,7 @@ function renderMessages(messages) {
                         
                         <div class="comm-msg-dropdown" id="dropdown-msg-${msg.id}">
                             <div class="comm-dropdown-item" onclick="copyMsgText('${msg.id}')"><i class="far fa-copy"></i> Copy tin nhắn</div>
+                            ${msg.content && msg.content.startsWith('[IMAGE]') ? `<div class="comm-dropdown-item download-direct" onclick="downloadImage('${msg.content.replace('[IMAGE]', '').trim()}')"><i class="fas fa-download"></i> Tải xuống ảnh</div>` : ''}
                             <div class="comm-dropdown-item" onclick="togglePinMsg('${msg.id}')"><i class="fas fa-thumbtack"></i> Ghim / Bỏ ghim</div>
                             <div class="comm-dropdown-item"><i class="far fa-star"></i> Đánh dấu tin nhắn</div>
                             <div class="comm-dropdown-item"><i class="fas fa-list-ul"></i> Chọn nhiều tin nhắn</div>
@@ -2305,6 +2316,7 @@ async function sendMessage() {
                     
                     <div class="comm-msg-dropdown" id="dropdown-msg-${data.id}">
                         <div class="comm-dropdown-item" onclick="copyMsgText('${data.id}')"><i class="far fa-copy"></i> Copy tin nhắn</div>
+                        ${data.content && data.content.startsWith('[IMAGE]') ? `<div class="comm-dropdown-item download-direct" onclick="downloadImage('${data.content.replace('[IMAGE]', '').trim()}')"><i class="fas fa-download"></i> Tải xuống ảnh</div>` : ''}
                         <div class="comm-dropdown-item" onclick="togglePinMsg('${data.id}')"><i class="fas fa-thumbtack"></i> Ghim / Bỏ ghim</div>
                         <div class="comm-dropdown-item"><i class="far fa-star"></i> Đánh dấu tin nhắn</div>
                         <div class="comm-dropdown-divider"></div>
@@ -2370,7 +2382,7 @@ async function sendSystemCallLog(content, targetUserId) {
     }
 }
 
-// Lắng nghe phím Enter khi chat và sự kiện chọn ảnh
+// Lắng nghe phím Enter khi chat, sự kiện chọn ảnh và dán ảnh
 document.addEventListener("DOMContentLoaded", () => {
     document.body.addEventListener('keypress', function(e) {
         if(e.target && e.target.id === 'commChatInputMessage' && e.key === 'Enter') {
@@ -2378,10 +2390,34 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Lắng nghe sự kiện chọn ảnh
+    // Lắng nghe sự kiện chọn ảnh qua input file
     document.body.addEventListener('change', function(e) {
         if(e.target && e.target.id === 'commImageInput') {
             handleImageSelect(e);
+        }
+    });
+
+    // v10.5: Lắng nghe sự kiện dán ảnh (Paste)
+    document.body.addEventListener('paste', function(e) {
+        // Chỉ xử lý khi đang ở tab Chat và focus vào input chat hoặc đang trong vùng chat
+        const isChatInput = e.target && e.target.id === 'commChatInputMessage';
+        const isInChatBox = e.target && e.target.closest('.comm-chat-box');
+        
+        if (!isChatInput && !isInChatBox) return;
+
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        const imageFiles = [];
+
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                const blob = items[i].getAsFile();
+                if (blob) imageFiles.push(blob);
+            }
+        }
+
+        if (imageFiles.length > 0) {
+            e.preventDefault(); // Ngăn chặn dán text/url ảnh nếu là file ảnh
+            handleImageSelect(imageFiles);
         }
     });
 });
@@ -2483,6 +2519,7 @@ function subscribeToChat(targetUserId) {
                                             
                                             <div class="comm-msg-dropdown" id="dropdown-msg-${msg.id}">
                                                 <div class="comm-dropdown-item" onclick="copyMsgText('${msg.id}')"><i class="far fa-copy"></i> Copy tin nhắn</div>
+                                                ${msg.content && msg.content.startsWith('[IMAGE]') ? `<div class="comm-dropdown-item download-direct" onclick="downloadImage('${msg.content.replace('[IMAGE]', '').trim()}')"><i class="fas fa-download"></i> Tải xuống ảnh</div>` : ''}
                                                 <div class="comm-dropdown-item" onclick="togglePinMsg('${msg.id}')"><i class="fas fa-thumbtack"></i> Ghim / Bỏ ghim</div>
                                                 <div class="comm-dropdown-divider"></div>
                                                 <div class="comm-dropdown-item delete" onclick="deleteMsgForMe('${msg.id}')"><i class="far fa-trash-alt"></i> Xóa chỉ ở phía tôi</div>
@@ -2612,19 +2649,73 @@ document.addEventListener('click', () => {
     closeAllChatDropdowns();
 });
 
-function copyMsgText(msgId) {
+async function copyMsgText(msgId) {
     const msgEl = document.getElementById(`msg-${msgId}`);
     if (!msgEl) return;
     
     const bubble = msgEl.querySelector('.comm-msg-bubble');
     if (!bubble) return;
 
-    // Nếu là sticker, copy URL
-    const img = bubble.querySelector('img.comm-msg-sticker');
-    const textToCopy = img ? img.src : bubble.innerText;
+    // Kiểm tra các loại nội dung đặc biệt
+    const sticker = bubble.querySelector('img.comm-msg-sticker');
+    const image = bubble.querySelector('img.comm-msg-image-content');
+    
+    if (image || sticker) {
+        const url = (image || sticker).src;
+        try {
+            // Giải pháp tối ưu: Vẽ ảnh lên Canvas và export ra PNG chuẩn
+            // Điều này giúp vượt qua các hạn chế định dạng của trình duyệt
+            const img = new Image();
+            img.crossOrigin = "anonymous"; // Cực kỳ quan trọng để xử lý ảnh từ domain khác
+            
+            img.onload = async () => {
+                try {
+                    const canvas = document.createElement("canvas");
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext("2d");
+                    ctx.drawImage(img, 0, 0);
+                    
+                    canvas.toBlob(async (blob) => {
+                        try {
+                            const item = new ClipboardItem({ "image/png": blob });
+                            await navigator.clipboard.write([item]);
+                            showNotification("Đã copy hình ảnh (PNG) vào bộ nhớ tạm", "success");
+                        } catch (err) {
+                            throw err;
+                        }
+                    }, "image/png");
+                } catch (e) {
+                    // Fallback nếu canvas bị lỗi
+                    navigator.clipboard.writeText(url).then(() => {
+                        showNotification("Đã copy liên kết ảnh (do chính sách bảo mật)", "success");
+                    });
+                }
+            };
+            
+            img.onerror = () => {
+                // Fallback nếu không load được ảnh qua JS
+                navigator.clipboard.writeText(url).then(() => {
+                    showNotification("Đã copy liên kết ảnh", "success");
+                });
+            };
+            
+            img.src = url;
+        } catch (err) {
+            navigator.clipboard.writeText(url).then(() => {
+                showNotification("Đã copy liên kết ảnh", "success");
+            });
+        }
+        return;
+    }
 
+    // Mặc định copy text
+    const textToCopy = bubble.innerText;
     navigator.clipboard.writeText(textToCopy).then(() => {
         showNotification("Đã copy tin nhắn vào bộ nhớ tạm", "success");
+    }).catch(err => {
+        console.error("Lỗi khi copy:", err);
+        showNotification("Không thể copy tin nhắn", "error");
     });
 }
 
@@ -3412,6 +3503,8 @@ let myCommPeer = null;
 let currentCall = null;
 let currentLocalStream = null;
 let incomingCallObj = null;
+let peerRetryCount = 0; // v10.0: Thêm biến giới hạn số lần thử lại
+const MAX_PEER_RETRIES = 3;
 
 let isAudioMuted = false;
 let isVideoMuted = false;
@@ -3438,6 +3531,8 @@ function setupCommPeer() {
     if (myCommPeer) {
         console.log("♻️ Dọn dẹp Peer cũ trước khi khởi tạo mới...");
         try {
+            myCommPeer.off("error"); // Gỡ bỏ các listener cũ để tránh loop
+            myCommPeer.off("call");
             myCommPeer.disconnect();
             myCommPeer.destroy();
         } catch(e) {}
@@ -3451,23 +3546,40 @@ function setupCommPeer() {
         host: "0.peerjs.com",
         port: 443,
         path: "/",
-        debug: 1, // Để 1 để log lỗi cơ bản
+        debug: 0, // v10.0: Giảm debug xuống 0 để console sạch sẽ tuyệt đối
     });
 
-    // v9.0: Thêm logic đóng kết nối cũ nếu bị chiếm ID
+    // v10.0: Tối ưu logic xử lý lỗi trùng ID
     myCommPeer.on("error", (err) => {
         if (err.type === 'id-taken') {
-            console.warn("⚠️ Peer ID is taken. Đang cố gắng dọn dẹp và kết nối lại...");
-            // Thử ngắt kết nối và tạo mới sau 1s
-            setTimeout(() => {
-                if (myCommPeer) {
-                    myCommPeer.destroy();
-                    setupCommPeer();
-                }
-            }, 2000);
+            if (peerRetryCount < MAX_PEER_RETRIES) {
+                peerRetryCount++;
+                console.warn(`⚠️ Peer ID bị trùng (Lần ${peerRetryCount}). Đang thử kết nối lại sau 3s...`);
+                
+                setTimeout(() => {
+                    if (myCommPeer && !myCommPeer.destroyed) {
+                        setupCommPeer();
+                    }
+                }, 3000);
+            } else {
+                console.error("❌ Không thể khởi tạo PeerJS sau nhiều lần thử. Có thể bạn đang mở web trên tab khác.");
+            }
             return;
         }
+        
+        // Nếu là lỗi máy chủ hoặc kết nối, thử reconnect
+        if (err.type === 'server-error' || err.type === 'network') {
+             console.warn("🌐 Lỗi kết nối PeerJS, đang thử kết nối lại...");
+             setTimeout(() => myCommPeer.reconnect(), 5000);
+             return;
+        }
+
         console.error("❌ CineChat Peer lỗi:", err);
+    });
+
+    myCommPeer.on("open", () => {
+        console.log("✅ CineChat Peer đã sẵn sàng với ID:", myCommPeer.id);
+        peerRetryCount = 0; // Reset số lần thử khi thành công
     });
 
     // Lắng nghe cuộc gọi đến
@@ -4199,11 +4311,99 @@ function updateLightboxUI() {
     const indexEl = document.getElementById('lightboxCurrentIndex');
     const totalEl = document.getElementById('lightboxTotalCount');
 
-    if (imageEl) imageEl.src = url;
+    if (imageEl) {
+        imageEl.src = url;
+        imageEl.draggable = false; // Ngăn chặn kéo ảnh kiểu bóng mờ của trình duyệt
+    }
     if (indexEl) indexEl.innerText = currentLightboxIndex + 1;
     if (totalEl) totalEl.innerText = currentLightboxImages.length;
 
+    // Reset transform khi chuyển ảnh
+    resetLightboxTransform();
+
     renderLightboxSidebar();
+}
+
+/**
+ * Khởi tạo tính năng kéo để di chuyển ảnh
+ */
+function initLightBoxDrag() {
+    const wrapper = document.querySelector('.lightbox-img-wrapper');
+    if (!wrapper) return;
+
+    wrapper.addEventListener('mousedown', (e) => {
+        if (currentLightboxZoom <= 1) return; // Chỉ cho kéo khi đã phóng to
+        
+        e.preventDefault(); // Quan trọng: Ngăn chặn trình duyệt chọn văn bản hoặc kéo ảnh
+        isDraggingLightbox = true;
+        wrapper.classList.add('grabbing');
+        startX = e.pageX - wrapper.offsetLeft;
+        startY = e.pageY - wrapper.offsetTop;
+        scrollLeft = wrapper.scrollLeft;
+        scrollTop = wrapper.scrollTop;
+    });
+
+    // Ngăn chặn sự kiện dragstart mặc định của ảnh
+    wrapper.addEventListener('dragstart', (e) => {
+        e.preventDefault();
+    });
+
+    wrapper.addEventListener('mouseleave', () => {
+        isDraggingLightbox = false;
+        wrapper.classList.remove('grabbing');
+    });
+
+    wrapper.addEventListener('mouseup', () => {
+        isDraggingLightbox = false;
+        wrapper.classList.remove('grabbing');
+    });
+
+    wrapper.addEventListener('mousemove', (e) => {
+        if (!isDraggingLightbox) return;
+        e.preventDefault();
+        
+        const x = e.pageX - wrapper.offsetLeft;
+        const y = e.pageY - wrapper.offsetTop;
+        const walkX = (x - startX) * 2; // Tốc độ di chuyển
+        const walkY = (y - startY) * 2;
+        
+        wrapper.scrollLeft = scrollLeft - walkX;
+        wrapper.scrollTop = scrollTop - walkY;
+    });
+}
+
+function resetLightboxTransform() {
+    currentLightboxRotation = 0;
+    currentLightboxZoom = 1;
+    applyLightboxTransform();
+}
+
+function applyLightboxTransform() {
+    const wrapper = document.querySelector('.lightbox-img-wrapper');
+    if (wrapper) {
+        wrapper.style.setProperty('--zoom', currentLightboxZoom);
+        wrapper.style.setProperty('--rotate', currentLightboxRotation + 'deg');
+    }
+}
+
+/**
+ * Xoay ảnh 90 độ
+ */
+function rotateLightboxImage() {
+    currentLightboxRotation += 90;
+    applyLightboxTransform();
+}
+
+/**
+ * Thu phóng ảnh
+ */
+function zoomLightboxImage(step) {
+    const newZoom = currentLightboxZoom + step;
+    // Giới hạn zoom từ 0.5x đến 3x
+    if (newZoom >= 0.5 && newZoom <= 3) {
+        currentLightboxZoom = parseFloat(newZoom.toFixed(1));
+        applyLightboxTransform();
+    }
 }
 
 /**
@@ -4265,15 +4465,39 @@ function closeImageViewer() {
 }
 
 /**
- * Mở ảnh trong tab mới để người dùng tải về theo ý muốn
+ * Ép trình duyệt tải ảnh về máy (Force Download) thay vì chỉ mở tab mới
  */
-function downloadImage() {
-    if (currentLightboxIndex === -1) return;
-    const url = currentLightboxImages[currentLightboxIndex];
+async function downloadImage(urlParam = null) {
+    let url = urlParam;
     
-    window.open(url, '_blank');
+    // Nếu không truyền URL, lấy từ Lightbox đang mở
+    if (!url) {
+        if (currentLightboxIndex === -1) return;
+        url = currentLightboxImages[currentLightboxIndex];
+    }
     
-    showNotification("Đã mở ảnh trong tab mới!", "info");
+    showNotification("Đang xử lý tải ảnh...", "info");
+
+    try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = 'CineChat_' + Date.now() + '.png';
+        document.body.appendChild(link);
+        link.click();
+        
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+        
+        showNotification("Đã tải ảnh thành công!", "success");
+    } catch (error) {
+        console.error("Download error:", error);
+        window.open(url, '_blank');
+        showNotification("Không thể tải trực tiếp, đã mở ảnh ở tab mới.", "warning");
+    }
 }
 
 /**
@@ -4300,4 +4524,9 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeImageViewer();
     if (e.key === 'ArrowLeft') navigateImage(-1);
     if (e.key === 'ArrowRight') navigateImage(1);
+    
+    // Thêm phím tắt cho xoay và zoom
+    if (e.key.toLowerCase() === 'r') rotateLightboxImage();
+    if (e.key === '+' || e.key === '=') zoomLightboxImage(0.2);
+    if (e.key === '-' || e.key === '_') zoomLightboxImage(-0.2);
 });
