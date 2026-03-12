@@ -14,6 +14,10 @@ let currentPinnedMessages = []; // Danh sách tin nhắn gim hiện tại [{id, 
 let isPinnedListExpanded = false; // Trạng thái mở rộng danh sách ghim
 let confirmModalResolver = null; // Promise resolver cho confirm modal
 let currentConfirmActionId = null; // ID hành động hiện tại để lưu suppression
+const IMGBB_API_KEY = '82e6c87383e2d42e3dbcb62a798eca36';
+let pendingImages = []; // Mảng chứa các đối tượng {blob, previewUrl} đang chờ gửi
+let currentLightboxImages = []; // Danh sách toàn bộ ảnh trong hội thoại hiện tại
+let currentLightboxIndex = -1;  // Index ảnh đang xem
 
 /**
  * Điều khiển Dropdown Menu Chat - ĐƯA LÊN ĐẦU ĐỂ TRÁNH REFERENCE ERROR
@@ -599,6 +603,266 @@ function escapeHtml(unsafe) {
          .replace(/'/g, "&#039;");
 }
 
+/**
+ * Hàm nén ảnh phía client bằng Canvas
+ * @param {File} file - File ảnh gốc
+ * @param {number} maxWidth - Chiều rộng tối đa (mặc định 1200)
+ * @param {number} quality - Độ nén (0.1 - 1.0)
+ */
+function compressImage(file, maxWidth = 1200, quality = 0.8) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                // Tính toán kích thước mới
+                if (width > maxWidth) {
+                    height = (maxWidth / width) * height;
+                    width = maxWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Xuất ra dạng blob để upload
+                canvas.toBlob((blob) => {
+                    resolve(blob);
+                }, 'image/jpeg', quality);
+            };
+        };
+    });
+}
+
+/**
+ * Upload ảnh lên ImgBB
+ * @param {Blob} blob - Ảnh đã nén
+ */
+async function uploadToImgBB(blob) {
+    const formData = new FormData();
+    formData.append('image', blob);
+    formData.append('key', IMGBB_API_KEY);
+
+    try {
+        const response = await fetch('https://api.imgbb.com/1/upload', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+        if (result.success) {
+            return result.data.url;
+        } else {
+            throw new Error(result.error.message || 'Lỗi upload ImgBB');
+        }
+    } catch (error) {
+        console.error('Lỗi upload ảnh:', error);
+        throw error;
+    }
+}
+
+/**
+ * Xử lý khi người dùng chọn nhiều ảnh - Hiển thị Preview Grid
+ */
+async function handleImageSelect(event) {
+    const files = Array.from(event.target.files);
+    if (files.length === 0) return;
+
+    // Hiển thị trạng thái đang xử lý
+    showNotification(`Đang xử lý ${files.length} ảnh...`, "info");
+    
+    try {
+        for (const file of files) {
+            if (!file.type.startsWith('image/')) continue;
+            
+            // 1. Nén ảnh
+            const blob = await compressImage(file);
+            const previewUrl = URL.createObjectURL(blob);
+            
+            // 2. Thêm vào mảng tạm
+            pendingImages.push({ blob, previewUrl });
+        }
+        
+        // 3. Render danh sách preview
+        renderImagePreviewList();
+        
+    } catch (error) {
+        showNotification("Xử lý ảnh thất bại: " + error.message, "error");
+    } finally {
+        event.target.value = ''; // Reset input
+    }
+}
+
+/**
+ * Render danh sách ảnh trong khung preview
+ */
+function renderImagePreviewList() {
+    const container = document.getElementById('commImagePreviewContainer');
+    const listEl = document.getElementById('commPreviewList');
+    const countEl = document.getElementById('commPreviewCount');
+
+    if (!container || !listEl) return;
+
+    if (pendingImages.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+
+    listEl.innerHTML = pendingImages.map((img, index) => `
+        <div class="comm-preview-item">
+            <img src="${img.previewUrl}" alt="Preview ${index}">
+            <button class="remove-btn" onclick="removeSelectedImage(${index})"><i class="fas fa-times"></i></button>
+        </div>
+    `).join('');
+
+    countEl.innerText = pendingImages.length;
+    container.style.display = 'flex';
+    scrollToBottomChat();
+}
+
+/**
+ * Xóa một ảnh khỏi danh sách chờ
+ */
+function removeSelectedImage(index) {
+    const img = pendingImages[index];
+    if (img && img.previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(img.previewUrl);
+    }
+    pendingImages.splice(index, 1);
+    renderImagePreviewList();
+}
+
+/**
+ * Hủy toàn bộ danh sách xem trước
+ */
+function cancelImagePreview() {
+    pendingImages.forEach(img => {
+        if (img.previewUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(img.previewUrl);
+        }
+    });
+    pendingImages = [];
+    const container = document.getElementById('commImagePreviewContainer');
+    if (container) container.style.display = 'none';
+}
+
+/**
+ * Xác nhận gửi tất cả ảnh trong danh sách
+ */
+async function confirmSendImage() {
+    if (pendingImages.length === 0) return;
+
+    const btn = document.getElementById('btnConfirmSendImage');
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    
+    const total = pendingImages.length;
+    let successCount = 0;
+
+    showNotification(`Đang tải lên ${total} ảnh...`, "info");
+
+    try {
+        // Gửi tuần tự để tránh quá tải API và đảm bảo thứ tự
+        for (let i = 0; i < pendingImages.length; i++) {
+            const imgObj = pendingImages[i];
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> (${i+1}/${total})`;
+            
+            try {
+                // 1. Upload lên ImgBB
+                const imageUrl = await uploadToImgBB(imgObj.blob);
+                
+                // 2. Gửi tin nhắn
+                await sendImageMessage(imageUrl);
+                successCount++;
+            } catch (err) {
+                console.error(`Lỗi gửi ảnh thứ ${i+1}:`, err);
+            }
+        }
+        
+        // 3. Đóng preview
+        cancelImagePreview();
+        
+        if (successCount === total) {
+            showNotification(`Đã gửi thành công ${total} ảnh!`, "success");
+        } else {
+            showNotification(`Đã gửi ${successCount}/${total} ảnh. Một số ảnh bị lỗi.`, "warning");
+        }
+        
+    } catch (error) {
+        showNotification("Lỗi hệ thống khi gửi ảnh!", "error");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
+    }
+}
+
+/**
+ * Gửi tin nhắn chứa ảnh
+ */
+async function sendImageMessage(imageUrl) {
+    const content = `[IMAGE]${imageUrl}`;
+    const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    
+    // Giả lập tempId để UI mượt
+    const tempId = 'temp-img-' + Date.now();
+    const container = document.getElementById("commChatMessages");
+    if (container) {
+        if(container.innerHTML.includes("Hãy gửi lời chào đầu tiên!")) container.innerHTML = "";
+        container.insertAdjacentHTML('beforeend', `
+            <div class="comm-msg sent" style="opacity: 0.7;" id="${tempId}">
+                <div class="comm-msg-body-wrapper">
+                    <div class="comm-msg-bubble">${parseMessageContent(content)}</div>
+                </div>
+                <div class="comm-msg-time">${time} <i class="fas fa-spinner fa-spin"></i></div>
+            </div>
+        `);
+        scrollToBottomChat();
+    }
+
+    try {
+        const isTargetOnline = userPresenceMap.get(currentChatUserId)?.online;
+        const { data, error } = await supabase
+            .from('community_messages')
+            .insert({
+                sender_id: currentUser.id,
+                receiver_id: currentChatUserId,
+                content: content,
+                status: isTargetOnline ? 'delivered' : 'sent'
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+        
+        // Cập nhật ID thật
+        const msgEl = document.getElementById(tempId);
+        if (msgEl) {
+            msgEl.id = `msg-${data.id}`;
+            msgEl.style.opacity = "1";
+            const timeEl = msgEl.querySelector('.comm-msg-time');
+            if (timeEl) {
+                const statusHtml = data.status === 'delivered' 
+                    ? `<div class="comm-msg-status delivered">Đã nhận <i class="fas fa-check-double"></i></div>`
+                    : `<div class="comm-msg-status sent">Đã gửi <i class="fas fa-check"></i></div>`;
+                timeEl.innerHTML = `${time}. ${statusHtml}`;
+            }
+        }
+    } catch (e) {
+        console.error("Lỗi gửi ảnh lên DB:", e);
+        const msgEl = document.getElementById(tempId);
+        if (msgEl) msgEl.remove();
+        showNotification("Lỗi gửi ảnh!", "error");
+    }
+}
+
 // Parse nội dung tin nhắn: xử lý [STICKER]url và [REPLY:id:name:text] nội_dung
 function parseMessageContent(content) {
     if (content === null || content === undefined) return "";
@@ -629,7 +893,16 @@ function parseMessageContent(content) {
                      onerror="this.style.display='none';">`;
     }
 
-    // Pattern 2: [REPLY:msgId:SenderName:nội_dung_gốc] nội_dung_reply
+    // Pattern 2: [IMAGE]url - hiển thị ảnh chất lượng cao
+    const imageMatch = str.match(/^\[IMAGE\](.+)$/);
+    if (imageMatch) {
+        const url = imageMatch[1].trim();
+        return `<img src="${escapeHtml(url)}" class="comm-msg-image-content" alt="image" 
+                     style="max-width:280px; max-height:400px; border-radius:12px; display:block; cursor:pointer; object-fit: cover;" 
+                     onclick="openImageViewer('${escapeHtml(url)}')">`;
+    }
+
+    // Pattern 3: [REPLY:msgId:SenderName:nội_dung_gốc] nội_dung_reply
     const replyMatch = str.match(/^\[REPLY:([^:]+):([^:]+):([^\]]+)\](.*)$/s);
     if (replyMatch) {
         const replyMsgId   = escapeHtml(replyMatch[1].trim());
@@ -2097,13 +2370,18 @@ async function sendSystemCallLog(content, targetUserId) {
     }
 }
 
-// Lắng nghe phím Enter khi chat
+// Lắng nghe phím Enter khi chat và sự kiện chọn ảnh
 document.addEventListener("DOMContentLoaded", () => {
-    // Sẽ chạy khi JS tải, nhưng id có thể chưa có do load html động.
-    // Nên gán bằng Event Delegation trên body là chắc nhất
     document.body.addEventListener('keypress', function(e) {
         if(e.target && e.target.id === 'commChatInputMessage' && e.key === 'Enter') {
             sendMessage();
+        }
+    });
+
+    // Lắng nghe sự kiện chọn ảnh
+    document.body.addEventListener('change', function(e) {
+        if(e.target && e.target.id === 'commImageInput') {
+            handleImageSelect(e);
         }
     });
 });
@@ -2449,7 +2727,10 @@ function prepareReply(msgId) {
         text = replyBody.innerText;
     } else {
         const sticker = bubble.querySelector('img.comm-msg-sticker');
-        text = sticker ? "[Sticker]" : bubble.innerText;
+        const image = bubble.querySelector('img.comm-msg-image-content');
+        if (sticker) text = "[Sticker]";
+        else if (image) text = "📷 Hình ảnh";
+        else text = bubble.innerText;
     }
 
     replyingTo = {
@@ -2585,6 +2866,8 @@ async function loadChatList() {
                     lastMsgText = "Tin nhắn đã bị xóa";
                 } else if (content.startsWith('[STICKER]')) {
                     lastMsgText = (isFromMe ? "Bạn: " : "") + "[Sticker]";
+                } else if (content.startsWith('[IMAGE]')) {
+                    lastMsgText = (isFromMe ? "Bạn: " : "") + "📷 Hình ảnh";
                 } else if (content.startsWith('[REPLY:')) {
                     // Trích xuất nội dung chính sau phần [REPLY:...]
                     const mainContentMatch = content.match(/\]\s*(.*)$/s);
@@ -3869,3 +4152,152 @@ function togglePinnedDropdown(event) {
     isPinnedListExpanded = !isPinnedListExpanded;
     renderPinnedBanner();
 }
+
+/**
+ * --- LIGHTBOX PRO FUNCTIONS ---
+ */
+
+/**
+ * Mở trình xem ảnh và quét toàn bộ ảnh trong đoạn chat
+ */
+function openImageViewer(clickedUrl) {
+    const modal = document.getElementById('commLightBoxModal');
+    if (!modal) return;
+
+    // 1. Quét toàn bộ ảnh trong container chat hiện tại
+    const chatContainer = document.getElementById('commChatMessages');
+    if (!chatContainer) return;
+
+    const imgElements = Array.from(chatContainer.querySelectorAll('img.comm-msg-image-content'));
+    
+    // 2. Chuyển thành mảng URL (giữ nguyên thứ tự để dễ quản lý, nhưng User muốn Sidebar từ mới đến cũ)
+    // Thứ tự DOM là từ cũ đến mới (trên xuống dưới), vậy mảng gốc là [cũ nhất -> mới nhất]
+    currentLightboxImages = imgElements.map(img => img.src);
+    
+    // 3. Tìm index của ảnh vừa click
+    currentLightboxIndex = currentLightboxImages.indexOf(clickedUrl);
+    if (currentLightboxIndex === -1) {
+        // Nếu không tìm thấy bằng index trực tiếp (có thể do URL absolute/relative), tìm bằng so sánh chuỗi
+        currentLightboxIndex = currentLightboxImages.findIndex(src => src.includes(clickedUrl) || clickedUrl.includes(src));
+    }
+
+    // 4. Hiển thị UI
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    
+    updateLightboxUI();
+}
+
+/**
+ * Cập nhật giao diện Lightbox (Ảnh chính + Sidebar)
+ */
+function updateLightboxUI() {
+    if (currentLightboxIndex < 0 || currentLightboxIndex >= currentLightboxImages.length) return;
+
+    const url = currentLightboxImages[currentLightboxIndex];
+    const imageEl = document.getElementById('lightboxImage');
+    const indexEl = document.getElementById('lightboxCurrentIndex');
+    const totalEl = document.getElementById('lightboxTotalCount');
+
+    if (imageEl) imageEl.src = url;
+    if (indexEl) indexEl.innerText = currentLightboxIndex + 1;
+    if (totalEl) totalEl.innerText = currentLightboxImages.length;
+
+    renderLightboxSidebar();
+}
+
+/**
+ * Render danh sách ảnh bên phải (Mới nhất lên đầu)
+ */
+function renderLightboxSidebar() {
+    const sidebar = document.getElementById('lightboxThumbnails');
+    if (!sidebar) return;
+
+    // Phải đảo ngược mảng để ảnh mới nhất lên đầu
+    // Nhưng index của ảnh gốc phải được giữ đúng
+    const reversedImages = [...currentLightboxImages].reverse();
+    
+    sidebar.innerHTML = reversedImages.map((src, idx) => {
+        // idx trong reversedImages tương ứng với index trong mảng gốc:
+        const originalIndex = currentLightboxImages.length - 1 - idx;
+        const isActive = originalIndex === currentLightboxIndex;
+        
+        return `
+            <div class="lightbox-thumb-item ${isActive ? 'active' : ''}" 
+                 onclick="jumpToImage(${originalIndex})">
+                <img src="${src}" alt="Thumb">
+            </div>
+        `;
+    }).join('');
+
+    // Tự động scroll đến ảnh đang active
+    const activeThumb = sidebar.querySelector('.lightbox-thumb-item.active');
+    if (activeThumb) {
+        activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+/**
+ * Điều hướng qua lại giữa các ảnh (Mũi tên)
+ */
+function navigateImage(direction) {
+    const newIndex = currentLightboxIndex + direction;
+    if (newIndex >= 0 && newIndex < currentLightboxImages.length) {
+        currentLightboxIndex = newIndex;
+        updateLightboxUI();
+    }
+}
+
+/**
+ * Nhảy trực tiếp đến 1 ảnh theo index
+ */
+function jumpToImage(index) {
+    currentLightboxIndex = index;
+    updateLightboxUI();
+}
+
+function closeImageViewer() {
+    const modal = document.getElementById('commLightBoxModal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+}
+
+/**
+ * Mở ảnh trong tab mới để người dùng tải về theo ý muốn
+ */
+function downloadImage() {
+    if (currentLightboxIndex === -1) return;
+    const url = currentLightboxImages[currentLightboxIndex];
+    
+    window.open(url, '_blank');
+    
+    showNotification("Đã mở ảnh trong tab mới!", "info");
+}
+
+/**
+ * Chia sẻ đường dẫn ảnh
+ */
+function shareImage() {
+    if (currentLightboxIndex === -1) return;
+    const url = currentLightboxImages[currentLightboxIndex];
+    
+    if (navigator.share) {
+        navigator.share({ title: 'Chia sẻ ảnh từ CineChat', url: url });
+    } else {
+        navigator.clipboard.writeText(url).then(() => {
+            showNotification("Đã copy link ảnh!", "success");
+        });
+    }
+}
+
+// Lắng nghe phím mũi tên và Esc
+document.addEventListener('keydown', (e) => {
+    const modal = document.getElementById('commLightBoxModal');
+    if (!modal || modal.style.display === 'none') return;
+
+    if (e.key === 'Escape') closeImageViewer();
+    if (e.key === 'ArrowLeft') navigateImage(-1);
+    if (e.key === 'ArrowRight') navigateImage(1);
+});
