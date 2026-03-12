@@ -135,7 +135,7 @@
                   <div id="commChatContent" style="display: none; flex-direction: column; height: 100%;">
                       <div class="comm-chat-box-header" id="chatBoxHeader">
                           <div class="comm-chat-box-info">
-                              <img src="https://via.placeholder.com/40" id="commChatTargetAvatar" alt="">
+                              <img src="https://ui-avatars.com/api/?name=Chat&background=random" id="commChatTargetAvatar" alt="">
                               <div>
                                   <div class="comm-chat-box-name" id="commChatTargetName">Chọn người chat</div>
                                   <div class="comm-chat-box-status" id="commChatTargetStatus"></div>
@@ -156,14 +156,22 @@
                           <!-- Tin nhắn sẽ load ở đây -->
                       </div>
 
-                      <div class="comm-chat-input-area">
-                          <button class="comm-action-btn"><i class="fas fa-paperclip"></i></button>
-                          <div class="comm-chat-input-wrapper" style="flex: 1; position: relative; display: flex; align-items: center;">
-                              <input type="text" id="commChatInputMessage" placeholder="Nhập tin nhắn..." style="width: 100%; padding-right: 40px;">
-                              <button class="comm-action-btn" style="position: absolute; right: 10px;"><i class="far fa-smile"></i></button>
-                          </div>
-                          <button class="comm-btn-send" onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
-                      </div>
+                       <div class="comm-chat-input-area">
+                           <button class="comm-action-btn" title="Đính kèm file" onclick="showNotification('Tính năng gửi file đang được phát triển', 'info')"><i class="fas fa-paperclip"></i></button>
+                               <div class="comm-chat-input-wrapper" style="flex: 1; position: relative; display: flex; align-items: center; gap: 8px;">
+                                   <input type="text" id="commChatInputMessage" placeholder="Nhập tin nhắn..." style="width: 100%; padding-right: 120px;">
+                                   <!-- Emoji Picker Container -->
+                                   <div id="commEmojiPicker" class="comm-emoji-picker"></div>
+                                   
+                                   <div class="comm-input-icon-group" style="position: absolute; right: 10px; display: flex; gap: 10px; align-items: center;">
+                                       <button class="comm-action-btn" title="Gửi ảnh" onclick="showNotification('Tính năng gửi ảnh đang được phát triển', 'info')"><i class="far fa-image"></i></button>
+                                       <button class="comm-action-btn" title="Sticker" onclick="toggleEmojiPicker(true, 'sticker')"><i class="far fa-sticky-note"></i></button>
+                                       <button class="comm-action-btn" title="Tặng quà" onclick="showNotification('Tính năng tặng quà đang được phát triển', 'info')"><i class="fas fa-gift"></i></button>
+                                       <button class="comm-action-btn btn-emoji-trigger" title="Biểu tượng cảm xúc" onclick="toggleEmojiPicker(true, 'emoji')"><i class="far fa-smile"></i></button>
+                                   </div>
+                               </div>
+                           <button class="comm-btn-send" onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
+                       </div>
                   </div>
               </main>
 
@@ -174,7 +182,7 @@
                   </div>
                   
                   <div class="comm-chat-info-profile" style="display: flex; flex-direction: column; align-items: center; padding: 0 20px 20px; border-bottom: 1px solid var(--border-color);">
-                      <img src="https://via.placeholder.com/100" id="commInfoAvatar" style="width: 90px; height: 90px; border-radius: 50%; border: 2px solid var(--accent-primary); padding: 2px; margin-bottom: 15px;">
+                      <img src="https://ui-avatars.com/api/?name=Info&background=random" id="commInfoAvatar" style="width: 90px; height: 90px; border-radius: 50%; border: 2px solid var(--accent-primary); padding: 2px; margin-bottom: 15px;">
                       <h3 id="commInfoName" class="comm-info-name">Ha ha</h3>
                       <p id="commInfoStatus" style="font-size: 0.85rem; color: var(--text-muted);">Truy cập 7 giờ trước</p>
                       

@@ -193,6 +193,11 @@ async function initCommunity() {
     
     // Đăng ký nhận thông báo tin nhắn mới để refresh danh sách chat
     subscribeToMessageNotifications();
+
+    // Khởi tạo kho Emoji đa dạng
+    if (typeof initEmojiPicker === 'function') {
+        initEmojiPicker();
+    }
 }
 
 // Global Init cho PeerJS ngay khi file script được load (Nếu đã login)
@@ -608,7 +613,20 @@ function parseMessageContent(content) {
     const stickerMatch = str.match(/^\[STICKER\](.+)$/);
     if (stickerMatch) {
         const url = stickerMatch[1].trim();
-        return `<img src="${escapeHtml(url)}" class="comm-msg-sticker" alt="sticker" style="max-width:120px;max-height:120px;border-radius:8px;display:block;">`;
+        
+        // v9.5: LỌC BỎ CHỦ ĐỘNG các link sticker đã biết chắc chắn là lỗi để tránh trình duyệt báo lỗi GET đỏ
+        // v10.0: Cho phép các link nội bộ từ images/stickers/
+        if (url.includes('images/stickers/')) {
+            // Hợp lệ, không lọc
+        } else if (url.includes('popcorn_1.png') || url.includes('127.0.0.1:5501') || url.includes('githubusercontent.com')) {
+            console.warn("🚫 Silent Filter: Đã loại bỏ link sticker chết để tránh lỗi Console:", url);
+            return '<span style="font-style:italic; color:var(--text-muted); font-size:0.8rem;">(Sticker không tồn tại)</span>';
+        }
+
+        // v9.0: Thêm onerror để tự ẩn sticker nếu link bị lỗi bất ngờ
+        return `<img src="${escapeHtml(url)}" class="comm-msg-sticker" alt="sticker" 
+                     style="max-width:120px;max-height:120px;border-radius:8px;display:block;" 
+                     onerror="this.style.display='none';">`;
     }
 
     // Pattern 2: [REPLY:msgId:SenderName:nội_dung_gốc] nội_dung_reply
@@ -3132,6 +3150,16 @@ function initCineChatCall() {
 
 function setupCommPeer() {
     if (!currentUser) return;
+
+    // v9.5: ĐIỀU QUAN TRỌNG - Phải dọn dẹp instance cũ trước khi tạo mới
+    if (myCommPeer) {
+        console.log("♻️ Dọn dẹp Peer cũ trước khi khởi tạo mới...");
+        try {
+            myCommPeer.disconnect();
+            myCommPeer.destroy();
+        } catch(e) {}
+        myCommPeer = null;
+    }
     
     // Dùng ID người dùng làm PeerID (Thêm tiền tố để tránh đụng với Watch Party nếu chạy song song)
     const peerId = "cinechat_" + currentUser.id;
@@ -3143,13 +3171,20 @@ function setupCommPeer() {
         debug: 1, // Để 1 để log lỗi cơ bản
     });
 
-    myCommPeer.on("open", (id) => {
-        console.log("✅ CineChat PeerJS sẵn sàng với ID:", id);
-    });
-
+    // v9.0: Thêm logic đóng kết nối cũ nếu bị chiếm ID
     myCommPeer.on("error", (err) => {
+        if (err.type === 'id-taken') {
+            console.warn("⚠️ Peer ID is taken. Đang cố gắng dọn dẹp và kết nối lại...");
+            // Thử ngắt kết nối và tạo mới sau 1s
+            setTimeout(() => {
+                if (myCommPeer) {
+                    myCommPeer.destroy();
+                    setupCommPeer();
+                }
+            }, 2000);
+            return;
+        }
         console.error("❌ CineChat Peer lỗi:", err);
-        // showNotification("Lỗi kết nối cuộc gọi", "error");
     });
 
     // Lắng nghe cuộc gọi đến
