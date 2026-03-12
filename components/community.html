@@ -156,6 +156,20 @@
                           <!-- Tin nhắn sẽ load ở đây -->
                       </div>
 
+                      <div id="commImagePreviewContainer" class="comm-image-preview-container" style="display: none;">
+                          <div class="comm-preview-header">
+                              <span>Xem trước <span id="commPreviewCount">0</span> ảnh</span>
+                              <button class="comm-preview-close" onclick="cancelImagePreview()">&times;</button>
+                          </div>
+                          <div id="commPreviewList" class="comm-preview-list">
+                              <!-- Danh sách ảnh preview sẽ render ở đây -->
+                          </div>
+                          <div class="comm-preview-footer">
+                              <button class="comm-btn-cancel-preview" onclick="cancelImagePreview()">Hủy</button>
+                              <button class="comm-btn-confirm-send" id="btnConfirmSendImage" onclick="confirmSendImage()">Gửi tất cả</button>
+                          </div>
+                      </div>
+
                        <div class="comm-chat-input-area">
                            <button class="comm-action-btn" title="Đính kèm file" onclick="showNotification('Tính năng gửi file đang được phát triển', 'info')"><i class="fas fa-paperclip"></i></button>
                                <div class="comm-chat-input-wrapper" style="flex: 1; position: relative; display: flex; align-items: center; gap: 8px;">
@@ -163,8 +177,9 @@
                                    <!-- Emoji Picker Container -->
                                    <div id="commEmojiPicker" class="comm-emoji-picker"></div>
                                    
-                                   <div class="comm-input-icon-group" style="position: absolute; right: 10px; display: flex; gap: 10px; align-items: center;">
-                                       <button class="comm-action-btn" title="Gửi ảnh" onclick="showNotification('Tính năng gửi ảnh đang được phát triển', 'info')"><i class="far fa-image"></i></button>
+                                   <input type="file" id="commImageInput" accept="image/*" multiple style="display: none;">
+                                    <div class="comm-input-icon-group" style="position: absolute; right: 10px; display: flex; gap: 10px; align-items: center;">
+                                       <button class="comm-action-btn" title="Gửi ảnh" onclick="document.getElementById('commImageInput').click()"><i class="far fa-image"></i></button>
                                        <button class="comm-action-btn" title="Sticker" onclick="toggleEmojiPicker(true, 'sticker')"><i class="far fa-sticky-note"></i></button>
                                        <button class="comm-action-btn" title="Tặng quà" onclick="showNotification('Tính năng tặng quà đang được phát triển', 'info')"><i class="fas fa-gift"></i></button>
                                        <button class="comm-action-btn btn-emoji-trigger" title="Biểu tượng cảm xúc" onclick="toggleEmojiPicker(true, 'emoji')"><i class="far fa-smile"></i></button>
@@ -401,6 +416,52 @@
           <div class="comm-modal-footer premium-footer">
               <button class="comm-btn-cancel premium-btn-secondary" onclick="closeCommConfirm(false)">Hủy</button>
               <button class="comm-btn-confirm premium-btn-primary" id="commConfirmBtn" onclick="closeCommConfirm(true)">Xác nhận</button>
+          </div>
+      </div>
+  </div>
+
+  <!-- MODAL: LIGHTBOX XEM ẢNH PRO (Image Viewer) -->
+  <div id="commLightBoxModal" class="comm-lightbox-modal" style="display: none;">
+      <div class="lightbox-overlay" onclick="closeImageViewer()"></div>
+      
+      <div class="lightbox-pro-container">
+          <button class="lightbox-close-absolute" onclick="closeImageViewer()" title="Đóng (Esc)">&times;</button>
+          
+          <!-- Phân vùng chính: Xem ảnh + Mũi tên -->
+          <div class="lightbox-main-view">
+              <button class="lightbox-nav-btn prev" onclick="navigateImage(-1)" title="Ảnh trước (Mũi tên trái)">
+                  <i class="fas fa-chevron-left"></i>
+              </button>
+
+              <div class="lightbox-center-content">
+                  <div class="lightbox-toolbar">
+                      <div class="lightbox-info">
+                          <span id="lightboxCurrentIndex">1</span> / <span id="lightboxTotalCount">1</span>
+                      </div>
+                      <div class="lightbox-actions">
+                          <button class="lightbox-btn" onclick="downloadImage()" title="Tải ảnh về"><i class="fas fa-download"></i></button>
+                          <button class="lightbox-btn" onclick="shareImage()" title="Chia sẻ link"><i class="fas fa-share-alt"></i></button>
+                          <button class="lightbox-btn close-btn" onclick="closeImageViewer()"><i class="fas fa-times"></i></button>
+                      </div>
+                  </div>
+                  <div class="lightbox-img-wrapper">
+                      <img id="lightboxImage" src="" alt="Full size image">
+                  </div>
+              </div>
+
+              <button class="lightbox-nav-btn next" onclick="navigateImage(1)" title="Ảnh sau (Mũi tên phải)">
+                  <i class="fas fa-chevron-right"></i>
+              </button>
+          </div>
+
+          <!-- Phân vùng Sidebar: Danh sách ảnh -->
+          <div class="lightbox-sidebar">
+              <div class="lightbox-sidebar-header">
+                  <i class="far fa-images"></i> Ảnh trong chat
+              </div>
+              <div id="lightboxThumbnails" class="lightbox-thumbnails">
+                  <!-- Thumbnails được render từ JS -->
+              </div>
           </div>
       </div>
   </div>
