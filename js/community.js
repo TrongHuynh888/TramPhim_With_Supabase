@@ -9,6 +9,99 @@ let currentCommView = 'feed'; // feed | chat | profile
 let communityPresenceChannel = null;
 let userPresenceMap = new Map(); // userId -> { online: boolean, last_seen: string }
 let currentChatTarget = null; // Thông tin người đang chat cùng
+let replyingTo = null; // { id, name, text }
+let currentPinnedMessages = []; // Danh sách tin nhắn gim hiện tại [{id, content, senderName}]
+let isPinnedListExpanded = false; // Trạng thái mở rộng danh sách ghim
+let confirmModalResolver = null; // Promise resolver cho confirm modal
+let currentConfirmActionId = null; // ID hành động hiện tại để lưu suppression
+
+/**
+ * Điều khiển Dropdown Menu Chat - ĐƯA LÊN ĐẦU ĐỂ TRÁNH REFERENCE ERROR
+ */
+function toggleChatItemDropdown(event, chatId) {
+    if (event) event.stopPropagation();
+    const dropdown = document.getElementById(`dropdown-chat-${chatId}`);
+    if (!dropdown) return;
+
+    const isActive = dropdown.classList.contains('active');
+    
+    // Đóng tất cả dropdown khác
+    closeAllChatDropdowns();
+    
+    // Nếu trước đó chưa active thì giờ bật lên
+    if (!isActive) {
+        dropdown.classList.add('active');
+    }
+}
+
+function closeAllChatDropdowns() {
+    document.querySelectorAll('.comm-chat-item-dropdown.active').forEach(d => {
+        d.classList.remove('active');
+    });
+}
+
+// --- CUSTOM CONFIRM MODAL LOGIC ---
+function showConfirmModal(title, message, iconClass = "fas fa-exclamation-triangle", actionId = "default") {
+    return new Promise((resolve) => {
+        // 1. Kiểm tra suppression từ localStorage
+        const suppressKey = `confirm_suppress_${actionId}`;
+        const suppressExpiry = localStorage.getItem(suppressKey);
+        
+        if (suppressExpiry) {
+            const expiryTime = parseInt(suppressExpiry);
+            if (Date.now() < expiryTime) {
+                console.log(`🚀 Action [${actionId}] đang trong thời gian ẩn thông báo. Tự động xác nhận.`);
+                resolve(true);
+                return;
+            } else {
+                localStorage.removeItem(suppressKey); // Hết hạn thì xóa luôn
+            }
+        }
+
+        const modal = document.getElementById("commConfirmModal");
+        const titleEl = document.getElementById("commConfirmTitle");
+        const msgEl = document.getElementById("commConfirmMessage");
+        const iconEl = document.getElementById("commConfirmIcon");
+        const suppressCheck = document.getElementById("commConfirmSuppress");
+        
+        if (!modal || !titleEl || !msgEl) {
+            // Fallback nếu không tìm thấy modal
+            resolve(confirm(message));
+            return;
+        }
+
+        currentConfirmActionId = actionId;
+        titleEl.textContent = title;
+        msgEl.textContent = message;
+        if (iconEl) iconEl.className = iconClass;
+        if (suppressCheck) suppressCheck.checked = false; // Reset checkbox mỗi lần hiện
+        
+        modal.classList.add("active");
+        confirmModalResolver = resolve;
+    });
+}
+
+function closeCommConfirm(result) {
+    const modal = document.getElementById("commConfirmModal");
+    const suppressCheck = document.getElementById("commConfirmSuppress");
+    const durationSelect = document.getElementById("commConfirmDuration");
+
+    // Nếu người dùng nhấn xác nhận VÀ có tick vào "Không nhắc lại"
+    if (result && suppressCheck && suppressCheck.checked && currentConfirmActionId) {
+        const hours = parseInt(durationSelect.value) || 24;
+        const expiryTime = Date.now() + (hours * 3600 * 1000);
+        localStorage.setItem(`confirm_suppress_${currentConfirmActionId}`, expiryTime.toString());
+        console.log(`💾 Đã lưu suppression cho [${currentConfirmActionId}] trong ${hours} giờ.`);
+    }
+
+    if (modal) modal.classList.remove("active");
+    if (confirmModalResolver) {
+        confirmModalResolver(result);
+        confirmModalResolver = null;
+    }
+    currentConfirmActionId = null;
+}
+
 
 // 1. MODULE LOADER (Tương tự Watch Party)
 async function initCommunityModule() {
@@ -97,6 +190,9 @@ async function initCommunity() {
     subscribeToInteractions();
     
     // Khởi tạo PeerJS Call (Đã dời ra ngoài để chạy Global)
+    
+    // Đăng ký nhận thông báo tin nhắn mới để refresh danh sách chat
+    subscribeToMessageNotifications();
 }
 
 // Global Init cho PeerJS ngay khi file script được load (Nếu đã login)
@@ -152,19 +248,33 @@ function switchCommView(viewName) {
             // Kích hoạt trạng thái khóa cuộn và ẩn footer
             document.body.classList.add('comm-chat-active');
             
+            // Nếu chưa chọn người chat, ẩn sidebar thông tin
+            const layout = document.getElementById("commChatView");
+            if (layout) {
+                if (!currentChatUserId) {
+                    layout.classList.add("info-hidden");
+                    const icon = document.getElementById("iconToggleChatInfo");
+                    if (icon) icon.className = 'far fa-address-card';
+                } else {
+                    layout.classList.remove("info-hidden");
+                    const icon = document.getElementById("iconToggleChatInfo");
+                    if (icon) icon.className = 'fas fa-address-card';
+                }
+            }
+            
             // Nếu đã chọn người chat trước đó, tự động đánh dấu đã xem khi quay lại tab
             if (currentChatUserId) {
                 markMessagesAsSeen(currentChatUserId);
             }
 
             // Nếu chưa chọn người chat -> Hiện màn hình chào mừng, ẩn khung chat
+            const welcomeEl = document.getElementById("commChatWelcome");
+            const contentEl = document.getElementById("commChatContent");
             if (!currentChatUserId) {
-                const welcomeEl = document.getElementById("commChatWelcome");
-                const contentEl = document.getElementById("commChatContent");
                 if (welcomeEl) welcomeEl.style.display = "flex";
                 if (contentEl) contentEl.style.display = "none";
-                loadChatList();
             }
+            loadChatList(); // Luôn load danh sách chat khi vào tab Chat
         } else if (viewName === 'friends') {
             const el = document.getElementById("commFeedView");
             if (el) el.style.display = "grid";
@@ -436,15 +546,18 @@ function refreshPresenceUI() {
 
     // 2. Cập nhật trong hội thoại đang mở
     if (currentChatTarget) {
-        const headerStatus = document.querySelector('.comm-chat-box-status');
-        if (headerStatus) {
-            const isOnline = userPresenceMap.get(currentChatTarget.id)?.online;
-            if (isOnline) {
-                headerStatus.innerHTML = '<span style="color: #4caf50;"><i class="fas fa-circle" style="font-size: 8px;"></i> Đang hoạt động</span>';
-            } else {
-                // Nếu offline, hiển thị thời gian cuối cùng từ db (nếu đã có) hoặc mặc định
-                fetchUserLastSeen(currentChatTarget.id, headerStatus);
-            }
+        const headerStatus = document.getElementById('commChatTargetStatus');
+        const infoStatus = document.getElementById('commInfoStatus');
+        const isOnline = userPresenceMap.get(currentChatTarget.id)?.online;
+        
+        if (isOnline) {
+            const onlineHTML = '<span style="color: #4caf50;"><i class="fas fa-circle" style="font-size: 8px;"></i> Đang hoạt động</span>';
+            if (headerStatus) headerStatus.innerHTML = onlineHTML;
+            if (infoStatus) infoStatus.innerHTML = onlineHTML;
+        } else {
+            // Nếu offline, hiển thị thời gian cuối cùng từ db (nếu đã có) hoặc mặc định
+            if (headerStatus) fetchUserLastSeen(currentChatTarget.id, headerStatus);
+            if (infoStatus) fetchUserLastSeen(currentChatTarget.id, infoStatus);
         }
     }
 }
@@ -479,6 +592,53 @@ function escapeHtml(unsafe) {
          .replace(/>/g, "&gt;")
          .replace(/"/g, "&quot;")
          .replace(/'/g, "&#039;");
+}
+
+// Parse nội dung tin nhắn: xử lý [STICKER]url và [REPLY:id:name:text] nội_dung
+function parseMessageContent(content) {
+    if (content === null || content === undefined) return "";
+    let str = String(content);
+
+    // Chuẩn hóa hiển thị cho tin nhắn đã thu hồi (cả cũ và mới)
+    if (str === '[TIN NHẮN ĐÃ THU HỒI]' || str === 'Tin nhắn đã được thu hồi' || str === 'Tin nhắn đã thu hồi') {
+        return 'Tin nhắn đã thu hồi';
+    }
+
+    // Pattern 1: [STICKER]http://... - hiển thị ảnh sticker
+    const stickerMatch = str.match(/^\[STICKER\](.+)$/);
+    if (stickerMatch) {
+        const url = stickerMatch[1].trim();
+        return `<img src="${escapeHtml(url)}" class="comm-msg-sticker" alt="sticker" style="max-width:120px;max-height:120px;border-radius:8px;display:block;">`;
+    }
+
+    // Pattern 2: [REPLY:msgId:SenderName:nội_dung_gốc] nội_dung_reply
+    const replyMatch = str.match(/^\[REPLY:([^:]+):([^:]+):([^\]]+)\](.*)$/s);
+    if (replyMatch) {
+        const replyMsgId   = escapeHtml(replyMatch[1].trim());
+        const replySender  = escapeHtml(replyMatch[2].trim());
+        const replyPreview = escapeHtml(replyMatch[3].trim());
+        const mainContent  = escapeHtml(replyMatch[4].trim());
+        return `<div class="comm-msg-reply-wrapper">
+            <div class="comm-msg-reply-quote" onclick="scrollToMsg('${replyMsgId}')">
+                <span class="comm-msg-reply-name">${replySender}</span>
+                <span class="comm-msg-reply-text">${replyPreview}</span>
+            </div>
+            <div class="comm-msg-reply-body">${mainContent}</div>
+        </div>`;
+    }
+
+    // Mặc định: escape HTML thông thường, giữ nguyên xuống dòng
+    return escapeHtml(str).replace(/\n/g, '<br>');
+}
+
+// Scroll đến tin nhắn được reply
+function scrollToMsg(msgId) {
+    const el = document.getElementById('msg-' + msgId);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('comm-msg-highlight');
+        setTimeout(() => el.classList.remove('comm-msg-highlight'), 1500);
+    }
 }
 
 // function likePost(postId) {
@@ -705,6 +865,24 @@ async function submitProfileComment() {
         fetchProfileInteractions(currentProfileCommentTarget.userId);
     } catch (e) {
         console.error("Lỗi submit comment:", e);
+    }
+}
+
+// ===========================================
+// 5.5 CHAT TOGGLE SIDEBAR
+// ===========================================
+// Bật/tắt tab thông tin bên phải trong CineChat
+function toggleChatInfoSidebar() {
+    const layout = document.getElementById("commChatView");
+    const icon = document.getElementById("iconToggleChatInfo");
+    if (!layout) return;
+
+    layout.classList.toggle("info-hidden");
+    const isHidden = layout.classList.contains("info-hidden");
+
+    // Đổi icon theo trạng thái: filled khi đang hiện, outlined khi ẩn
+    if (icon) {
+        icon.className = isHidden ? 'far fa-address-card' : 'fas fa-address-card';
     }
 }
 
@@ -1557,29 +1735,64 @@ async function openChat(targetUserId, targetUserName, targetAvatar) {
         currentChatUserId = targetUserId;
         currentChatTarget = { id: targetUserId, display_name: targetUserName, avatar: targetAvatar }; // Store target user info
         
+        // Cập nhật highlight item đang chọn trong danh sách chat
+        document.querySelectorAll('.comm-chat-item').forEach(item => {
+            item.classList.remove('active');
+            if (item.getAttribute('data-user-id') === targetUserId) {
+                item.classList.add('active');
+            }
+        });
+        
         // 2. Điều phối hiển thị (Hiện Content Chat, ẩn Welcome)
         const welcomeEl = document.getElementById("commChatWelcome");
         const contentEl = document.getElementById("commChatContent");
+        const layoutEl = document.getElementById("commChatView");
+        
         if (welcomeEl) welcomeEl.style.display = "none";
         if (contentEl) contentEl.style.display = "flex";
+        
+        // Hiện sidebar khi bắt đầu chat
+        if (layoutEl) {
+            layoutEl.classList.remove("info-hidden");
+            const toggleIcon = document.getElementById("iconToggleChatInfo");
+            if (toggleIcon) toggleIcon.className = 'fas fa-address-card';
+        }
 
         // 3. Tìm các phần tử giao diện (Dùng ID mới tránh xung đột)
         const nameEl = document.getElementById("commChatTargetName");
         const avatarEl = document.getElementById("commChatTargetAvatar");
         const inputEl = document.getElementById("commChatInputMessage");
         const messagesContainer = document.getElementById("commChatMessages");
-        const chatBoxStatus = document.querySelector('.comm-chat-box-status');
+        const chatBoxStatus = document.getElementById("commChatTargetStatus");
+
+        // Info Sidebar elements
+        const infoAvatarEl = document.getElementById("commInfoAvatar");
+        const infoNameEl = document.getElementById("commInfoName");
+        const infoStatusEl = document.getElementById("commInfoStatus");
 
         console.log("🔍 Checking DOM elements (Comm):", { nameEl:!!nameEl, avatarEl:!!avatarEl, container:!!messagesContainer });
 
         // 3. Cập nhật header ngay lập tức
         if (nameEl) nameEl.textContent = targetUserName;
         if (avatarEl) avatarEl.src = targetAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(targetUserName)}&background=random`;
+        
+        // Cập nhật Info Sidebar
+        if (infoNameEl) infoNameEl.textContent = targetUserName;
+        if (infoAvatarEl) infoAvatarEl.src = targetAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(targetUserName)}&background=random`;
+        // Gán @username giả lập từ tên hiển thị
+        const infoDetails = document.querySelector(".comm-info-details > div > div > div:first-child");
+        if(infoDetails) infoDetails.textContent = "@" + targetUserName.toLowerCase().replace(/\s/g, "");
+
         if (inputEl) inputEl.disabled = false;
-        if (chatBoxStatus) {
-            chatBoxStatus.innerHTML = '<span style="color: var(--text-muted);">Đang tải trạng thái...</span>';
-            refreshPresenceUI(); // Update status immediately
-        }
+        
+        // Cập nhật Status
+        const setStatus = (statusHTML) => {
+            if (chatBoxStatus) chatBoxStatus.innerHTML = statusHTML;
+            if (infoStatusEl) infoStatusEl.innerHTML = statusHTML;
+        };
+
+        setStatus('<span style="color: var(--text-muted);">Đang tải trạng thái...</span>');
+        refreshPresenceUI(); // Update status immediately
         
         if (messagesContainer) {
             messagesContainer.innerHTML = '<div style="display:flex; justify-content:center; align-items:center; height:100%;"><div class="loading-spinner"></div></div>';
@@ -1587,14 +1800,25 @@ async function openChat(targetUserId, targetUserName, targetAvatar) {
             throw new Error("Không tìm thấy container tin nhắn (commChatMessages)");
         }
 
-        // 4. Lấy tin nhắn (Thử lấy mọi cột, nếu lỗi thì lấy cột cơ bản)
+        // 4. Lấy tin nhắn (Lọc tin nhắn chưa bị xóa bởi người dùng hiện tại)
         console.log("💾 Fetching messages...");
         let { data: messages, error } = await supabase
             .from('community_messages')
-            .select('id, sender_id, receiver_id, content, status, created_at')
+            .select('id, sender_id, receiver_id, content, status, created_at, deleted_by_sender, deleted_by_receiver')
             .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${targetUserId}),and(sender_id.eq.${targetUserId},receiver_id.eq.${currentUser.id})`)
             .order('created_at', { ascending: true })
             .limit(50);
+            
+        // Lọc tin nhắn đã xóa ở phía người dùng hiện tại
+        if (messages) {
+            messages = messages.filter(msg => {
+                if (msg.sender_id === currentUser.id) {
+                    return !msg.deleted_by_sender;
+                } else {
+                    return !msg.deleted_by_receiver;
+                }
+            });
+        }
             
         // Nếu lỗi (có thể do thiếu cột status/created_at), thử lại bản thu gọn
         if (error) {
@@ -1613,11 +1837,14 @@ async function openChat(targetUserId, targetUserName, targetAvatar) {
         
         // 5. Hiển thị
         renderMessages(messages || []);
+        isPinnedListExpanded = false; // Reset trạng thái khi đổi chat
+        loadPinnedMessages();
         scrollToBottomChat();
         
         // 6. Tác vụ phụ (không block UI)
         markMessagesAsSeen(targetUserId).catch(err => console.error("Lỗi markAsSeen:", err));
         subscribeToChat(targetUserId);
+        cancelReply(); // Reset trạng thái reply khi chuyển người chat
 
     } catch (e) {
         console.error("❌ CRITICAL ERROR in openChat:", e);
@@ -1662,8 +1889,25 @@ function renderMessages(messages) {
         }
         
         return `
-            <div class="comm-msg ${isMe ? 'sent' : 'received'}" id="msg-${msg.id}">
-                <div class="comm-msg-bubble">${escapeHtml(msg.content)}</div>
+            <div class="comm-msg ${isMe ? 'sent' : 'received'} ${msg.status === 'recalled' ? 'recalled-style' : ''}" id="msg-${msg.id}">
+                <div class="comm-msg-body-wrapper">
+                    <div class="comm-msg-bubble">${parseMessageContent(msg.content)}</div>
+                    <div class="comm-msg-actions-quick">
+                        <button onclick="prepareReply('${msg.id}')" title="Trả lời"><i class="fas fa-quote-left"></i></button>
+                        <button onclick="shareMsg('${msg.id}')" title="Chia sẻ"><i class="fas fa-share"></i></button>
+                        <button class="btn-more" onclick="toggleMsgDropdown(event, '${msg.id}')" title="Thêm"><i class="fas fa-ellipsis-h"></i></button>
+                        
+                        <div class="comm-msg-dropdown" id="dropdown-msg-${msg.id}">
+                            <div class="comm-dropdown-item" onclick="copyMsgText('${msg.id}')"><i class="far fa-copy"></i> Copy tin nhắn</div>
+                            <div class="comm-dropdown-item" onclick="togglePinMsg('${msg.id}')"><i class="fas fa-thumbtack"></i> Ghim / Bỏ ghim</div>
+                            <div class="comm-dropdown-item"><i class="far fa-star"></i> Đánh dấu tin nhắn</div>
+                            <div class="comm-dropdown-item"><i class="fas fa-list-ul"></i> Chọn nhiều tin nhắn</div>
+                            <div class="comm-dropdown-divider"></div>
+                            ${isMe ? `<div class="comm-dropdown-item recall" onclick="recallMsg('${msg.id}')"><i class="fas fa-undo"></i> Thu hồi</div>` : ''}
+                            <div class="comm-dropdown-item delete" onclick="deleteMsgForMe('${msg.id}')"><i class="far fa-trash-alt"></i> Xóa chỉ ở phía tôi</div>
+                        </div>
+                    </div>
+                </div>
                 <div class="comm-msg-time">
                     ${time}
                     ${statusHtml}
@@ -1683,8 +1927,14 @@ async function sendMessage() {
     if(!currentChatUserId || !currentUser) return;
     
     const input = document.getElementById("commChatInputMessage");
-    const content = input.value.trim();
+    let content = input.value.trim();
     if(!content) return;
+
+    // Nếu đang reply, chèn pattern [REPLY:...]
+    if (replyingTo) {
+        content = `[REPLY:${replyingTo.id}:${replyingTo.name}:${replyingTo.text}] ${content}`;
+    }
+
     
     // Tạo ID tạm thời riêng cho tin nhắn này
     const tempId = 'temp-msg-' + Date.now();
@@ -1704,15 +1954,33 @@ async function sendMessage() {
     const time = new Date(tempMsg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     container.insertAdjacentHTML('beforeend', `
         <div class="comm-msg sent" style="opacity: 0.7;" id="${tempId}">
-            <div class="comm-msg-bubble">${escapeHtml(tempMsg.content)}</div>
+            <div class="comm-msg-body-wrapper">
+                <div class="comm-msg-bubble">${parseMessageContent(tempMsg.content)}</div>
+                <div class="comm-msg-actions-quick">
+                    <button title="Trả lời"><i class="fas fa-quote-left"></i></button>
+                    <button title="Chia sẻ"><i class="fas fa-share"></i></button>
+                    <button class="btn-more"><i class="fas fa-ellipsis-h"></i></button>
+                </div>
+            </div>
             <div class="comm-msg-time">${time} <i class="fas fa-clock" style="font-size: 0.75rem; margin-left: 5px; color: var(--text-muted);" title="Đang gửi..."></i></div>
         </div>
     `);
     scrollToBottomChat();
     input.value = "";
+    cancelReply();
     
     // 2. Gửi lên Supabase
     try {
+        // [QUAN TRỌNG] Bỏ ẩn và bỏ trạng thái xóa hội thoại này khi có tin nhắn mới
+        supabase.from('community_friends')
+            .update({ hidden_by: [], deleted_by: [] }) 
+            .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${currentChatUserId}),and(user_id.eq.${currentChatUserId},friend_id.eq.${currentUser.id})`)
+            .then(({error: hideErr}) => {
+                if(hideErr) console.warn("Lỗi tự động bỏ ẩn hội thoại:", hideErr);
+                // Refresh list chat nếu đang hiện màn hình chat
+                if(currentCommView === 'chat') loadChatList();
+            });
+
         // Xác định trạng thái ban đầu: Nếu người nhận đang Online thì để 'delivered', ngược lại 'sent'
         const isTargetOnline = userPresenceMap.get(currentChatUserId)?.online;
         const initialStatus = isTargetOnline ? 'delivered' : 'sent';
@@ -1730,19 +1998,39 @@ async function sendMessage() {
             
         if (error) throw error;
         
-        // Cập nhật lại ID thật thay vì tạm thời (Nếu cần)
+        // Cập nhật lại ID thật và gắn đầy đủ các nút hành động
         const msgEl = document.getElementById(tempId);
         if(msgEl) {
             msgEl.style.opacity = "1";
             msgEl.id = `msg-${data.id}`;
+            
+            // Thay thế bộ nút tạm bằng bộ nút thật có onclick
+            const actionsQuick = msgEl.querySelector('.comm-msg-actions-quick');
+            if (actionsQuick) {
+                actionsQuick.innerHTML = `
+                    <button onclick="prepareReply('${data.id}')" title="Trả lời"><i class="fas fa-quote-left"></i></button>
+                    <button onclick="shareMsg('${data.id}')" title="Chia sẻ"><i class="fas fa-share"></i></button>
+                    <button class="btn-more" onclick="toggleMsgDropdown(event, '${data.id}')" title="Thêm"><i class="fas fa-ellipsis-h"></i></button>
+                    
+                    <div class="comm-msg-dropdown" id="dropdown-msg-${data.id}">
+                        <div class="comm-dropdown-item" onclick="copyMsgText('${data.id}')"><i class="far fa-copy"></i> Copy tin nhắn</div>
+                        <div class="comm-dropdown-item" onclick="togglePinMsg('${data.id}')"><i class="fas fa-thumbtack"></i> Ghim / Bỏ ghim</div>
+                        <div class="comm-dropdown-item"><i class="far fa-star"></i> Đánh dấu tin nhắn</div>
+                        <div class="comm-dropdown-divider"></div>
+                        <div class="comm-dropdown-item recall" onclick="recallMsg('${data.id}')"><i class="fas fa-undo"></i> Thu hồi</div>
+                        <div class="comm-dropdown-item delete" onclick="deleteMsgForMe('${data.id}')"><i class="far fa-trash-alt"></i> Xóa chỉ ở phía tôi</div>
+                    </div>
+                `;
+            }
+
             const timeEl = msgEl.querySelector('.comm-msg-time');
             if (timeEl) {
-                const time = new Date(data.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const timeStr = new Date(data.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 let statusHtml = data.status === 'delivered' 
                     ? `<div class="comm-msg-status delivered">Đã nhận <i class="fas fa-check-double"></i></div>`
                     : `<div class="comm-msg-status sent">Đã gửi <i class="fas fa-check"></i></div>`;
                 
-                timeEl.innerHTML = `${time} ${statusHtml}`;
+                timeEl.innerHTML = `${timeStr} ${statusHtml}`;
             }
         }
         
@@ -1815,22 +2103,54 @@ function subscribeToChat(targetUserId) {
             const msg = payload.new;
             if (!msg) return;
             
-            // Nếu là Update trạng thái tin nhắn của mình
-            if (payload.eventType === 'UPDATE' && msg.sender_id === currentUser.id && msg.receiver_id === targetUserId) {
-                const domMsg = document.getElementById(`msg-${msg.id}`);
-                if (domMsg) {
-                    const timeEl = domMsg.querySelector('.comm-msg-time');
-                    const timeStr = new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    if (timeEl) {
-                        let statusHtml = '';
-                        if (msg.status === 'seen') {
-                            statusHtml = `<div class="comm-msg-status seen">Đã xem <i class="fas fa-check-double"></i></div>`;
-                        } else if (msg.status === 'delivered') {
-                            statusHtml = `<div class="comm-msg-status delivered">Đã nhận <i class="fas fa-check-double"></i></div>`;
-                        } else {
-                            statusHtml = `<div class="comm-msg-status sent">Đã gửi <i class="fas fa-check"></i></div>`;
+            // Nếu là Update (Trạng thái hoặc Nội dung - Thu hồi)
+            if (payload.eventType === 'UPDATE') {
+                const isOurChat = (msg.sender_id === currentUser.id && msg.receiver_id === targetUserId) ||
+                                  (msg.sender_id === targetUserId && msg.receiver_id === currentUser.id);
+                
+                if (isOurChat) {
+                    const domMsg = document.getElementById(`msg-${msg.id}`);
+                    if (domMsg) {
+                        // 0. Kiểm tra nếu mình vừa xóa tin nhắn này ở thiết bị khác
+                        const isDeletedByMe = msg.sender_id === currentUser.id ? msg.deleted_by_sender : msg.deleted_by_receiver;
+                        if (isDeletedByMe) {
+                            domMsg.style.transition = 'all 0.3s ease';
+                            domMsg.style.opacity = '0';
+                            domMsg.style.transform = 'translateX(20px)';
+                            setTimeout(() => domMsg.remove(), 300);
+                            return; // Thoát vì tin nhắn đã bị xóa khỏi UI của mình
                         }
-                        timeEl.innerHTML = `${timeStr} ${statusHtml}`;
+
+                        // 1. Cập nhật nội dung (Dành cho Thu hồi tin nhắn)
+                        const bubbleEl = domMsg.querySelector('.comm-msg-bubble');
+                        if (bubbleEl) {
+                            bubbleEl.innerHTML = parseMessageContent(msg.content);
+                            if (msg.status === 'recalled') {
+                                domMsg.classList.add('recalled-style');
+                                // Ẩn các nút hành động nhanh nếu đã thu hồi
+                                const actionsEl = domMsg.querySelector('.comm-msg-actions-quick');
+                                if (actionsEl) actionsEl.style.display = 'none';
+                            }
+                        }
+
+                        // 2. Cập nhật trạng thái Seen/Delivered (Chỉ cho tin nhắn của chính mình gửi)
+                        if (msg.sender_id === currentUser.id) {
+                            const timeEl = domMsg.querySelector('.comm-msg-time');
+                            const timeStr = new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                            if (timeEl) {
+                                let statusHtml = '';
+                                if (msg.status === 'seen') {
+                                    statusHtml = `<div class="comm-msg-status seen">Đã xem <i class="fas fa-check-double"></i></div>`;
+                                } else if (msg.status === 'delivered') {
+                                    statusHtml = `<div class="comm-msg-status delivered">Đã nhận <i class="fas fa-check-double"></i></div>`;
+                                } else if (msg.status === 'recalled') {
+                                    statusHtml = `<div class="comm-msg-status recalled">Đã thu hồi <i class="fas fa-undo"></i></div>`;
+                                } else {
+                                    statusHtml = `<div class="comm-msg-status sent">Đã gửi <i class="fas fa-check"></i></div>`;
+                                }
+                                timeEl.innerHTML = `${timeStr} ${statusHtml}`;
+                            }
+                        }
                     }
                 }
                 return;
@@ -1841,6 +2161,10 @@ function subscribeToChat(targetUserId) {
                 if ((msg.sender_id === currentUser.id && msg.receiver_id === targetUserId) ||
                     (msg.sender_id === targetUserId && msg.receiver_id === currentUser.id)) {
                     
+                    // Kiểm tra xem tin nhắn có bị ẩn bởi mình không (trường hợp hiếm khi insert nhưng tốt để có)
+                    const isDeleted = msg.sender_id === currentUser.id ? msg.deleted_by_sender : msg.deleted_by_receiver;
+                    if (isDeleted) return;
+
                     // Nếu mình là người nhận, VÀ ĐANG Ở TRONG TAB CHAT VỚI ĐÚNG NGƯỜI ĐÓ
                     if (msg.receiver_id === currentUser.id && currentCommView === 'chat' && currentChatUserId === targetUserId) {
                         markMessagesAsSeen(targetUserId);
@@ -1853,8 +2177,22 @@ function subscribeToChat(targetUserId) {
                             if(container.innerHTML.includes("Hãy gửi lời chào đầu tiên!")) container.innerHTML = "";
                             const time = new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                             container.insertAdjacentHTML('beforeend', `
-                                <div class="comm-msg received" id="msg-${msg.id}">
-                                    <div class="comm-msg-bubble">${escapeHtml(msg.content)}</div>
+                                <div class="comm-msg received ${msg.status === 'recalled' ? 'recalled-style' : ''}" id="msg-${msg.id}">
+                                    <div class="comm-msg-body-wrapper">
+                                        <div class="comm-msg-bubble">${parseMessageContent(msg.content)}</div>
+                                        <div class="comm-msg-actions-quick">
+                                            <button onclick="prepareReply('${msg.id}')" title="Trả lời"><i class="fas fa-quote-left"></i></button>
+                                            <button onclick="shareMsg('${msg.id}')" title="Chia sẻ"><i class="fas fa-share"></i></button>
+                                            <button class="btn-more" onclick="toggleMsgDropdown(event, '${msg.id}')" title="Thêm"><i class="fas fa-ellipsis-h"></i></button>
+                                            
+                                            <div class="comm-msg-dropdown" id="dropdown-msg-${msg.id}">
+                                                <div class="comm-dropdown-item" onclick="copyMsgText('${msg.id}')"><i class="far fa-copy"></i> Copy tin nhắn</div>
+                                                <div class="comm-dropdown-item" onclick="togglePinMsg('${msg.id}')"><i class="fas fa-thumbtack"></i> Ghim / Bỏ ghim</div>
+                                                <div class="comm-dropdown-divider"></div>
+                                                <div class="comm-dropdown-item delete" onclick="deleteMsgForMe('${msg.id}')"><i class="far fa-trash-alt"></i> Xóa chỉ ở phía tôi</div>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <div class="comm-msg-time">${time}</div>
                                 </div>
                             `);
@@ -1864,75 +2202,625 @@ function subscribeToChat(targetUserId) {
                 }
                 return;
             }
+
+            // Nếu là DELETE (Trường hợp Hard Delete khi cả 2 cùng xóa)
+            if (payload.eventType === 'DELETE') {
+                const deletedId = payload.old.id;
+                const domMsg = document.getElementById(`msg-${deletedId}`);
+                if (domMsg) domMsg.remove();
+                return;
+            }
         }
       )
       .subscribe();
 }
 
-async function loadChatList() {
-    if(!currentUser) return;
-    const container = document.getElementById("commChatList");
-    if(!container) return;
+/**
+ * Đăng ký lắng nghe toàn cục cho bảng tin nhắn
+ * Mục đích: Refresh danh sách chat (loadChatList) khi có tin nhắn mới từ bất kỳ ai
+ */
+let globalMessageSubscription = null;
+function subscribeToMessageNotifications() {
+    if (!currentUser) return;
+    if (globalMessageSubscription) {
+        supabase.removeChannel(globalMessageSubscription);
+    }
+
+    globalMessageSubscription = supabase.channel('global-messages')
+        .on(
+            'postgres_changes',
+            { 
+                event: 'INSERT', 
+                schema: 'public', 
+                table: 'community_messages',
+                filter: `receiver_id=eq.${currentUser.id}`
+            },
+            async (payload) => {
+                const msg = payload.new;
+                console.log("📨 Có tin nhắn mới từ:", msg.sender_id);
+                
+                // [QUAN TRỌNG] Tự động bỏ ẩn và bỏ trạng thái xóa hội thoại này trên DB khi nhận tin nhắn mới
+                try {
+                    await supabase.from('community_friends')
+                        .update({ hidden_by: [], deleted_by: [] }) 
+                        .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${msg.sender_id}),and(user_id.eq.${msg.sender_id},friend_id.eq.${currentUser.id})`);
+                } catch (e) {
+                    console.warn("Lỗi tự động bỏ ẩn khi nhận tin nhắn:", e);
+                }
+
+                // Nếu đang ở màn hình chat (sidebar hiện), load lại list để cập nhật tin mới nhất/bỏ ẩn
+                if (currentCommView === 'chat') {
+                    loadChatList();
+                }
+            }
+        )
+        .subscribe();
+}
+
+// 7.1 LOGIC TƯƠNG TÁC TIN NHẮN
+function toggleMsgDropdown(event, msgId) {
+    if (event) event.stopPropagation();
     
-    container.innerHTML = '<div style="text-align:center; padding: 20px;"><div class="loading-spinner"></div></div>';
+    // Đóng tất cả dropdown khác
+    document.querySelectorAll('.comm-msg-dropdown.active').forEach(d => {
+        if (d.id !== `dropdown-msg-${msgId}`) d.classList.remove('active');
+    });
+
+    const dropdown = document.getElementById(`dropdown-msg-${msgId}`);
+    if (dropdown) {
+        // Kiểm tra khoảng trống phía trên
+        const button = event.currentTarget;
+        const chatContainer = document.getElementById("commChatMessages");
+        if (button && chatContainer) {
+            const buttonRect = button.getBoundingClientRect();
+            const containerRect = chatContainer.getBoundingClientRect();
+            const spaceAbove = buttonRect.top - containerRect.top;
+
+            // Nếu khoảng trống phía trên < 250px thì cho drop xuống dưới
+            if (spaceAbove < 250) {
+                dropdown.classList.add('dropdown-down');
+            } else {
+                dropdown.classList.remove('dropdown-down');
+            }
+        }
+
+        const isActive = dropdown.classList.toggle('active');
+        const parent = dropdown.parentElement;
+        if (parent) {
+            parent.classList.toggle('has-active-dropdown', isActive);
+        }
+
+        // Ngăn chặn click bên trong dropdown làm đóng chính nó
+        if (isActive && !dropdown.dataset.hasListener) {
+            dropdown.addEventListener('click', (e) => e.stopPropagation());
+            dropdown.dataset.hasListener = "true";
+        }
+    }
+}
+
+// Click ra ngoài để đóng dropdown
+document.addEventListener('click', () => {
+    document.querySelectorAll('.comm-msg-dropdown.active').forEach(d => {
+        d.classList.remove('active');
+        const parent = d.parentElement;
+        if (parent) parent.classList.remove('has-active-dropdown');
+    });
+
+    const pd = document.getElementById("commPinnedDropdown");
+    if (pd) pd.classList.remove("active");
+
+    // Đóng tất cả menu ghim (popup nhỏ)
+    document.querySelectorAll('.comm-pinned-item-menu.active').forEach(m => m.classList.remove('active'));
+
+    // Đóng tất cả dropdown của chat item (3 chấm)
+    closeAllChatDropdowns();
+});
+
+function copyMsgText(msgId) {
+    const msgEl = document.getElementById(`msg-${msgId}`);
+    if (!msgEl) return;
     
-    // Logic thực tế cần group by tin nhắn mới nhất. 
-    // Tạm thời lấy danh sách những người là bạn bè (accepted) làm list chat
+    const bubble = msgEl.querySelector('.comm-msg-bubble');
+    if (!bubble) return;
+
+    // Nếu là sticker, copy URL
+    const img = bubble.querySelector('img.comm-msg-sticker');
+    const textToCopy = img ? img.src : bubble.innerText;
+
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        showNotification("Đã copy tin nhắn vào bộ nhớ tạm", "success");
+    });
+}
+
+async function recallMsg(msgId) {
+    const ok = await showConfirmModal("Thu hồi tin nhắn", "Bạn có chắc chắn muốn thu hồi tin nhắn này?", "fas fa-undo-alt", "recall_msg");
+    if (!ok) return;
+    
     try {
-        const { data: friendsData, error } = await supabase
-            .from('community_friends')
-            .select(`
-                friend_id,
-                user_id
-            `)
-            .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
-            .eq('status', 'accepted')
-            .limit(20);
-            
-        if(error) throw error;
+        const { error } = await supabase
+            .from('community_messages')
+            .update({ content: 'Tin nhắn đã thu hồi', status: 'recalled' })
+            .eq('id', msgId)
+            .eq('sender_id', currentUser.id);
+
+        if (error) throw error;
+        showNotification("Đã thu hồi tin nhắn", "info");
         
-        if(!friendsData || friendsData.length===0) {
-            container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">Bạn chưa kết bạn với ai để bắt đầu tính năng chat. Hãy gửi lời mời kết bạn!</div>';
+        // Cập nhật lại danh sách hội thoại để hiện preview mới
+        loadChatList();
+    } catch (e) {
+        console.error("Lỗi thu hồi:", e);
+        showNotification("Không thể thu hồi tin nhắn", "error");
+    }
+}
+
+async function deleteMsgForMe(msgId) {
+    const ok = await showConfirmModal("Xóa tin nhắn", "Xóa tin nhắn này ở phía bạn? (Hành động này không thể hoàn tác)", "fas fa-trash-alt", "delete_msg");
+    if (!ok) return;
+    
+    try {
+        // 1. Lấy thông tin tin nhắn hiện tại để kiểm tra vai trò
+        const { data: msg, error: fetchError } = await supabase
+            .from('community_messages')
+            .select('*')
+            .eq('id', msgId)
+            .single();
+            
+        if (fetchError || !msg) throw new Error("Không tìm thấy tin nhắn");
+
+        const isSender = msg.sender_id === currentUser.id;
+        const updateData = isSender ? { deleted_by_sender: true } : { deleted_by_receiver: true };
+
+        // 2. Cập nhật flag xóa của người hiện tại
+        const { data: updatedMsg, error: updateError } = await supabase
+            .from('community_messages')
+            .update(updateData)
+            .eq('id', msgId)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        // 3. Ẩn ngay trên UI
+        const el = document.getElementById(`msg-${msgId}`);
+        if (el) {
+            el.style.transition = 'all 0.3s ease';
+            el.style.opacity = '0';
+            el.style.transform = 'translateX(20px)';
+            setTimeout(() => el.remove(), 300);
+        }
+
+        // 4. [QUAN TRỌNG] Kiểm tra nếu cả hai bên đều đã xóa thì thực hiện Hard Delete (xóa khỏi DB)
+        if (updatedMsg.deleted_by_sender && updatedMsg.deleted_by_receiver) {
+            console.log("🗑️ Cả hai bên đã xóa, đang thực hiện xóa vĩnh viễn khỏi DB...");
+            await supabase
+                .from('community_messages')
+                .delete()
+                .eq('id', msgId);
+        }
+
+        showNotification("Đã xóa tin nhắn ở phía bạn", "info");
+
+        // Cập nhật lại danh sách hội thoại để hiện preview mới
+        loadChatList();
+    } catch (e) {
+        console.error("Lỗi xóa tin nhắn:", e);
+        showNotification("Không thể xóa tin nhắn", "error");
+    }
+}
+
+function shareMsg(msgId) {
+    showNotification("Tính năng chia sẻ đang phát triển", "info");
+}
+
+function prepareReply(msgId) {
+    const msgEl = document.getElementById(`msg-${msgId}`);
+    if (!msgEl) return;
+
+    const isMe = msgEl.classList.contains('sent');
+    const senderName = isMe ? (currentUser.display_name || "Tôi") : (currentChatTarget ? currentChatTarget.display_name : "Bạn");
+    
+    // Đóng dropdown nếu mở từ đó
+    document.querySelectorAll('.comm-msg-dropdown.active').forEach(d => d.classList.remove('active'));
+    
+    const bubble = msgEl.querySelector('.comm-msg-bubble');
+    // Lấy text preview, bỏ qua phần reply cũ nếu có
+    let text = "";
+    const replyBody = bubble.querySelector('.comm-msg-reply-body');
+    if (replyBody) {
+        text = replyBody.innerText;
+    } else {
+        const sticker = bubble.querySelector('img.comm-msg-sticker');
+        text = sticker ? "[Sticker]" : bubble.innerText;
+    }
+
+    replyingTo = {
+        id: msgId,
+        name: senderName,
+        text: text.substring(0, 50) + (text.length > 50 ? "..." : "")
+    };
+
+    // Hiển thị thanh bar reply phía trên input (Sẽ cần CSS)
+    showReplyBar();
+}
+
+function showReplyBar() {
+    let bar = document.getElementById("commChatReplyBar");
+    if (!bar) {
+        const inputArea = document.querySelector(".comm-chat-input-area");
+        bar = document.createElement("div");
+        bar.id = "commChatReplyBar";
+        bar.className = "comm-chat-reply-bar";
+        inputArea.parentNode.insertBefore(bar, inputArea);
+    }
+
+    bar.innerHTML = `
+        <div class="reply-content">
+            <i class="fas fa-reply"></i>
+            <div class="reply-text-wrapper">
+                <span class="reply-name">Đang trả lời ${replyingTo.name}</span>
+                <span class="reply-preview">${replyingTo.text}</span>
+            </div>
+        </div>
+        <button class="reply-cancel" onclick="cancelReply()"><i class="fas fa-times"></i></button>
+    `;
+    bar.classList.add('active');
+}
+
+function cancelReply() {
+    replyingTo = null;
+    const bar = document.getElementById("commChatReplyBar");
+    if (bar) bar.classList.remove('active');
+}
+
+
+/**
+ * Hàm tải danh sách hội thoại - VIẾT LẠI HOÀN TOÀN
+ */
+async function loadChatList() {
+    if (!currentUser) return;
+    const container = document.getElementById("commChatList");
+    if (!container) return;
+
+    const myIdStr = String(currentUser.id).trim();
+    console.log(`[CineChat] --- BẮT ĐẦU LOAD CHAT LIST (My ID: ${myIdStr}) ---`);
+
+    try {
+        // 1. Lấy dữ liệu hội thoại
+        const { data: friendsData, error: fError } = await supabase
+            .from('community_friends')
+            .select('*')
+            .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
+            .eq('status', 'accepted');
+
+        if (fError) throw fError;
+
+        // 2. Lọc bỏ ẩn
+        const activeChats = (friendsData || []).filter(chat => {
+            const hiddenBy = Array.isArray(chat.hidden_by) ? chat.hidden_by : [];
+            return !hiddenBy.some(id => String(id).trim() === myIdStr);
+        });
+
+        if (activeChats.length === 0) {
+            container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">Không có hội thoại nào.</div>';
             return;
         }
 
-        const friendIds = friendsData.map(f => f.user_id === currentUser.id ? f.friend_id : f.user_id);
-        
+        // 3. Lấy profile bạn bè
+        const friendIds = activeChats.map(c => c.user_id === currentUser.id ? c.friend_id : c.user_id);
         const { data: profiles, error: pError } = await supabase
             .from('profiles')
             .select('id, display_name, avatar')
             .in('id', friendIds);
-            
+
         if (pError) throw pError;
-        
-        container.innerHTML = profiles.map(user => {
-            const avatar = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.display_name)}&background=random`;
-            const friendId = user.id;
-            const name = user.display_name;
-            const lastMsg = "Click để chat..."; // Placeholder, actual last message would require more complex query
+
+        // 4. Lấy tin nhắn mới nhất để hiển thị preview (Lấy khoảng 100 tin gần nhất của user này)
+        const { data: recentMessages, error: mError } = await supabase
+            .from('community_messages')
+            .select('id, sender_id, receiver_id, content, status, created_at, deleted_by_sender, deleted_by_receiver')
+            .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+        // Tạo map friendId -> tin nhắn mới nhất
+        const latestMsgMap = {};
+        if (recentMessages) {
+            recentMessages.forEach(msg => {
+                const myId = String(currentUser.id).trim();
+                const senderId = String(msg.sender_id).trim();
+                const receiverId = String(msg.receiver_id).trim();
+                
+                // Kiểm tra xem tin nhắn này có bị mình xóa không
+                const isDeletedByMe = (senderId === myId) ? msg.deleted_by_sender : msg.deleted_by_receiver;
+                if (isDeletedByMe) return; // Bỏ qua tin nhắn đã xóa ở phía mình
+
+                const friendId = (senderId === myId) ? receiverId : senderId;
+                if (!latestMsgMap[friendId]) {
+                    latestMsgMap[friendId] = msg;
+                }
+            });
+        }
+
+        // 5. Xử lý dữ liệu hiển thị
+        let displayItems = profiles.map(profile => {
+            const row = activeChats.find(c => String(c.user_id).trim() === String(profile.id).trim() || String(c.friend_id).trim() === String(profile.id).trim());
+            const pinnedBy = Array.isArray(row.pinned_by) ? row.pinned_by : [];
+            
+            // So sánh ID cực kỳ cẩn thận
+            const isPinned = pinnedBy.some(id => String(id).trim() === myIdStr);
+
+            // Lấy nội dung tin nhắn cuối
+            const friendIdStr = String(profile.id).trim();
+            const lastMsgObj = latestMsgMap[friendIdStr];
+            let lastMsgText = "Nhấn để bắt đầu chat";
+            
+            if (lastMsgObj) {
+                const myId = String(currentUser.id).trim();
+                const senderId = String(lastMsgObj.sender_id).trim();
+                const isFromMe = (senderId === myId);
+                const content = lastMsgObj.content || "";
+                
+                if (lastMsgObj.status === 'recalled' || content === 'Tin nhắn đã thu hồi' || content === '[Tin nhắn đã thu hồi]') {
+                    lastMsgText = "Tin nhắn đã thu hồi";
+                } else if (lastMsgObj.status === 'deleted') {
+                    lastMsgText = "Tin nhắn đã bị xóa";
+                } else if (content.startsWith('[STICKER]')) {
+                    lastMsgText = (isFromMe ? "Bạn: " : "") + "[Sticker]";
+                } else if (content.startsWith('[REPLY:')) {
+                    // Trích xuất nội dung chính sau phần [REPLY:...]
+                    const mainContentMatch = content.match(/\]\s*(.*)$/s);
+                    const mainContent = mainContentMatch ? mainContentMatch[1].trim() : content;
+                    lastMsgText = (isFromMe ? "Bạn: " : "") + mainContent;
+                } else {
+                    lastMsgText = (isFromMe ? "Bạn: " : "") + content;
+                }
+                
+                // Trình bày ngắn gọn
+                if (lastMsgText.length > 35) lastMsgText = lastMsgText.substring(0, 32) + "...";
+            }
+
+            return {
+                ...profile,
+                rowId: row.id,
+                isPinned: isPinned,
+                lastMsg: lastMsgText
+            };
+        });
+
+        // Sắp xếp: Ghim lên đầu
+        displayItems.sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
+
+        console.log("[CineChat] Danh sách sau khi xử lý ghim:");
+        console.table(displayItems.map(i => ({ Tên: i.display_name, 'Ghim?': i.isPinned, 'FriendID': i.id })));
+
+        // 6. Render HTML
+        container.innerHTML = displayItems.map(item => {
+            const avatar = item.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.display_name)}&background=random`;
+            const isActive = currentChatUserId === item.id;
+            const isOnline = userPresenceMap.get(String(item.id))?.online;
             
             return `
-                <div class="comm-chat-item ${currentChatTarget && currentChatTarget.id === friendId ? 'active' : ''}" data-user-id="${friendId}" onclick="openChat('${user.id}', '${user.display_name.replace(/'/g, "\\'")}', '${avatar}')">
+                <div class="comm-chat-item ${isActive ? 'active' : ''} ${item.isPinned ? 'pinned' : ''}" 
+                     id="chat-item-${item.id}"
+                     data-user-id="${item.id}"
+                     onclick="openChat('${item.id}', '${item.display_name.replace(/'/g, "\\'")}', '${avatar}')">
+                    
+                    ${item.isPinned ? '<div class="comm-pinned-badge"><i class="fas fa-thumbtack"></i> GHIM</div>' : ''}
+                    
                     <div class="comm-chat-item-avatar">
                         <img src="${avatar}">
-                        <div class="comm-online-indicator"></div>
+                        <div class="comm-online-indicator" style="background: ${isOnline ? '#4caf50' : '#888'}"></div>
                     </div>
                     <div class="comm-chat-item-info">
-                        <div class="comm-chat-item-name">${name}</div>
-                        <div class="comm-chat-item-msg">${lastMsg}</div>
-                        <div class="comm-chat-item-status" style="font-size: 0.75rem; color: var(--text-muted);"></div>
+                        <div class="comm-chat-item-name">${item.display_name}</div>
+                        <div class="comm-chat-item-msg">${item.lastMsg}</div>
+                    </div>
+
+                    <div class="comm-chat-item-actions">
+                        <button class="comm-chat-btn-more" onclick="event.stopPropagation(); toggleChatItemDropdown(event, '${item.id}')">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        
+                        <div class="comm-chat-item-dropdown" id="dropdown-chat-${item.id}">
+                            <div class="comm-chat-dropdown-item" onclick="event.stopPropagation(); processPin('${item.rowId}', ${item.isPinned})">
+                                <i class="fas fa-thumbtack" style="${item.isPinned ? 'color: #ffcc00' : ''}"></i> 
+                                ${item.isPinned ? 'Bỏ ghim' : 'Ghim hội thoại'}
+                            </div>
+                            <div class="comm-chat-dropdown-item" onclick="event.stopPropagation(); processHide('${item.rowId}', '${item.id}')">
+                                <i class="fas fa-eye-slash"></i> Ẩn trò chuyện
+                            </div>
+                            <div class="comm-chat-dropdown-divider"></div>
+                            <div class="comm-chat-dropdown-item delete" onclick="event.stopPropagation(); processDelete('${item.rowId}', '${item.id}')">
+                                <i class="fas fa-trash-alt"></i> Xóa hội thoại
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
         }).join("");
-        
-        refreshPresenceUI(); // Update presence indicators after rendering list
-        
-    } catch(e) {
-        console.error("Lỗi lấy danh sách chat", e);
-        container.innerHTML = '<div style="padding: 20px; color: red;">Lỗi tải dữ liệu.</div>';
+
+        if (typeof refreshPresenceUI === 'function') refreshPresenceUI();
+
+    } catch (e) {
+        console.error("[CineChat] Lỗi loadChatList:", e);
     }
 }
+
+/**
+ * Xử lý Ghim (Pin) - v4.7 Bulletproof
+ */
+async function processPin(rowId, currentPinnedStatus) {
+    if (!currentUser || !rowId) {
+        console.error("[CineChat] Thiếu thông tin để Ghim:", { currentUser, rowId });
+        return;
+    }
+    
+    try {
+        const myId = String(currentUser.id).trim();
+        console.log(`[CineChat] --- Bắt đầu ${currentPinnedStatus ? 'BỎ GHIM' : 'GHIM'} ---`);
+        console.log(`[CineChat] Row ID: ${rowId}, My ID: ${myId}`);
+        
+        // 1. Lấy trạng thái mới nhất từ DB
+        const { data: currentData, error: fetchErr } = await supabase
+            .from('community_friends')
+            .select('pinned_by, user_id, friend_id')
+            .eq('id', rowId)
+            .single();
+
+        if (fetchErr) throw fetchErr;
+
+        let pinnedBy = Array.isArray(currentData.pinned_by) ? [...currentData.pinned_by] : [];
+        // Làm sạch mảng (ép kiểu string cho tất cả)
+        pinnedBy = pinnedBy.map(id => String(id).trim());
+
+        if (currentPinnedStatus) {
+            pinnedBy = pinnedBy.filter(id => id !== myId);
+        } else {
+            if (!pinnedBy.includes(myId)) pinnedBy.push(myId);
+        }
+
+        console.log("[CineChat] Mảng pinned_by mới chuẩn bị gửi:", pinnedBy);
+
+        // 2. Cập nhật DB và YÊU CẦU TRẢ VỀ DỮ LIỆU MỚI (.select())
+        const { data: updatedRows, error: updateErrCount } = await supabase
+            .from('community_friends')
+            .update({ pinned_by: pinnedBy })
+            .eq('id', rowId)
+            .select();
+
+        if (updateErrCount) throw updateErrCount;
+
+        // KIỂM TRA THỰC TẾ: Supabase update thành công nhưng có trúng dòng nào không?
+        if (!updatedRows || updatedRows.length === 0) {
+            console.error("[CineChat] CRITICAL: Update thành công nhưng 0 dòng bị ảnh hưởng!");
+            showNotification("Lỗi: Không có quyền cập nhật dòng này (Kiểm tra RLS Database)", "error");
+            return;
+        }
+
+        const actualPinnedBy = updatedRows[0].pinned_by || [];
+        console.log("[CineChat] Dữ liệu thực tế từ SERVER sau khi update:", actualPinnedBy);
+
+        // Kiểm tra xem ID của mình có thực sự nằm trong mảng vừa lưu không
+        const isActuallySaved = actualPinnedBy.some(id => String(id).trim() === myId);
+        
+        if (!currentPinnedStatus && !isActuallySaved) {
+            console.warn("[CineChat] WARNING: Bạn đã ghim nhưng Server không lưu ID của bạn!");
+            showNotification("Database không lưu được trạng thái Ghim. Vui lòng kiểm tra phân quyền.", "warning");
+        } else {
+            showNotification(currentPinnedStatus ? "Đã bỏ ghim" : "Đã ghim hội thoại thành công", "success");
+        }
+        
+        // 3. Đợi 200ms cho DB ổn định rồi load lại
+        setTimeout(() => loadChatList(), 200);
+
+    } catch (err) {
+        console.error("[CineChat] Lỗi triệt để processPin:", err);
+        showNotification("Lỗi kỹ thuật: " + err.message, "error");
+    } finally {
+        closeAllChatDropdowns();
+    }
+}
+
+/**
+ * Xử lý Ẩn (Hide) - VIẾT LẠI HOÀN TOÀN
+ */
+async function processHide(rowId, targetUserId) {
+    if (!currentUser || !rowId) return;
+    try {
+        const { data, error: fError } = await supabase
+            .from('community_friends')
+            .select('hidden_by')
+            .eq('id', rowId)
+            .single();
+
+        if (fError) throw fError;
+
+        let hiddenBy = Array.isArray(data.hidden_by) ? data.hidden_by : [];
+        const myId = String(currentUser.id);
+
+        if (!hiddenBy.some(id => String(id) === myId)) {
+            hiddenBy.push(myId);
+        }
+
+        const { error: uError } = await supabase
+            .from('community_friends')
+            .update({ hidden_by: hiddenBy })
+            .eq('id', rowId);
+
+        if (uError) throw uError;
+
+        showNotification("Đã ẩn cuộc trò chuyện", "info");
+        if (currentChatUserId === targetUserId) switchCommView('chat');
+        await loadChatList();
+
+    } catch (err) {
+        console.error("[CineChat] Lỗi khi ẩn:", err);
+    } finally {
+        closeAllChatDropdowns();
+    }
+}
+
+/**
+ * Xử lý Xóa (Delete/Hard-Delete) - VIẾT LẠI HOÀN TOÀN
+ */
+async function processDelete(rowId, targetUserId) {
+    if (!currentUser || !rowId) return;
+    
+    const confirm = await showConfirmModal("Xác nhận xóa?", "Tin nhắn sẽ biến mất khỏi danh sách của bạn. Nếu cả 2 cùng xóa, toàn bộ dữ liệu sẽ được quét sạch khỏi hệ thống.", "fas fa-trash-alt", "delete_conv");
+    if (!confirm) return;
+
+    try {
+        // 1. Lấy thông tin hiện tại - dùng id trực tiếp
+        const { data, error: fError } = await supabase
+            .from('community_friends')
+            .select('*')
+            .eq('id', rowId)
+            .single();
+
+        if (fError) throw fError;
+
+        let deletedBy = Array.isArray(data.deleted_by) ? data.deleted_by : [];
+        let hiddenBy = Array.isArray(data.hidden_by) ? data.hidden_by : [];
+        const myId = String(currentUser.id);
+
+        if (!deletedBy.some(id => String(id) === myId)) deletedBy.push(myId);
+        if (!hiddenBy.some(id => String(id) === myId)) hiddenBy.push(myId);
+
+        // 2. Cập nhật DB
+        const { error: uError } = await supabase
+            .from('community_friends')
+            .update({ deleted_by: deletedBy, hidden_by: hiddenBy })
+            .eq('id', rowId);
+
+        if (uError) throw uError;
+
+        // 3. Xử lý Hard Delete nếu cần
+        const otherId = (data.user_id === currentUser.id) ? data.friend_id : data.user_id;
+        
+        if (deletedBy.some(id => String(id) === String(otherId))) {
+            console.log("🔥 Đã xác nhận cả 2 bên cùng xóa. Đang quét sạch database...");
+            await supabase
+                .from('community_messages')
+                .delete()
+                .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${targetUserId}),and(sender_id.eq.${targetUserId},receiver_id.eq.${currentUser.id})`);
+            
+            showNotification("Cả hai đã xóa. Toàn bộ tin nhắn đã được quét sạch.", "success");
+        } else {
+            showNotification("Đã xóa hội thoại phía bạn.", "info");
+        }
+
+        if (currentChatUserId === targetUserId) switchCommView('chat');
+        await loadChatList();
+
+    } catch (err) {
+        console.error("[CineChat] Lỗi khi xóa:", err);
+    } finally {
+        closeAllChatDropdowns();
+    }
+}
+
+// XÓA CÁC HÀM CŨ Ở CUỐI FILE VÌ ĐÃ ĐƯA LÊN ĐẦU
 
 // Khi nhấn vào tab 'friends', gọi hàm này thay vì feed
 async function renderFriendsView() {
@@ -2186,20 +3074,27 @@ function subscribeToFriends() {
             const row = payload.new || payload.old;
             if (!row) return;
 
-            // Nếu có ai đó gửi kết bạn cho mình (INSERT)
+            // 1. Có lời mời kết bạn mới (INSERT)
             if (payload.eventType === 'INSERT' && row.friend_id === currentUser.id && row.status === 'pending') {
                 showNotification("Bạn có 1 lời mời kết bạn mới!", "info");
-                fetchFriendRequests(); // Refresh danh sách lời mời
+                if (typeof fetchFriendRequests === 'function') fetchFriendRequests();
             }
             
-            // Nếu có ai đó đồng ý kết bạn hoặc mình đồng ý (UPDATE -> accepted)
+            // 2. Chấp nhận kết bạn (UPDATE -> accepted)
             if (payload.eventType === 'UPDATE' && row.status === 'accepted') {
+                // KIỂM TRA THÔNG MINH (v4.8): Chỉ hiện thông báo nếu trạng thái thực sự thay đổi từ pending -> accepted
+                // Tránh hiện thông báo khi người dùng chỉ đang Ghim/Xóa/Ẩn hội thoại
+                const oldStatus = payload.old ? payload.old.status : null;
+                const isActualApproval = oldStatus === 'pending';
+
                 if (row.user_id === currentUser.id || row.friend_id === currentUser.id) {
-                    showNotification("Có 1 yêu cầu kết bạn đã được phê duyệt!", "success");
-                    // Refresh nếu đang ở trang bạn bè
-                    if (currentCommView === 'friends') renderFriendsView();
-                    // Refresh nếu đang ở trang chat
-                    if (currentCommView === 'chat') loadChatList();
+                    if (isActualApproval) {
+                        showNotification("Có 1 yêu cầu kết bạn đã được phê duyệt!", "success");
+                    }
+                    
+                    // Cập nhật UI (Luôn cập nhật nếu có thay đổi để đảm bảo đồng bộ Ghim/Ẩn/Xóa)
+                    if (currentCommView === 'friends' && typeof renderFriendsView === 'function') renderFriendsView();
+                    if (currentCommView === 'chat' && typeof loadChatList === 'function') loadChatList();
                 }
             }
         }
@@ -2762,4 +3657,180 @@ function endCallLogic() {
     // Xóa video tag source
     document.getElementById("localVideo").srcObject = null;
     document.getElementById("remoteVideo").srcObject = null;
+}
+
+// --- PINNED MESSAGES LOGIC ---
+async function loadPinnedMessages() {
+    if (!currentChatUserId || !currentUser) return;
+    
+    try {
+        const { data, error } = await supabase
+            .from('community_messages')
+            .select('id, content, sender_id')
+            .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${currentChatUserId}),and(sender_id.eq.${currentChatUserId},receiver_id.eq.${currentUser.id})`)
+            .eq('is_pinned', true)
+            .order('created_at', { ascending: false })
+            .limit(5);
+
+        if (error) throw error;
+        
+        currentPinnedMessages = data.map(msg => ({
+            id: msg.id,
+            content: msg.content,
+            senderName: msg.sender_id === currentUser.id ? (currentUser.display_name || 'Tôi') : (currentChatTarget ? currentChatTarget.display_name : 'Bạn')
+        }));
+    } catch (e) {
+        console.warn('is_pinned column might not exist. Fallback to LocalStorage.', e.message);
+        const stored = localStorage.getItem(`pinned_${currentUser.id}_${currentChatUserId}`);
+        currentPinnedMessages = stored ? JSON.parse(stored) : [];
+    }
+    renderPinnedBanner();
+}
+
+async function togglePinMsg(msgId) {
+    document.querySelectorAll('.comm-msg-dropdown.active').forEach(d => d.classList.remove('active'));
+
+    const isPinned = currentPinnedMessages.some(m => m.id === msgId);
+    
+    if (!isPinned) {
+        if (currentPinnedMessages.length >= 5) {
+            showNotification('Chỉ được ghim tối đa 5 tin nhắn!', 'warning');
+            return;
+        }
+        
+        const msgEl = document.getElementById(`msg-${msgId}`);
+        if (!msgEl) return;
+
+        const isMe = msgEl.classList.contains('sent');
+        const senderName = isMe ? (currentUser.display_name || 'Tôi') : (currentChatTarget ? currentChatTarget.display_name : 'Bạn');
+        
+        const bubble = msgEl.querySelector('.comm-msg-bubble');
+        let text = '';
+        const replyBody = bubble.querySelector('.comm-msg-reply-body');
+        if (replyBody) text = replyBody.innerText;
+        else {
+            const sticker = bubble.querySelector('img.comm-msg-sticker');
+            text = sticker ? '[Sticker]' : bubble.innerText;
+        }
+
+        currentPinnedMessages.push({
+            id: msgId,
+            content: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
+            senderName: senderName
+        });
+        showNotification('Đã ghim tin nhắn', 'success');
+    } else {
+        currentPinnedMessages = currentPinnedMessages.filter(m => m.id !== msgId);
+        showNotification('Đã bỏ ghim', 'info');
+    }
+    
+    // Save state
+    try {
+        await supabase.from('community_messages').update({ is_pinned: !isPinned }).eq('id', msgId);
+    } catch (e) {} // Ignore if column doesn't exist
+    localStorage.setItem(`pinned_${currentUser.id}_${currentChatUserId}`, JSON.stringify(currentPinnedMessages));
+    
+    renderPinnedBanner();
+}
+
+function renderPinnedBanner() {
+    const banner = document.getElementById('commChatPinnedBanner');
+    if (!banner) return;
+
+    if (currentPinnedMessages.length === 0) {
+        banner.style.display = 'none';
+        isPinnedListExpanded = false;
+        return;
+    }
+
+    banner.style.display = 'block'; // Đổi sang block để bao quát list
+    banner.classList.toggle('expanded', isPinnedListExpanded);
+    
+    const latestPin = currentPinnedMessages[currentPinnedMessages.length - 1];
+
+    if (isPinnedListExpanded) {
+        // Giao diện khi MỞ RỘNG
+        const itemsHtml = [...currentPinnedMessages].reverse().map(msg => `
+            <div class="comm-pinned-item" onclick="scrollToMsg('${msg.id}')">
+                <div class="comm-pinned-item-icon">
+                    <i class="far fa-comment-dots"></i>
+                </div>
+                <div class="comm-pinned-item-info">
+                    <div class="comm-pinned-item-label">Tin nhắn</div>
+                    <div class="comm-pinned-item-content">${msg.senderName}: ${msg.content}</div>
+                </div>
+                <button class="comm-btn-unpin" onclick="event.stopPropagation(); togglePinnedItemMenu(event, '${msg.id}')" title="Tùy chọn">
+                    <i class="fas fa-ellipsis-h"></i>
+                </button>
+                <div class="comm-pinned-item-menu" id="menu-pinned-${msg.id}">
+                    <div class="comm-pinned-menu-item" onclick="copyPinnedText('${msg.id}')"><i class="far fa-copy"></i> Copy</div>
+                    <div class="comm-pinned-menu-item delete" onclick="togglePinMsg('${msg.id}')"><i class="fas fa-thumbtack"></i> Bỏ ghim</div>
+                </div>
+            </div>
+        `).join('');
+
+        banner.innerHTML = `
+            <div class="comm-pinned-header">
+                <div class="comm-pinned-header-title">Danh sách ghim (${currentPinnedMessages.length})</div>
+                <div class="comm-pinned-header-collapse" onclick="togglePinnedDropdown(event)">Thu gọn <i class="fas fa-chevron-up"></i></div>
+            </div>
+            <div class="comm-pinned-list-items">
+                ${itemsHtml}
+            </div>
+        `;
+    } else {
+        // Giao diện khi THU GỌN (Banner mặc định)
+        let moreBtnHtml = '';
+        if (currentPinnedMessages.length > 1) {
+            moreBtnHtml = `<button class="comm-chat-pinned-more-btn" onclick="togglePinnedDropdown(event)">+<span style="color:#fff;font-weight:bold;margin:0 2px">${currentPinnedMessages.length - 1}</span> ghim <i class="fas fa-chevron-down"></i></button>`;
+        }
+
+        banner.innerHTML = `
+            <div class="comm-chat-pinned-wrapper">
+                <div class="comm-chat-pinned-icon">
+                    <i class="far fa-comment-dots"></i>
+                </div>
+                <div class="comm-chat-pinned-content" onclick="scrollToMsg('${latestPin.id}')">
+                    <div class="comm-chat-pinned-title">Tin nhắn</div>
+                    <div class="comm-chat-pinned-text">${latestPin.senderName}: ${latestPin.content}</div>
+                </div>
+                <div class="comm-chat-pinned-actions">
+                    ${moreBtnHtml}
+                    <button class="comm-chat-pinned-menu-btn" title="Tùy chọn" onclick="event.stopPropagation(); togglePinnedItemMenu(event, '${latestPin.id}')"><i class="fas fa-ellipsis-h"></i></button>
+                    <div class="comm-pinned-item-menu" id="menu-pinned-${latestPin.id}">
+                        <div class="comm-pinned-menu-item" onclick="copyPinnedText('${latestPin.id}')"><i class="far fa-copy"></i> Copy</div>
+                        <div class="comm-pinned-menu-item delete" onclick="togglePinMsg('${latestPin.id}')"><i class="fas fa-thumbtack"></i> Bỏ ghim</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function togglePinnedItemMenu(event, msgId) {
+    if (event) event.stopPropagation();
+    // Đóng tất cả menu ghim khác
+    document.querySelectorAll('.comm-pinned-item-menu.active').forEach(m => {
+        if (m.id !== `menu-pinned-${msgId}`) m.classList.remove('active');
+    });
+    
+    const menu = document.getElementById(`menu-pinned-${msgId}`);
+    if (menu) menu.classList.toggle('active');
+}
+
+function copyPinnedText(msgId) {
+    const pin = currentPinnedMessages.find(m => m.id === msgId);
+    if (!pin) return;
+    
+    navigator.clipboard.writeText(pin.content).then(() => {
+        showNotification("Đã copy nội dung ghim", "success");
+        // Đóng menu
+        document.querySelectorAll('.comm-pinned-item-menu.active').forEach(m => m.classList.remove('active'));
+    });
+}
+
+function togglePinnedDropdown(event) {
+    if (event) event.stopPropagation();
+    isPinnedListExpanded = !isPinnedListExpanded;
+    renderPinnedBanner();
 }

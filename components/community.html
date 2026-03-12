@@ -138,14 +138,18 @@
                               <img src="https://via.placeholder.com/40" id="commChatTargetAvatar" alt="">
                               <div>
                                   <div class="comm-chat-box-name" id="commChatTargetName">Chọn người chat</div>
-                                  <div class="comm-chat-box-status"></div>
+                                  <div class="comm-chat-box-status" id="commChatTargetStatus"></div>
                               </div>
                           </div>
                           <div class="comm-chat-actions">
                               <button title="Gọi thoại" onclick="startCall(false)"><i class="fas fa-phone-alt"></i></button>
                               <button title="Gọi video" onclick="startCall(true)"><i class="fas fa-video"></i></button>
-                              <button title="Thông tin"><i class="fas fa-info-circle"></i></button>
+                              <button title="Thông tin hội thoại" id="btnToggleChatInfo" onclick="toggleChatInfoSidebar()"><i class="fas fa-address-card" id="iconToggleChatInfo"></i></button>
                           </div>
+                      </div>
+
+                      <div class="comm-chat-pinned-msg" id="commChatPinnedBanner" style="display: none;">
+                          <!-- Nội dung ghim sẽ được render bằng JS -->
                       </div>
 
                       <div class="comm-chat-messages" id="commChatMessages">
@@ -154,20 +158,72 @@
 
                       <div class="comm-chat-input-area">
                           <button class="comm-action-btn"><i class="fas fa-paperclip"></i></button>
-                          <input type="text" id="commChatInputMessage" placeholder="Nhập tin nhắn...">
+                          <div class="comm-chat-input-wrapper" style="flex: 1; position: relative; display: flex; align-items: center;">
+                              <input type="text" id="commChatInputMessage" placeholder="Nhập tin nhắn..." style="width: 100%; padding-right: 40px;">
+                              <button class="comm-action-btn" style="position: absolute; right: 10px;"><i class="far fa-smile"></i></button>
+                          </div>
                           <button class="comm-btn-send" onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
                       </div>
                   </div>
               </main>
 
               <!-- Info Sidebar -->
-              <aside class="comm-chat-sidebar comm-chat-info-sidebar" style="padding: 20px;">
-                  <h3 style="font-size: 1rem; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Phim đang quan tâm</h3>
-                  <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                      <img src="https://placehold.co/80x120" style="border-radius: 8px; width: 60px;">
-                      <div>
-                          <h4 style="font-size: 0.9rem; font-weight: 600;">Dune: Part Two</h4>
-                          <p style="font-size: 0.75rem; color: var(--text-muted);">Khoa học viễn tưởng</p>
+              <aside class="comm-chat-sidebar comm-chat-info-sidebar" id="commChatInfoSidebar">
+                  <div class="comm-chat-header" style="display: flex; justify-content: flex-end; padding: 10px 15px; border-bottom: none;">
+                      <button style="background: none; border: none; color: var(--text-muted); cursor: pointer;" onclick="toggleChatInfoSidebar()"><i class="fas fa-times"></i></button>
+                  </div>
+                  
+                  <div class="comm-chat-info-profile" style="display: flex; flex-direction: column; align-items: center; padding: 0 20px 20px; border-bottom: 1px solid var(--border-color);">
+                      <img src="https://via.placeholder.com/100" id="commInfoAvatar" style="width: 90px; height: 90px; border-radius: 50%; border: 2px solid var(--accent-primary); padding: 2px; margin-bottom: 15px;">
+                      <h3 id="commInfoName" class="comm-info-name">Ha ha</h3>
+                      <p id="commInfoStatus" style="font-size: 0.85rem; color: var(--text-muted);">Truy cập 7 giờ trước</p>
+                      
+                      <div class="comm-info-actions" style="display: flex; gap: 15px; margin-top: 20px; width: 100%; justify-content: center;">
+                          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+                              <button class="comm-info-btn"><i class="fas fa-comment"></i></button>
+                              <span style="font-size: 0.75rem; color: var(--text-muted);">Nhắn tin</span>
+                          </div>
+                          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+                              <button class="comm-info-btn"><i class="fas fa-bell"></i></button>
+                              <span style="font-size: 0.75rem; color: var(--text-muted);">Thông báo</span>
+                          </div>
+                          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+                              <button class="comm-info-btn"><i class="fas fa-gift"></i></button>
+                              <span style="font-size: 0.75rem; color: var(--text-muted);">Tặng quà</span>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div class="comm-info-details" style="padding: 20px; border-bottom: 1px solid var(--border-color);">
+                      <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                          <div>
+                              <div class="comm-sidebar-user-details">
+                              <div class="comm-profile-id">@haha</div>
+                              <div class="comm-profile-label">Username</div>
+                          </div>
+                          <i class="fas fa-qrcode" style="color: var(--text-muted);"></i>
+                      </div>
+                  </div>
+
+                  <div class="comm-info-media">
+                      <div class="comm-info-media-item">
+                          <i class="far fa-image"></i>
+                          <span>0 ảnh</span>
+                      </div>
+                      <div class="comm-info-media-item">
+                          <i class="fas fa-film"></i>
+                          <span>0 video</span>
+                      </div>
+                      <div class="comm-info-media-item">
+                          <i class="fas fa-link"></i>
+                          <span>0 liên kết</span>
+                      </div>
+                  </div>
+
+                  <div class="comm-info-danger">
+                      <div class="comm-info-danger-item">
+                          <i class="fas fa-hand-paper"></i>
+                          <span>Chặn người dùng</span>
                       </div>
                   </div>
               </aside>
@@ -190,15 +246,15 @@
                       <button class="mini-action-btn" onclick="showProfileComments('avatar')"><i class="fas fa-comment"></i> <span id="commAvatarComments">0</span></button>
                   </div>
               </div>
-              <h2 id="commProfileName">Đang tải...</h2>
-              <p id="commProfileBio" style="color: var(--text-muted); margin-top: 5px;">Người yêu điện ảnh</p>
+                  <h2 id="commProfileName" class="comm-profile-name-header">Đang tải...</h2>
+                  <p id="commProfileBio" class="comm-profile-bio">Người yêu điện ảnh</p>
           </div>
       </div>
 
       <!-- Nút hành động (Sẽ ẩn/hiện nút phù hợp bằng JS) -->
       <div style="display: flex; justify-content: flex-end; gap: 15px; margin-top: -30px; padding-right: 20px;" id="profileActionBtns">
-          <button id="btnEditProfile" class="comm-btn-post" style="background: rgba(255,255,255,0.1); border: 1px solid var(--border-color); color: #fff;" onclick="openEditProfileModal()"><i class="fas fa-edit"></i> Chỉnh sửa</button>
-          <button id="btnMessageUser" class="comm-btn-post" style="background: transparent; border: 1px solid var(--border-color); color: #fff;"><i class="fas fa-envelope"></i> Nhắn tin</button>
+          <button id="btnEditProfile" class="comm-btn-post comm-profile-action-btn" onclick="openEditProfileModal()"><i class="fas fa-edit"></i> Chỉnh sửa</button>
+          <button id="btnMessageUser" class="comm-btn-post comm-profile-action-btn"><i class="fas fa-envelope"></i> Nhắn tin</button>
           <button id="btnFollowUser" class="comm-btn-post"><i class="fas fa-user-plus"></i> Theo dõi</button>
       </div>
 
@@ -308,3 +364,35 @@
 
 </section>
 </section>
+
+
+  <!-- MODAL XÁC NHẬN TÙY CHỈNH (Confirm Modal) -->
+  <div id="commConfirmModal" class="comm-modal">
+      <div class="comm-modal-content confirm-modal-content premium-modal">
+          <button class="comm-modal-close premium-close" onclick="closeCommConfirm(false)">&times;</button>
+          <div class="comm-modal-body premium-body">
+              <div class="confirm-icon-wrapper">
+                  <i id="commConfirmIcon" class="fas fa-exclamation-triangle"></i>
+              </div>
+              <h2 id="commConfirmTitle" class="premium-title">Xác nhận</h2>
+              <p id="commConfirmMessage" class="premium-message">Bạn có chắc chắn muốn thực hiện hành động này?</p>
+              
+              <div class="confirm-suppress-area">
+                  <label class="suppress-label">
+                      <input type="checkbox" id="commConfirmSuppress">
+                      <span>Không nhắc lại trong:</span>
+                  </label>
+                  <select id="commConfirmDuration" class="suppress-select">
+                      <option value="1">1 giờ</option>
+                      <option value="4">4 giờ</option>
+                      <option value="24" selected>1 ngày</option>
+                      <option value="168">7 ngày</option>
+                  </select>
+              </div>
+          </div>
+          <div class="comm-modal-footer premium-footer">
+              <button class="comm-btn-cancel premium-btn-secondary" onclick="closeCommConfirm(false)">Hủy</button>
+              <button class="comm-btn-confirm premium-btn-primary" id="commConfirmBtn" onclick="closeCommConfirm(true)">Xác nhận</button>
+          </div>
+      </div>
+  </div>

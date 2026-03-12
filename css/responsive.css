@@ -2359,3 +2359,62 @@ body[data-theme="light"] .chat-msg .author {
     font-size: 1.2rem !important;
   }
 }
+
+/* ============================================
+   RESPONSIVE: CỘNG ĐỒNG (COMMUNITY PAGE)
+   ============================================ */
+
+/* TABLET (iPad, <1024px) */
+@media (max-width: 1024px) {
+  .community-wrapper {
+    grid-template-columns: 200px 1fr !important; /* Thu nhỏ sidebar trái */
+  }
+  .comm-chat-layout {
+    grid-template-columns: 250px 1fr !important; /* Ẩn sidebar phải (thông tin user), chỉ hiện list chat và khung chat */
+  }
+  .comm-chat-info-sidebar {
+    display: none !important; /* Ẩn tạm Info Sidebar trên Tablet */
+  }
+}
+
+/* MOBILE (<768px) */
+@media (max-width: 768px) {
+  .community-wrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    height: calc(100vh - 80px) !important;
+    overflow-y: auto !important; /* Cho phép cuộn dọc tự nhiên */
+  }
+  
+  .comm-left-sidebar {
+    flex-direction: row !important; /* Chuyển nav bar sang ngang */
+    overflow-x: auto !important;
+    padding: 10px !important;
+    border-radius: 0 !important;
+    margin-bottom: 10px !important;
+  }
+  .comm-nav-item span {
+    display: none !important; /* Ẩn chữ, chỉ để icon */
+  }
+  .comm-section-title, .comm-tags-list {
+    display: none !important; /* Ẩn thẻ tags */
+  }
+
+  .comm-chat-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+  }
+  
+  .comm-chat-sidebar {
+    max-height: 30vh !important; /* Giới hạn list chat */
+    border-radius: 0 !important;
+    margin-bottom: 10px !important;
+  }
+  
+  .comm-chat-box {
+    flex: 1 !important;
+    min-height: 50vh !important; /* Dành chỗ cho khung chat */
+    border-radius: 0 !important;
+  }
+}
