@@ -552,8 +552,8 @@
    4. CHAT INTERFACE (Khi mÃ¡Â»Å¸ tin nhÃ¡ÂºÂ¯n)
 ========================================== */
 .comm-chat-layout {
-  display: none; /* Ã¡ÂºÂ¨n Ã„â€˜i mÃ¡ÂºÂ·c Ã„â€˜Ã¡Â»â€¹nh, chÃ¡Â»â€° hiÃ¡Â»â€¡n khi gÃ¡Â»Âi hÃƒÂ m switch */
-  grid-template-columns: 300px 1fr 300px; /* Sidebar chats, Khu chat chÃƒÂ­nh, Info bÃ¡ÂºÂ¡n chat */
+  display: none; /* Ã¡ÂºÂ¨n Ã„â€˜i mÃ¡ÂºÂ·c Ã„â€˜Ã¡Â»â€¹nh, chÃ¡Â»â€° hiÃ¡Â»â€¡n khi gÃ¡Â»Â i hÃƒÂ m switch */
+  grid-template-columns: 300px 1fr 380px; /* Sidebar chats, Khu chat chÃƒÂ­nh, Info bÃ¡ÂºÂ¡n chat */
   gap: 20px;
   height: 100%;
 }
@@ -1108,7 +1108,7 @@
 
 /* Bo góc cho ảnh */
 .comm-msg-image-content {
-    max-width: 220px;
+    max-width: 350px;
     max-height: 320px;
     border-radius: 12px;
     display: block;
@@ -1487,11 +1487,20 @@
   overflow: hidden;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Modal rÃ¡Â»â„¢ng hÃ†Â¡n cho BÃƒÂ¬nh luÃ¡ÂºÂ­n */
+/* Modal rộng hơn cho Bình luận */
 .comm-modal-content.modal-lg {
   max-width: 800px;
+}
+
+/* Modal cực rộng cho Thư viện ảnh */
+.comm-modal-content.modal-xl {
+  width: 90% !important;
+  max-width: 1400px !important;
+  height: 90vh !important;
 }
 
 .comm-modal-header {
@@ -1579,7 +1588,7 @@
 }
 
 .comm-comment-time {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   margin-top: 5px;
   display: flex;
@@ -3517,6 +3526,10 @@ body.comm-chat-active .community-wrapper {
     z-index: 2;
 }
 
+.comm-preview-item:hover .remove-btn {
+    opacity: 1;
+}
+
 .comm-preview-footer {
     display: flex;
     justify-content: flex-end;
@@ -3848,4 +3861,709 @@ body.comm-chat-active .community-wrapper {
         width: 40px;
         height: 40px;
     }
+}
+
+/* THƯ VIỆN ẢNH (Media Gallery) */
+.media-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+    padding: 10px 0;
+}
+
+.gallery-item {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+}
+
+.gallery-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.gallery-item:hover img {
+    transform: scale(1.1);
+}
+
+.gallery-item-info {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 8px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.8));
+    color: #fff;
+    font-size: 0.7rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.gallery-item:hover .gallery-item-info {
+    opacity: 1;
+}
+
+.gallery-item-date {
+    display: block;
+    font-weight: 600;
+}
+
+.gallery-item-time {
+    display: block;
+    opacity: 0.8;
+}
+
+.gallery-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 25px !important;
+}
+
+/* Scrollbar cho gallery body */
+.gallery-body::-webkit-scrollbar {
+    width: 6px;
+}
+.gallery-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+.gallery-body::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 10px;
+}
+.gallery-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* ===========================================
+   FORWARD MODAL STYLES
+   =========================================== */
+.forward-body {
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.forward-search-wrapper {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.forward-search-wrapper i {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+}
+
+.forward-search-wrapper input {
+    width: 100%;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    color: #fff;
+    padding: 12px 15px 12px 40px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+}
+
+.forward-search-wrapper input:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(77, 184, 255, 0.2);
+}
+
+.forward-friends-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.forward-friend-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 15px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    transition: all 0.2s;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.forward-friend-item:hover {
+    background: rgba(255, 255, 255, 0.07);
+    transform: translateX(5px);
+}
+
+.forward-friend-item.selected {
+    background: rgba(77, 184, 255, 0.1);
+    border-color: var(--accent-primary);
+}
+
+.forward-friend-item.selected .forward-select-status {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.forward-friend-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.forward-friend-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.forward-friend-name {
+    font-weight: 500;
+    font-size: 0.95rem;
+}
+
+.forward-select-status {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: transparent;
+    transition: all 0.2s;
+}
+
+.forward-btn-send {
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+}
+
+.forward-btn-send:hover {
+    filter: brightness(1.2);
+    transform: translateY(-2px);
+}
+
+.forward-btn-send.sent {
+    background: #4caf50;
+    cursor: default;
+    pointer-events: none;
+}
+
+.forward-preview-content {
+    background: rgba(255, 255, 255, 0.05);
+    border-left: 4px solid var(--accent-primary);
+    padding: 12px 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    max-height: 200px; /* Tăng chiều cao để thấy ảnh rõ hơn */
+    overflow-y: auto; /* Cho phép cuộn nếu nội dung quá dài */
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.forward-preview-sender {
+    font-weight: 700;
+    color: var(--accent-primary);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+    display: inline-block;
+}
+
+.forward-preview-content img {
+    max-width: 100%;
+    max-height: 150px;
+    border-radius: 8px;
+    object-fit: contain;
+    margin-top: 10px;
+    display: block;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+/* Scrollbar cho Forward List */
+.forward-body::-webkit-scrollbar {
+    width: 6px;
+}
+.forward-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+.forward-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+.forward-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* ===========================================
+   CHAT WALLPAPER STYLES
+   =========================================== */
+#commChatContent {
+    position: relative;
+    background-size: cover !important;
+    background-position: var(--wp-position, center) !important;
+    background-repeat: no-repeat !important;
+    transition: background 0.5s ease;
+}
+
+.comm-chat-messages {
+    position: relative;
+    background: transparent !important; /* Để lộ hình nền phía sau */
+    z-index: 1;
+}
+
+/* Overlay cho container cha */
+#commChatContent::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 15, 20, var(--wp-overlay-opacity, 0.4));
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 0.5s ease, background 0.3s ease;
+}
+
+#commChatContent.has-wallpaper::before {
+    opacity: 1;
+}
+
+/* Đảm bảo tin nhắn nổi lên trên overlay */
+.message-row {
+    position: relative;
+    z-index: 1;
+}
+
+/* Wallpaper Controls */
+.wp-controls {
+    flex-shrink: 0; /* Không bao giờ bị co lại */
+    margin: 10px 0 0 0;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+}
+
+.wp-control-item {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.wp-label-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.wp-label-group label {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.wp-opacity-value {
+    font-weight: bold;
+    color: var(--accent-primary);
+    font-size: 0.85rem;
+}
+
+/* CSS đã được hợp nhất xuống dưới cùng (v6.8) để tránh xung đột */
+
+/* Position Picker Styles */
+.wp-position-picker {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    width: 120px;
+    margin: 10px auto;
+}
+
+.wp-pos-btn {
+    width: 36px;
+    height: 36px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.wp-pos-btn:hover {
+    border-color: var(--accent-primary);
+    color: #fff;
+}
+
+.wp-pos-btn.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+    box-shadow: 0 0 10px rgba(77, 184, 255, 0.4);
+}
+
+.wallpaper-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+}
+
+.wp-tab {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    padding: 8px 16px;
+    cursor: pointer;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.wp-tab.active {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.wallpaper-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 15px;
+    max-height: none; /* Cuộn ở cấp body */
+    padding: 10px 5px;
+}
+
+.wallpaper-body {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1;
+    overflow: hidden !important; /* Chặn cuộn toàn vùng để cố định controls */
+    padding: 20px !important;
+    height: 100%;
+}
+
+.wp-tab-content {
+    flex: 1;
+    overflow-y: auto; /* Chỉ cho phép cuộn ở đây */
+    padding-right: 5px;
+    margin-bottom: 10px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.wallpaper-item {
+    position: relative;
+    aspect-ratio: 9/16;
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+    background: var(--bg-secondary);
+}
+
+.wallpaper-item:hover {
+    transform: scale(1.03);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.wallpaper-item.active {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 15px rgba(77, 184, 255, 0.4);
+}
+
+.wallpaper-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.wp-delete-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    background: rgba(255, 0, 0, 0.7);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 2;
+}
+
+.wallpaper-item:hover .wp-delete-btn {
+    opacity: 1;
+}
+
+.wp-upload-area {
+    border: 2px dashed var(--border-color);
+    border-radius: 15px;
+    padding: 30px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 20px;
+    color: var(--text-muted);
+}
+
+.wp-upload-area:hover {
+    border-color: var(--accent-primary);
+    background: rgba(77, 184, 255, 0.05);
+    color: #fff;
+}
+
+.wp-upload-area i {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+}
+
+.wp-link-input-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.wp-link-input-group input {
+    flex: 1;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    color: #fff;
+    padding: 10px 15px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+.wp-link-input-group button {
+    padding: 0 20px;
+}
+
+/* --- Wallpaper Modal Reposition (V4.7 - KHÍT KO LỘ V6.3) --- */
+#commWallpaperModal {
+    position: fixed !important;
+    top: 95px !important; 
+    right: 15px !important; /* DỊCH THÊM SANG PHẢI ĐỂ TĂNG ĐỘ PHỦ */
+    bottom: 0px !important; /* ÉP SÁT ĐÁY MÀN HÌNH ĐỂ KHÔNG LỘ BIÊN DƯỚI */
+    left: auto !important;
+    width: 400px !important; /* TĂNG LÊN 400PX ĐỂ CHE PHỦ RỘNG RÃI */
+    height: auto !important; /* TỰ ĐỘNG THEO TOP/BOTTOM */
+    background: transparent !important;
+    backdrop-filter: none !important;
+    z-index: 2000; /* TĂNG TỐI ĐA ĐỂ ĐÈ MỌI THỨ */
+    padding: 0 !important;
+    margin: 0 !important;
+    display: none !important;
+    justify-content: flex-end !important;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+#commWallpaperModal.active {
+    display: flex !important;
+}
+
+#commWallpaperModal .comm-modal-content {
+    pointer-events: auto;
+    width: 400px !important;
+    max-width: 400px !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    background: #121419 !important;
+    backdrop-filter: none !important;
+    border-radius: 12px 12px 0 0 !important; /* Bo góc trên, phẳng góc dưới để đè khít lề */
+    border: 1px solid var(--border-color) !important;
+    box-shadow: 0 0 0 10px #121419, -30px 0 60px rgba(0, 0, 0, 0.8) !important;
+    display: flex;
+    flex-direction: column;
+    margin: 0 !important;
+    animation: none !important;
+    overflow: hidden !important;
+    position: relative;
+    padding: 0 !important;
+}
+
+#commWallpaperModal .comm-modal-header {
+    background: #121419 !important;
+    border-bottom: 1px solid var(--border-color);
+    padding: 15px 20px;
+    z-index: 100;
+    border-top-left-radius: 12px !important;
+    border-top-right-radius: 12px !important;
+    position: relative;
+}
+
+#commWallpaperModal .comm-modal-footer {
+    border-bottom-left-radius: 12px !important;
+    border-bottom-right-radius: 12px !important;
+}
+
+/* Final & Clean Slider Implementation (v6.8) */
+.wp-slider-track-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 5px;
+}
+
+.wp-slider-container {
+    position: relative !important;
+    display: block !important;
+    width: 100% !important;
+    padding: 5px 0 !important;
+    z-index: 5 !important;
+    overflow: visible !important;
+}
+
+.wp-slider {
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    width: 100% !important;
+    height: 6px !important;
+    background: transparent !important; /* KHÔNG ĐƯỢC để màu nền ở đây */
+    border: none !important;
+    outline: none !important;
+    margin: 12px 0 !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+}
+
+/* Reset triệt để các pseudo-elements ma (Nguyên nhân gây ô vuông trắng) */
+.wp-slider::-webkit-slider-runnable-track,
+.wp-slider::-webkit-slider-thumb,
+.wp-slider::-webkit-slider-container,
+.wp-slider::-webkit-media-slider-container,
+.wp-slider::-webkit-slider-runnable-track::before,
+.wp-slider::-webkit-slider-runnable-track::after {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Track chuẩn */
+.wp-slider::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.15) !important;
+    border-radius: 5px;
+}
+
+/* Thumb chuẩn */
+.wp-slider::-webkit-slider-thumb {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    width: 20px !important;
+    height: 20px !important;
+    background: #4db8ff !important;
+    border: 3px solid #fff !important;
+    border-radius: 50% !important;
+    cursor: pointer !important;
+    margin-top: -7px !important;
+    box-shadow: 0 0 10px rgba(77, 184, 255, 0.8) !important;
+    transition: transform 0.2s;
+}
+
+.wp-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+/* Mozilla Support */
+.wp-slider::-moz-range-track {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 5px;
+}
+
+.wp-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: #4db8ff;
+    border: 3px solid #fff;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.wp-position-picker {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 12px !important;
+    width: fit-content !important;
+    margin: 0 auto;
+}
+
+.wp-pos-btn {
+    width: 42px;
+    height: 42px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.wp-pos-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.wp-pos-btn.active {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 10px rgba(77, 184, 255, 0.3);
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+
+/* Ẩn bớt các phần không cần thiết khi preview để đỡ rối */
+#commWallpaperModal .wp-upload-area {
+    padding: 15px;
+}
+
+#commWallpaperModal .wallpaper-grid {
+    max-height: none !important; /* Trả lại luồng tự nhiên cho body scroll */
 }

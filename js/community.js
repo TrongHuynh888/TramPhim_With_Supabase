@@ -22,6 +22,25 @@ let currentLightboxRotation = 0; // Trạng thái xoay (độ)
 let currentLightboxZoom = 1;     // Trạng thái thu phóng
 let isDraggingLightbox = false;
 let startX, startY, scrollLeft, scrollTop;
+let forwardingMsgId = null; // ID tin nhắn đang được chuẩn bị chuyển tiếp
+let forwardFriendsData = []; // Cache danh sách bạn bè để filter nhanh
+let selectedForwardUserIds = []; // Danh sách các ID người dùng được chọn để chuyển tiếp
+
+const WALLPAPER_GALLERY = [
+    "images/backgroundChat/bg1.png",
+    "images/backgroundChat/bg2.png",
+    "images/backgroundChat/bg3.png",
+    "images/backgroundChat/bg4.png",
+    "images/backgroundChat/bg5.png",
+    "images/backgroundChat/bg6.png"
+];
+
+// Biến lưu trạng thái tạm thời cho Wallpaper Preview
+let originalWallpaperState = { url: null, opacity: 0.4, position: 'center' };
+let currentPreviewWallpaper = null;
+let currentPreviewOpacity = 0.4;
+let currentPreviewPosition = 'center';
+
 
 /**
  * Điều khiển Dropdown Menu Chat - ĐƯA LÊN ĐẦU ĐỂ TRÁNH REFERENCE ERROR
@@ -830,8 +849,13 @@ async function sendImageMessage(imageUrl) {
             <div class="comm-msg sent" style="opacity: 0.7;" id="${tempId}">
                 <div class="comm-msg-body-wrapper">
                     <div class="comm-msg-bubble">${parseMessageContent(content)}</div>
+                    <div class="comm-msg-actions-quick">
+                        <button title="Trả lời"><i class="fas fa-quote-left"></i></button>
+                        <button title="Chia sẻ"><i class="fas fa-share"></i></button>
+                        <button class="btn-more"><i class="fas fa-ellipsis-h"></i></button>
+                    </div>
                 </div>
-                <div class="comm-msg-time">${time} <i class="fas fa-spinner fa-spin"></i></div>
+                <div class="comm-msg-time">${time} <i class="fas fa-clock" style="font-size: 0.75rem; margin-left: 5px; color: var(--text-muted);" title="Đang gửi..."></i></div>
             </div>
         `);
         scrollToBottomChat();
@@ -852,17 +876,39 @@ async function sendImageMessage(imageUrl) {
 
         if (error) throw error;
         
-        // Cập nhật ID thật
+        // Cập nhật ID thật và gắn đầy đủ các nút hành động
         const msgEl = document.getElementById(tempId);
         if (msgEl) {
             msgEl.id = `msg-${data.id}`;
             msgEl.style.opacity = "1";
+
+            // Thay thế bộ nút tạm bằng bộ nút thật có onclick
+            const actionsQuick = msgEl.querySelector('.comm-msg-actions-quick');
+            if (actionsQuick) {
+                actionsQuick.innerHTML = `
+                    <button onclick="prepareReply('${data.id}')" title="Trả lời"><i class="fas fa-quote-left"></i></button>
+                    <button onclick="shareMsg('${data.id}')" title="Chia sẻ"><i class="fas fa-share"></i></button>
+                    <button class="btn-more" onclick="toggleMsgDropdown(event, '${data.id}')" title="Thêm"><i class="fas fa-ellipsis-h"></i></button>
+                    
+                    <div class="comm-msg-dropdown" id="dropdown-msg-${data.id}">
+                        <div class="comm-dropdown-item" onclick="copyMsgText('${data.id}')"><i class="far fa-copy"></i> Copy tin nhắn</div>
+                        ${data.content && data.content.startsWith('[IMAGE]') ? `<div class="comm-dropdown-item download-direct" onclick="downloadImage('${data.content.replace('[IMAGE]', '').trim()}')"><i class="fas fa-download"></i> Tải xuống ảnh</div>` : ''}
+                        <div class="comm-dropdown-item" onclick="togglePinMsg('${data.id}')"><i class="fas fa-thumbtack"></i> Ghim / Bỏ ghim</div>
+                        <div class="comm-dropdown-item"><i class="far fa-star"></i> Đánh dấu tin nhắn</div>
+                        <div class="comm-dropdown-divider"></div>
+                        <div class="comm-dropdown-item recall" onclick="recallMsg('${data.id}')"><i class="fas fa-undo"></i> Thu hồi</div>
+                        <div class="comm-dropdown-item delete" onclick="deleteMsgForMe('${data.id}')"><i class="far fa-trash-alt"></i> Xóa chỉ ở phía tôi</div>
+                    </div>
+                `;
+            }
+
             const timeEl = msgEl.querySelector('.comm-msg-time');
             if (timeEl) {
+                const timeStr = new Date(data.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 const statusHtml = data.status === 'delivered' 
                     ? `<div class="comm-msg-status delivered">Đã nhận <i class="fas fa-check-double"></i></div>`
                     : `<div class="comm-msg-status sent">Đã gửi <i class="fas fa-check"></i></div>`;
-                timeEl.innerHTML = `${time}. ${statusHtml}`;
+                timeEl.innerHTML = `${timeStr} ${statusHtml}`;
             }
         }
     } catch (e) {
@@ -908,7 +954,7 @@ function parseMessageContent(content) {
     if (imageMatch) {
         const url = imageMatch[1].trim();
         return `<img src="${escapeHtml(url)}" class="comm-msg-image-content" alt="image" 
-                     style="max-width:220px; max-height:320px; border-radius:12px; display:block; cursor:pointer; object-fit: cover;" 
+                     style="max-width:350px; max-height:320px; border-radius:12px; display:block; cursor:pointer; object-fit: cover;" 
                      onclick="openImageViewer('${escapeHtml(url)}')">`;
     }
 
@@ -1172,6 +1218,9 @@ async function submitProfileComment() {
 // ===========================================
 // 5.5 CHAT TOGGLE SIDEBAR
 // ===========================================
+// Biến toàn cục để nhớ trạng thái ẩn/hiện sidebar trong phiên làm việc (mặc định ẩn khi mới vào)
+let isChatInfoSidebarHiddenInSession = true;
+
 // Bật/tắt tab thông tin bên phải trong CineChat
 function toggleChatInfoSidebar() {
     const layout = document.getElementById("commChatView");
@@ -1179,11 +1228,11 @@ function toggleChatInfoSidebar() {
     if (!layout) return;
 
     layout.classList.toggle("info-hidden");
-    const isHidden = layout.classList.contains("info-hidden");
+    isChatInfoSidebarHiddenInSession = layout.classList.contains("info-hidden");
 
     // Đổi icon theo trạng thái: filled khi đang hiện, outlined khi ẩn
     if (icon) {
-        icon.className = isHidden ? 'far fa-address-card' : 'fas fa-address-card';
+        icon.className = isChatInfoSidebarHiddenInSession ? 'far fa-address-card' : 'fas fa-address-card';
     }
 }
 
@@ -2052,11 +2101,18 @@ async function openChat(targetUserId, targetUserName, targetAvatar) {
         if (welcomeEl) welcomeEl.style.display = "none";
         if (contentEl) contentEl.style.display = "flex";
         
-        // Hiện sidebar khi bắt đầu chat
+        // Đồng bộ trạng thái sidebar theo session (Mặc định ẩn khi mới vào)
         if (layoutEl) {
-            layoutEl.classList.remove("info-hidden");
+            if (isChatInfoSidebarHiddenInSession) {
+                layoutEl.classList.add("info-hidden");
+            } else {
+                layoutEl.classList.remove("info-hidden");
+            }
+            
             const toggleIcon = document.getElementById("iconToggleChatInfo");
-            if (toggleIcon) toggleIcon.className = 'fas fa-address-card';
+            if (toggleIcon) {
+                toggleIcon.className = isChatInfoSidebarHiddenInSession ? 'far fa-address-card' : 'fas fa-address-card';
+            }
         }
 
         // 3. Tìm các phần tử giao diện (Dùng ID mới tránh xung đột)
@@ -2144,8 +2200,12 @@ async function openChat(targetUserId, targetUserName, targetAvatar) {
         
         // 6. Tác vụ phụ (không block UI)
         markMessagesAsSeen(targetUserId).catch(err => console.error("Lỗi markAsSeen:", err));
+        fetchChatMediaStats(targetUserId); // Luôn đếm ảnh khi mở chat
         subscribeToChat(targetUserId);
         cancelReply(); // Reset trạng thái reply khi chuyển người chat
+
+        // Nâng cấp V2: Cập nhật hình nền riêng cho cuộc trò chuyện này
+        initChatWallpaper();
 
     } catch (e) {
         console.error("❌ CRITICAL ERROR in openChat:", e);
@@ -2797,7 +2857,8 @@ async function deleteMsgForMe(msgId) {
 }
 
 function shareMsg(msgId) {
-    showNotification("Tính năng chia sẻ đang phát triển", "info");
+    if (!msgId) return;
+    openForwardModal(msgId);
 }
 
 function prepareReply(msgId) {
@@ -4530,3 +4591,632 @@ document.addEventListener('keydown', (e) => {
     if (e.key === '+' || e.key === '=') zoomLightboxImage(0.2);
     if (e.key === '-' || e.key === '_') zoomLightboxImage(-0.2);
 });
+
+/**
+ * 7.2 THƯ VIỆN ĐA PHƯƠNG TIỆN (Media Gallery)
+ */
+async function fetchChatMediaStats(targetUserId) {
+    if (!currentUser || !targetUserId) return;
+    
+    try {
+        const { count, error } = await supabase
+            .from('community_messages')
+            .select('*', { count: 'exact', head: true })
+            .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${targetUserId}),and(sender_id.eq.${targetUserId},receiver_id.eq.${currentUser.id})`)
+            .like('content', '[IMAGE]%');
+
+        if (error) throw error;
+
+        const countEl = document.getElementById("commInfoPhotoCount");
+        if (countEl) {
+            countEl.textContent = `${count || 0} ảnh`;
+        }
+    } catch (e) {
+        console.error("Lỗi đếm số lượng ảnh:", e);
+    }
+}
+
+async function showChatMediaGallery() {
+    if (!currentChatUserId || !currentUser) return;
+    
+    const modal = document.getElementById("commMediaGalleryModal");
+    const grid = document.getElementById("mediaGalleryGrid");
+    const empty = document.getElementById("mediaGalleryEmpty");
+    
+    if (!modal || !grid) return;
+    
+    modal.style.display = "flex";
+    grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 20px;"><div class="loading-spinner"></div></div>';
+    empty.style.display = "none";
+    
+    try {
+        const { data, error } = await supabase
+            .from('community_messages')
+            .select('id, content, created_at')
+            .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${currentChatUserId}),and(sender_id.eq.${currentChatUserId},receiver_id.eq.${currentUser.id})`)
+            .like('content', '[IMAGE]%')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            grid.innerHTML = "";
+            empty.style.display = "block";
+            return;
+        }
+
+        // Tạo danh sách URL để dùng cho lightbox
+        const imageUrls = data.map(m => m.content.replace('[IMAGE]', '').trim());
+
+        grid.innerHTML = data.map((msg, idx) => {
+            const url = msg.content.replace('[IMAGE]', '').trim();
+            const dateObj = new Date(msg.created_at);
+            const dateStr = dateObj.toLocaleDateString('vi-VN');
+            const timeStr = dateObj.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+            return `
+                <div class="gallery-item" onclick="openImageViewer('${url}', ${idx}, ${JSON.stringify(imageUrls).replace(/"/g, '&quot;')})">
+                    <img src="${url}" loading="lazy">
+                    <div class="gallery-item-info">
+                        <span class="gallery-item-date">${dateStr}</span>
+                        <span class="gallery-item-time">${timeStr}</span>
+                    </div>
+                </div>
+            `;
+        }).join("");
+
+    } catch (e) {
+        console.error("Lỗi tải thư viện ảnh:", e);
+        grid.innerHTML = '<p style="grid-column:1/-1; text-align:center; color:red;">Lỗi tải dữ liệu. Vui lòng thử lại.</p>';
+    }
+}
+
+function closeMediaGallery() {
+    const modal = document.getElementById("commMediaGalleryModal");
+    if (modal) modal.style.display = "none";
+}
+
+/**
+ * TÍNH NĂNG CHUYỂN TIẾP TIN NHẮN (FORWARD)
+ */
+
+async function openForwardModal(msgId) {
+    if (!currentUser) {
+        showNotification("Vui lòng đăng nhập để thực hiện", "warning");
+        return;
+    }
+
+    forwardingMsgId = msgId;
+    const modal = document.getElementById("commForwardModal");
+    const previewEl = document.getElementById("forwardPreviewContent");
+    if (!modal) return;
+
+    modal.classList.add("active");
+
+    // Reset UI
+    const searchInput = document.getElementById("forwardSearchInput");
+    if (searchInput) searchInput.value = "";
+    selectedForwardUserIds = [];
+    updateForwardSendButton();
+    
+    if (previewEl) {
+        previewEl.innerHTML = '<div class="loading-spinner"></div>';
+        
+        // Lấy nội dung tin nhắn để preview
+        try {
+            const { data: msg, error } = await supabase
+                .from('community_messages')
+                .select(`
+                    content,
+                    sender:profiles!sender_id ( display_name )
+                `)
+                .eq('id', msgId)
+                .single();
+
+            if (error) throw error;
+
+            const senderName = msg.sender?.display_name || "Người dùng";
+            let displayContent = msg.content;
+            
+            if (displayContent.startsWith('[IMAGE]')) {
+                const url = displayContent.replace('[IMAGE]', '').trim();
+                displayContent = `<span class="forward-preview-sender">${senderName}:</span><br>[Hình ảnh]<br><img src="${url}">`;
+            } else if (displayContent.startsWith('[STICKER]')) {
+                const url = displayContent.replace('[STICKER]', '').trim();
+                displayContent = `<span class="forward-preview-sender">${senderName}:</span><br>[Sticker]<br><img src="${url}" style="width: 60px;">`;
+            } else if (displayContent.startsWith('[REPLY]')) {
+                const parts = displayContent.split('|');
+                displayContent = `<span class="forward-preview-sender">${senderName}:</span><br>[Trả lời] ${parts[parts.length - 1]}`;
+            } else {
+                displayContent = `<span class="forward-preview-sender">${senderName}:</span><br>${displayContent}`;
+            }
+
+            previewEl.innerHTML = displayContent;
+        } catch (e) {
+            console.error("Lỗi tải nội dung preview:", e);
+            previewEl.innerHTML = '<span class="text-danger">Không thể tải nội dung tin nhắn</span>';
+        }
+    }
+    
+    // Tải danh sách bạn bè
+    loadForwardFriends();
+}
+
+function closeForwardModal() {
+    const modal = document.getElementById("commForwardModal");
+    if (modal) modal.classList.remove("active");
+    forwardingMsgId = null;
+}
+
+async function loadForwardFriends() {
+    const listEl = document.getElementById("forwardFriendsList");
+    if (!listEl) return;
+
+    listEl.innerHTML = '<div class="loading-spinner"></div>';
+
+    try {
+        // Lấy danh sách bạn bè đã chấp nhận
+        const { data, error } = await supabase
+            .from('community_friends')
+            .select(`
+                user_id, friend_id,
+                profiles_user:user_id ( id, display_name, avatar ),
+                profiles_friend:friend_id ( id, display_name, avatar )
+            `)
+            .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
+            .eq('status', 'accepted');
+
+        if (error) throw error;
+
+        // Xử lý dữ liệu để lấy thông tin người bạn
+        forwardFriendsData = data.map(row => {
+            const isUser = row.user_id === currentUser.id;
+            return isUser ? row.profiles_friend : row.profiles_user;
+        });
+
+        renderForwardFriends(forwardFriendsData);
+
+    } catch (e) {
+        console.error("Lỗi tải danh sách bạn bè chuyển tiếp:", e);
+        listEl.innerHTML = '<p class="text-center text-danger">Không thể tải danh sách bạn bè</p>';
+    }
+}
+
+function renderForwardFriends(friends) {
+    const listEl = document.getElementById("forwardFriendsList");
+    if (!listEl) return;
+
+    if (friends.length === 0) {
+        listEl.innerHTML = '<p class="text-center text-muted" style="padding: 20px;">Không tìm thấy bạn bè nào</p>';
+        return;
+    }
+
+    listEl.innerHTML = friends.map(friend => {
+        const avatar = friend.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(friend.display_name)}&background=random`;
+        const isSelected = selectedForwardUserIds.includes(friend.id);
+        return `
+            <div class="forward-friend-item ${isSelected ? 'selected' : ''}" onclick="toggleForwardUser('${friend.id}', this)">
+                <div class="forward-friend-info">
+                    <img src="${avatar}" class="forward-friend-avatar" alt="${friend.display_name}">
+                    <span class="forward-friend-name">${friend.display_name}</span>
+                </div>
+                <div class="forward-select-status">
+                    <i class="fas fa-check"></i>
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+function toggleForwardUser(userId, el) {
+    const index = selectedForwardUserIds.indexOf(userId);
+    if (index > -1) {
+        selectedForwardUserIds.splice(index, 1);
+        el.classList.remove('selected');
+    } else {
+        selectedForwardUserIds.push(userId);
+        el.classList.add('selected');
+    }
+    updateForwardSendButton();
+}
+
+function updateForwardSendButton() {
+    const btn = document.getElementById("btnSendMultiForward");
+    if (!btn) return;
+    
+    const count = selectedForwardUserIds.length;
+    btn.innerHTML = `Gửi (${count})`;
+    btn.disabled = count === 0;
+}
+
+async function sendMultiForward() {
+    if (!forwardingMsgId || selectedForwardUserIds.length === 0 || !currentUser) return;
+
+    const btn = document.getElementById("btnSendMultiForward");
+    const originalContent = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang gửi...';
+    btn.disabled = true;
+
+    try {
+        // 1. Lấy nội dung tin nhắn gốc
+        const { data: originalMsg, error: fetchErr } = await supabase
+            .from('community_messages')
+            .select('content')
+            .eq('id', forwardingMsgId)
+            .single();
+
+        if (fetchErr) throw fetchErr;
+
+        // 2. Gửi cho tất cả người đã chọn
+        const sendPromises = selectedForwardUserIds.map(async (targetUserId) => {
+            const isTargetOnline = userPresenceMap.get(targetUserId)?.online;
+            return supabase
+                .from('community_messages')
+                .insert({
+                    sender_id: currentUser.id,
+                    receiver_id: targetUserId,
+                    content: originalMsg.content,
+                    status: isTargetOnline ? 'delivered' : 'sent'
+                });
+        });
+
+        const results = await Promise.all(sendPromises);
+        const hasError = results.some(r => r.error);
+
+        if (hasError) throw new Error("Một số tin nhắn gửi thất bại");
+
+        showNotification(`Đã chuyển tiếp tin nhắn tới ${selectedForwardUserIds.length} người bạn`, "success");
+        closeForwardModal();
+
+    } catch (e) {
+        console.error("Lỗi chuyển tiếp hàng loạt:", e);
+        showNotification("Gửi thất bại, vui lòng thử lại!", "error");
+        btn.innerHTML = originalContent;
+        btn.disabled = false;
+    }
+}
+
+function filterForwardFriends() {
+    const keyword = document.getElementById("forwardSearchInput").value.toLowerCase().trim();
+    if (!keyword) {
+        renderForwardFriends(forwardFriendsData);
+        return;
+    }
+
+    const filtered = forwardFriendsData.filter(f => 
+        f.display_name.toLowerCase().includes(keyword)
+    );
+    renderForwardFriends(filtered);
+}
+
+async function processForward(targetUserId, btn) {
+    if (!forwardingMsgId || !targetUserId || !currentUser) return;
+
+    // Đổi trạng thái nút
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    btn.disabled = true;
+
+    try {
+        // 1. Lấy nội dung tin nhắn gốc
+        const { data: originalMsg, error: fetchErr } = await supabase
+            .from('community_messages')
+            .select('content')
+            .eq('id', forwardingMsgId)
+            .single();
+
+        if (fetchErr) throw fetchErr;
+
+        // 2. Gửi tin nhắn mới tới người nhận
+        const isTargetOnline = userPresenceMap.get(targetUserId)?.online;
+        const { error: sendErr } = await supabase
+            .from('community_messages')
+            .insert({
+                sender_id: currentUser.id,
+                receiver_id: targetUserId,
+                content: originalMsg.content,
+                status: isTargetOnline ? 'delivered' : 'sent'
+            });
+
+        if (sendErr) throw sendErr;
+
+        // 3. Cập nhật UI nút
+        btn.innerHTML = '<i class="fas fa-check"></i> Đã gửi';
+        btn.classList.add('sent');
+
+        // Nếu người nhận đang là người mình đang chat cùng, UI sẽ tự update qua Realtime
+        // Nếu không, chỉ cần thông báo "Đã gửi" trên nút là đủ.
+
+    } catch (e) {
+        console.error("Lỗi chuyển tiếp tin nhắn:", e);
+        showNotification("Gửi thất bại, vui lòng thử lại!", "error");
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+/**
+ * TÍNH NĂNG ĐỔI HÌNH NỀN CHAT
+ */
+
+function openWallpaperModal() {
+    const modal = document.getElementById("commWallpaperModal");
+    if (modal) modal.classList.add("active");
+    
+    // Lưu lại trạng thái hiện tại để có thể Hủy
+    const storageKey = currentChatTarget ? `chat_wallpaper_${currentChatTarget.id}` : 'chat_wallpaper_global';
+    const opacityKey = currentChatTarget ? `chat_wallpaper_opacity_${currentChatTarget.id}` : 'chat_wallpaper_opacity_global';
+    const positionKey = currentChatTarget ? `chat_wallpaper_pos_${currentChatTarget.id}` : 'chat_wallpaper_pos_global';
+    
+    originalWallpaperState.url = localStorage.getItem(storageKey);
+    originalWallpaperState.opacity = parseFloat(localStorage.getItem(opacityKey) || "0.4");
+    originalWallpaperState.position = localStorage.getItem(positionKey) || "center";
+    
+    currentPreviewWallpaper = originalWallpaperState.url;
+    currentPreviewOpacity = originalWallpaperState.opacity;
+    currentPreviewPosition = originalWallpaperState.position;
+
+    // Reset slider UI
+    const slider = document.getElementById("wpOpacitySlider");
+    const opacityVal = document.getElementById("wpOpacityValue");
+    if (slider) slider.value = currentPreviewOpacity * 100;
+    if (opacityVal) opacityVal.innerText = Math.round(currentPreviewOpacity * 100) + "%";
+
+    // Reset position UI
+    document.querySelectorAll(".wp-pos-btn").forEach(btn => {
+        if (btn.dataset.pos === currentPreviewPosition) {
+            btn.classList.add("active");
+        } else {
+            btn.classList.remove("active");
+        }
+    });
+
+    renderWallpaperGallery();
+    renderCustomWallpapers();
+}
+
+function closeWallpaperModal() {
+    const modal = document.getElementById("commWallpaperModal");
+    if (modal) modal.classList.remove("active");
+}
+
+function switchWallpaperTab(tabName) {
+    const tabs = document.querySelectorAll(".wp-tab");
+    const contents = document.querySelectorAll(".wp-tab-content");
+
+    tabs.forEach(t => t.classList.remove("active"));
+    contents.forEach(c => c.style.display = "none");
+
+    if (tabName === 'gallery') {
+        tabs[0].classList.add("active");
+        document.getElementById("wpTabGallery").style.display = "block";
+    } else {
+        tabs[1].classList.add("active");
+        document.getElementById("wpTabCustom").style.display = "block";
+    }
+}
+
+function renderWallpaperGallery() {
+    const grid = document.getElementById("wpGalleryGrid");
+    if (!grid) return;
+
+    const storageKey = currentChatTarget ? `chat_wallpaper_${currentChatTarget.id}` : 'chat_wallpaper_global';
+    const currentWp = localStorage.getItem(storageKey);
+    
+    grid.innerHTML = WALLPAPER_GALLERY.map(url => `
+        <div class="wallpaper-item ${currentWp === url ? 'active' : ''}" onclick="applyChatWallpaper('${url}')">
+            <img src="${url}" alt="Wallpaper">
+        </div>
+    `).join("");
+}
+
+function renderCustomWallpapers() {
+    const grid = document.getElementById("wpCustomGrid");
+    if (!grid) return;
+
+    const customWps = JSON.parse(localStorage.getItem('custom_chat_wallpapers') || "[]");
+    const storageKey = currentChatTarget ? `chat_wallpaper_${currentChatTarget.id}` : 'chat_wallpaper_global';
+    const currentWp = localStorage.getItem(storageKey);
+
+    if (customWps.length === 0) {
+        grid.innerHTML = '<p class="text-center text-muted" style="grid-column: 1/-1; padding: 20px;">Bạn chưa tải lên hình nền nào.</p>';
+        return;
+    }
+
+    grid.innerHTML = customWps.map(url => `
+        <div class="wallpaper-item ${currentWp === url ? 'active' : ''}">
+            <img src="${url}" alt="Custom" onclick="applyChatWallpaper('${url}')">
+            <button class="wp-delete-btn" onclick="deleteChatWallpaper('${url}')" title="Xóa"><i class="fas fa-trash-alt"></i></button>
+        </div>
+    `).join("");
+}
+
+function applyChatWallpaper(url) {
+    const chatContainer = document.getElementById("commChatContent");
+    if (!chatContainer) return;
+
+    currentPreviewWallpaper = url;
+
+    if (url) {
+        chatContainer.style.backgroundImage = `url('${url}')`;
+        chatContainer.classList.add("has-wallpaper");
+        chatContainer.style.setProperty('--wp-position', currentPreviewPosition);
+    } else {
+        chatContainer.style.backgroundImage = "none";
+        chatContainer.classList.remove("has-wallpaper");
+    }
+
+    // Update active state in grid (UI only)
+    document.querySelectorAll(".wallpaper-item").forEach(item => {
+        const img = item.querySelector("img");
+        if (img && img.src.includes(url)) {
+            item.classList.add("active");
+        } else {
+            item.classList.remove("active");
+        }
+    });
+}
+
+function resetWallpaper() {
+    applyChatWallpaper(null);
+}
+
+async function uploadWallpaperImgBB(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+        showNotification("Ảnh không được vượt quá 5MB", "warning");
+        return;
+    }
+
+    const uploadArea = document.querySelector(".wp-upload-area");
+    if (!uploadArea) return;
+
+    const originalHTML = uploadArea.innerHTML;
+    uploadArea.innerHTML = '<div class="loading-spinner"></div><p>Đang tải lên...</p>';
+    uploadArea.style.pointerEvents = "none";
+
+    try {
+        // Sử dụng hàm upload chung của hệ thống để đảm bảo ổn định và đúng API Key
+        const url = await uploadToImgBB(file);
+        
+        if (url) {
+            let customWps = JSON.parse(localStorage.getItem('custom_chat_wallpapers') || "[]");
+            if (!customWps.includes(url)) {
+                customWps.unshift(url);
+                localStorage.setItem('custom_chat_wallpapers', JSON.stringify(customWps));
+            }
+
+            renderCustomWallpapers();
+            applyChatWallpaper(url);
+            showNotification("Tải lên và áp dụng thành công!", "success");
+        }
+    } catch (e) {
+        console.error("Lỗi upload hình nền:", e);
+        showNotification("Tải ảnh thất bại: " + e.message, "error");
+    } finally {
+        uploadArea.innerHTML = originalHTML;
+        uploadArea.style.pointerEvents = "auto";
+    }
+}
+
+function deleteChatWallpaper(url) {
+    if (typeof event !== 'undefined') event.stopPropagation();
+    
+    if (!confirm("Xóa hình nền này khỏi danh sách cá nhân?")) return;
+
+    let customWps = JSON.parse(localStorage.getItem('custom_chat_wallpapers') || "[]");
+    customWps = customWps.filter(item => item !== url);
+    localStorage.setItem('custom_chat_wallpapers', JSON.stringify(customWps));
+
+    const storageKey = currentChatTarget ? `chat_wallpaper_${currentChatTarget.id}` : 'chat_wallpaper_global';
+    const currentWp = localStorage.getItem(storageKey);
+    if (currentWp === url) {
+        resetWallpaper();
+    }
+
+    renderCustomWallpapers();
+}
+
+function applyWallpaperFromLink() {
+    const linkInput = document.getElementById("wpLinkInput");
+    const url = linkInput?.value?.trim();
+
+    if (!url) {
+        showNotification("Vui lòng nhập link ảnh!", "warning");
+        return;
+    }
+
+    applyChatWallpaper(url);
+    linkInput.value = "";
+}
+
+function updateWallpaperOpacity(value) {
+    const chatContainer = document.getElementById("commChatContent");
+    if (!chatContainer) return;
+
+    const opacity = value / 100;
+    currentPreviewOpacity = opacity;
+    
+    chatContainer.style.setProperty('--wp-overlay-opacity', opacity);
+    
+    // Update label
+    const opacityVal = document.getElementById("wpOpacityValue");
+    if (opacityVal) opacityVal.innerText = Math.round(value) + "%";
+}
+
+function updateWallpaperPosition(pos) {
+    const chatContainer = document.getElementById("commChatContent");
+    if (!chatContainer) return;
+
+    currentPreviewPosition = pos;
+    chatContainer.style.setProperty('--wp-position', pos);
+
+    // Update UI active state
+    document.querySelectorAll(".wp-pos-btn").forEach(btn => {
+        if (btn.dataset.pos === pos) {
+            btn.classList.add("active");
+        } else {
+            btn.classList.remove("active");
+        }
+    });
+}
+
+function confirmWallpaperChanges() {
+    const storageKey = currentChatTarget ? `chat_wallpaper_${currentChatTarget.id}` : 'chat_wallpaper_global';
+    const opacityKey = currentChatTarget ? `chat_wallpaper_opacity_${currentChatTarget.id}` : 'chat_wallpaper_opacity_global';
+    const positionKey = currentChatTarget ? `chat_wallpaper_pos_${currentChatTarget.id}` : 'chat_wallpaper_pos_global';
+
+    if (currentPreviewWallpaper) {
+        localStorage.setItem(storageKey, currentPreviewWallpaper);
+    } else {
+        localStorage.removeItem(storageKey);
+    }
+    
+    localStorage.setItem(opacityKey, currentPreviewOpacity);
+    localStorage.setItem(positionKey, currentPreviewPosition);
+    
+    showNotification("Đã lưu cài đặt hình nền!", "success");
+    closeWallpaperModal();
+}
+
+function cancelWallpaperPreview() {
+    const chatContainer = document.getElementById("commChatContent");
+    if (chatContainer) {
+        if (originalWallpaperState.url) {
+            chatContainer.style.backgroundImage = `url('${originalWallpaperState.url}')`;
+            chatContainer.classList.add("has-wallpaper");
+        } else {
+            chatContainer.style.backgroundImage = "none";
+            chatContainer.classList.remove("has-wallpaper");
+        }
+        chatContainer.style.setProperty('--wp-overlay-opacity', originalWallpaperState.opacity);
+        chatContainer.style.setProperty('--wp-position', originalWallpaperState.position);
+    }
+    closeWallpaperModal();
+}
+
+function initChatWallpaper() {
+    const chatContainer = document.getElementById("commChatContent");
+    if (!chatContainer) return;
+
+    const storageKey = currentChatTarget ? `chat_wallpaper_${currentChatTarget.id}` : 'chat_wallpaper_global';
+    const opacityKey = currentChatTarget ? `chat_wallpaper_opacity_${currentChatTarget.id}` : 'chat_wallpaper_opacity_global';
+    const positionKey = currentChatTarget ? `chat_wallpaper_pos_${currentChatTarget.id}` : 'chat_wallpaper_pos_global';
+    
+    const savedWp = localStorage.getItem(storageKey);
+    const savedOpacity = localStorage.getItem(opacityKey) || "0.4";
+    const savedPos = localStorage.getItem(positionKey) || "center";
+
+    if (savedWp) {
+        chatContainer.style.backgroundImage = `url('${savedWp}')`;
+        chatContainer.classList.add("has-wallpaper");
+    } else {
+        chatContainer.style.backgroundImage = "none";
+        chatContainer.classList.remove("has-wallpaper");
+    }
+    
+    chatContainer.style.setProperty('--wp-overlay-opacity', savedOpacity);
+    chatContainer.style.setProperty('--wp-position', savedPos);
+}

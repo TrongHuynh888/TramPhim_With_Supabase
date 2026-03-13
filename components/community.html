@@ -229,9 +229,9 @@
                   </div>
 
                   <div class="comm-info-media">
-                      <div class="comm-info-media-item">
+                      <div class="comm-info-media-item" onclick="showChatMediaGallery()" style="cursor: pointer;">
                           <i class="far fa-image"></i>
-                          <span>0 ảnh</span>
+                          <span id="commInfoPhotoCount">0 ảnh</span>
                       </div>
                       <div class="comm-info-media-item">
                           <i class="fas fa-film"></i>
@@ -243,11 +243,16 @@
                       </div>
                   </div>
 
-                  <div class="comm-info-danger">
                       <div class="comm-info-danger-item">
                           <i class="fas fa-hand-paper"></i>
                           <span>Chặn người dùng</span>
                       </div>
+                  </div>
+
+                  <div class="comm-info-details" style="padding: 20px;">
+                      <button class="comm-btn-post" style="width: 100%;" onclick="openWallpaperModal()">
+                          <i class="fas fa-palette"></i> Đổi hình nền chat
+                      </button>
                   </div>
               </aside>
           </div>
@@ -439,8 +444,11 @@
                           <span id="lightboxCurrentIndex">1</span> / <span id="lightboxTotalCount">1</span>
                       </div>
                       <div class="lightbox-actions">
-                          <button class="lightbox-btn" onclick="downloadImage()" title="Tải ảnh về"><i class="fas fa-download"></i></button>
-                          <button class="lightbox-btn" onclick="shareImage()" title="Chia sẻ link"><i class="fas fa-share-alt"></i></button>
+                           <button class="lightbox-btn" onclick="rotateLightboxImage()" title="Xoay ảnh (R)"><i class="fas fa-redo"></i></button>
+                           <button class="lightbox-btn" onclick="zoomLightboxImage(0.2)" title="Phóng to (+)"><i class="fas fa-search-plus"></i></button>
+                           <button class="lightbox-btn" onclick="zoomLightboxImage(-0.2)" title="Thu nhỏ (-)"><i class="fas fa-search-minus"></i></button>
+                           <button class="lightbox-btn" onclick="downloadImage()" title="Tải xuống"><i class="fas fa-download"></i></button>
+                           <button class="lightbox-btn" onclick="shareImage()" title="Chia sẻ"><i class="fas fa-share-alt"></i></button>
                           <button class="lightbox-btn close-btn" onclick="closeImageViewer()"><i class="fas fa-times"></i></button>
                       </div>
                   </div>
@@ -462,6 +470,124 @@
               <div id="lightboxThumbnails" class="lightbox-thumbnails">
                   <!-- Thumbnails được render từ JS -->
               </div>
+          </div>
+      </div>
+  </div>
+  <!-- MODAL: THƯ VIỆN ẢNH (Chat Media Gallery) -->
+  <div id="commMediaGalleryModal" class="comm-modal" style="display: none;">
+      <div class="comm-modal-content modal-xl premium-modal">
+          <div class="comm-modal-header premium-header">
+              <h3><i class="far fa-images"></i> Thư viện ảnh</h3>
+              <button class="comm-modal-close" onclick="closeMediaGallery()">&times;</button>
+          </div>
+          <div class="comm-modal-body gallery-body">
+              <div id="mediaGalleryGrid" class="media-gallery-grid">
+                  <!-- Ảnh sẽ render ở đây -->
+              </div>
+              <div id="mediaGalleryEmpty" style="display: none; text-align: center; padding: 40px; color: var(--text-muted);">
+                  <i class="far fa-folder-open" style="font-size: 3rem; margin-bottom: 10px;"></i>
+                  <p>Chưa có ảnh nào được chia sẻ trong cuộc hội thoại này.</p>
+              </div>
+          </div>
+      </div>
+  </div>
+
+  <!-- MODAL: CHUYỂN TIẾP TIN NHẮN (Forward Modal) -->
+  <div id="commForwardModal" class="comm-modal">
+      <div class="comm-modal-content premium-modal">
+          <div class="comm-modal-header premium-header">
+              <h3><i class="fas fa-share"></i> Chuyển tiếp tin nhắn</h3>
+              <button class="comm-modal-close" onclick="closeForwardModal()">&times;</button>
+          </div>
+          <div class="comm-modal-body forward-body">
+              <div id="forwardPreviewContent" class="forward-preview-content">
+                  <!-- Nội dung tin nhắn xem trước sẽ hiển thị ở đây -->
+              </div>
+              <div class="forward-search-wrapper">
+                  <i class="fas fa-search"></i>
+                  <input type="text" id="forwardSearchInput" placeholder="Tìm kiếm bạn bè..." onkeyup="filterForwardFriends()">
+              </div>
+              <div id="forwardFriendsList" class="forward-friends-list">
+                  <!-- Danh sách bạn bè sẽ load ở đây -->
+                  <div class="loading-spinner"></div>
+              </div>
+          </div>
+          <div class="comm-modal-footer premium-footer">
+              <button class="comm-btn-cancel premium-btn-secondary" onclick="closeForwardModal()">Hủy</button>
+              <button class="comm-btn-confirm premium-btn-primary" id="btnSendMultiForward" onclick="sendMultiForward()" disabled>Gửi (0)</button>
+          </div>
+      </div>
+  </div>
+  <div id="commWallpaperModal" class="comm-modal">
+      <div class="comm-modal-content premium-modal modal-lg">
+          <div class="comm-modal-header premium-header">
+              <h3><i class="fas fa-image"></i> Hình nền Chat</h3>
+              <button class="comm-modal-close" onclick="closeWallpaperModal()">&times;</button>
+          </div>
+          <div class="comm-modal-body wallpaper-body">
+              <div class="wallpaper-tabs">
+                  <button class="wp-tab active" onclick="switchWallpaperTab('gallery')">Thư viện mẫu</button>
+                  <button class="wp-tab" onclick="switchWallpaperTab('custom')">Cá nhân / Upload</button>
+              </div>
+
+              <!-- Thư viện mẫu -->
+              <div id="wpTabGallery" class="wp-tab-content">
+                  <div class="wallpaper-grid" id="wpGalleryGrid">
+                      <!-- Render bằng JS -->
+                  </div>
+              </div>
+
+              <!-- Cá nhân / Upload -->
+              <div id="wpTabCustom" class="wp-tab-content" style="display: none;">
+                  <div class="wp-upload-area" onclick="document.getElementById('wpImageUpload').click()">
+                      <i class="fas fa-cloud-upload-alt"></i>
+                      <p>Tải ảnh lên (ImgBB)</p>
+                      <input type="file" id="wpImageUpload" accept="image/*" style="display: none;" onchange="uploadWallpaperImgBB(event)">
+                  </div>
+                  <div class="wp-link-input-group">
+                      <input type="text" id="wpLinkInput" placeholder="Hoặc dán link ảnh trực tiếp tại đây...">
+                      <button class="comm-btn-post mini" onclick="applyWallpaperFromLink()">Áp dụng</button>
+                  </div>
+                  <div class="wallpaper-grid" id="wpCustomGrid">
+                      <!-- Render ảnh đã upload -->
+                  </div>
+              </div>
+              <div class="wp-controls" style="display: flex; flex-direction: column; gap: 20px;">
+                  <!-- 1. Vị trí ảnh (Lên trên) -->
+                  <div class="wp-control-item">
+                      <div class="wp-label-group" style="margin-bottom: 12px;">
+                          <label><i class="fas fa-arrows-alt"></i> Vị trí hiển thị đẹp nhất</label>
+                      </div>
+                      <div class="wp-position-picker" id="wpPositionPicker">
+                          <button class="wp-pos-btn" data-pos="top" onclick="updateWallpaperPosition('top')" title="Căn đỉnh"><i class="fas fa-chevron-up"></i></button>
+                          <button class="wp-pos-btn" data-pos="center top" onclick="updateWallpaperPosition('center top')" title="Giữa trên"><i class="fas fa-arrow-up"></i></button>
+                          <button class="wp-pos-btn" data-pos="bottom" onclick="updateWallpaperPosition('bottom')" title="Căn đáy"><i class="fas fa-chevron-down"></i></button>
+                          
+                          <button class="wp-pos-btn" data-pos="left" onclick="updateWallpaperPosition('left')" title="Căn trái"><i class="fas fa-chevron-left"></i></button>
+                          <button class="wp-pos-btn active" data-pos="center" onclick="updateWallpaperPosition('center')" title="Chính giữa"><i class="fas fa-dot-circle"></i></button>
+                          <button class="wp-pos-btn" data-pos="right" onclick="updateWallpaperPosition('right')" title="Căn phải"><i class="fas fa-chevron-right"></i></button>
+                      </div>
+                  </div>
+
+                  <!-- 2. Độ tối (Xuống dưới cùng theo yêu cầu dứt khoát của bạn) -->
+                  <div class="wp-control-item" style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 15px;">
+                      <div class="wp-label-group">
+                          <label for="wpOpacitySlider"><i class="fas fa-adjust"></i> Độ tối & Tương phản</label>
+                          <span id="wpOpacityValue" class="wp-opacity-value">40%</span>
+                      </div>
+                      <div class="wp-slider-container">
+                          <input type="range" id="wpOpacitySlider" class="wp-slider" min="0" max="100" value="40" oninput="updateWallpaperOpacity(this.value)">
+                          <div class="wp-slider-track-labels">
+                              <span>Sáng</span>
+                              <span>Tối</span>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+          <div class="comm-modal-footer premium-footer">
+              <button class="comm-btn-cancel premium-btn-secondary" onclick="cancelWallpaperPreview()"><i class="fas fa-undo"></i> Hủy xem trước</button>
+              <button class="comm-btn-confirm premium-btn-primary" onclick="confirmWallpaperChanges()"><i class="fas fa-check"></i> Lưu & Áp dụng</button>
           </div>
       </div>
   </div>
