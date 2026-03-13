@@ -4941,7 +4941,10 @@ async function processForward(targetUserId, btn) {
 
 function openWallpaperModal() {
     const modal = document.getElementById("commWallpaperModal");
+    const sidebar = document.getElementById("commChatInfoSidebar");
+    
     if (modal) modal.classList.add("active");
+    if (sidebar) sidebar.style.visibility = "hidden"; // Ẩn sidebar để modal đè lên hoàn hảo
     
     // Lưu lại trạng thái hiện tại để có thể Hủy
     const storageKey = currentChatTarget ? `chat_wallpaper_${currentChatTarget.id}` : 'chat_wallpaper_global';
@@ -4977,7 +4980,10 @@ function openWallpaperModal() {
 
 function closeWallpaperModal() {
     const modal = document.getElementById("commWallpaperModal");
+    const sidebar = document.getElementById("commChatInfoSidebar");
+    
     if (modal) modal.classList.remove("active");
+    if (sidebar) sidebar.style.visibility = "visible";
 }
 
 function switchWallpaperTab(tabName) {

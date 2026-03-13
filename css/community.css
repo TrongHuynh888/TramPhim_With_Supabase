@@ -552,10 +552,12 @@
    4. CHAT INTERFACE (Khi mÃ¡Â»Å¸ tin nhÃ¡ÂºÂ¯n)
 ========================================== */
 .comm-chat-layout {
-  display: none; /* Ã¡ÂºÂ¨n Ã„â€˜i mÃ¡ÂºÂ·c Ã„â€˜Ã¡Â»â€¹nh, chÃ¡Â»â€° hiÃ¡Â»â€¡n khi gÃ¡Â»Â i hÃƒÂ m switch */
+  display: none; /* Ã¡ÂºÂ¨n Ã„â€˜i mÃ¡ÂºÂ·c Ã„â€˜Ã¡Â»â€¹nh, chÃ¡Â»â€° hiÃ¡Â»â€¡n khi gÃ¡Â»Â i hÃƒÂm switch */
   grid-template-columns: 300px 1fr 380px; /* Sidebar chats, Khu chat chÃƒÂ­nh, Info bÃ¡ÂºÂ¡n chat */
   gap: 20px;
   height: 100%;
+  position: relative; /* ThÃƒÂªm Ã„â€˜Ã¡Â»Æ’ phÃ¡Â»Â¥c vá»¥ absolute modal */
+  overflow: hidden;
 }
 
 .comm-chat-sidebar {
@@ -815,6 +817,9 @@
 }
 
 .comm-chat-box-header {
+  position: relative;
+  z-index: 5;
+  background: #000 !important;
   padding: 15px 20px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
@@ -4254,10 +4259,10 @@ body.comm-chat-active .community-wrapper {
 
 .wallpaper-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    gap: 15px;
-    max-height: none; /* Cuộn ở cấp body */
-    padding: 10px 5px;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); /* Giảm từ 130px xuống 100px để lên 3 cột */
+    gap: 8px; /* Giảm gap cho gọn */
+    max-height: none;
+    padding: 5px;
 }
 
 .wallpaper-body {
@@ -4281,7 +4286,7 @@ body.comm-chat-active .community-wrapper {
 .wallpaper-item {
     position: relative;
     aspect-ratio: 9/16;
-    border-radius: 12px;
+    border-radius: 8px; /* Giảm từ 12px xuống 8px cho hợp kích thước nhỏ */
     overflow: hidden;
     cursor: pointer;
     border: 2px solid transparent;
@@ -4371,152 +4376,198 @@ body.comm-chat-active .community-wrapper {
     padding: 0 20px;
 }
 
-/* --- Wallpaper Modal Reposition (V4.7 - KHÍT KO LỘ V6.3) --- */
-#commWallpaperModal {
-    position: fixed !important;
-    top: 95px !important; 
-    right: 15px !important; /* DỊCH THÊM SANG PHẢI ĐỂ TĂNG ĐỘ PHỦ */
-    bottom: 0px !important; /* ÉP SÁT ĐÁY MÀN HÌNH ĐỂ KHÔNG LỘ BIÊN DƯỚI */
+/* --- Absolute Chat Modal (Ghế) --- */
+.absolute-chat-modal {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
     left: auto !important;
-    width: 400px !important; /* TĂNG LÊN 400PX ĐỂ CHE PHỦ RỘNG RÃI */
-    height: auto !important; /* TỰ ĐỘNG THEO TOP/BOTTOM */
-    background: transparent !important;
-    backdrop-filter: none !important;
-    z-index: 2000; /* TĂNG TỐI ĐA ĐỂ ĐÈ MỌI THỨ */
+    width: 380px !important;
+    height: 100% !important;
+    z-index: 1000 !important;
     padding: 0 !important;
     margin: 0 !important;
     display: none !important;
-    justify-content: flex-end !important;
-    pointer-events: none;
-    overflow: hidden;
+    background: transparent !important;
 }
 
-#commWallpaperModal.active {
+.absolute-chat-modal.active {
     display: flex !important;
 }
 
-#commWallpaperModal .comm-modal-content {
-    pointer-events: auto;
-    width: 400px !important;
-    max-width: 400px !important;
+.absolute-chat-modal .comm-modal-content {
+    width: 100% !important;
     height: 100% !important;
-    max-height: 100% !important;
-    background: #121419 !important;
-    backdrop-filter: none !important;
-    border-radius: 12px 12px 0 0 !important; /* Bo góc trên, phẳng góc dưới để đè khít lề */
+    margin: 0 !important;
+    border-radius: 12px !important;
     border: 1px solid var(--border-color) !important;
-    box-shadow: 0 0 0 10px #121419, -30px 0 60px rgba(0, 0, 0, 0.8) !important;
+    background: #121419 !important;
     display: flex;
     flex-direction: column;
-    margin: 0 !important;
-    animation: none !important;
-    overflow: hidden !important;
+    overflow: hidden;
     position: relative;
-    padding: 0 !important;
+    box-shadow: -5px 0 25px rgba(0,0,0,0.5);
 }
 
-#commWallpaperModal .comm-modal-header {
-    background: #121419 !important;
+.absolute-chat-modal .wallpaper-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.absolute-chat-modal .comm-modal-header {
+    background: rgba(255,255,255,0.03);
     border-bottom: 1px solid var(--border-color);
     padding: 15px 20px;
-    z-index: 100;
-    border-top-left-radius: 12px !important;
-    border-top-right-radius: 12px !important;
-    position: relative;
 }
 
-#commWallpaperModal .comm-modal-footer {
-    border-bottom-left-radius: 12px !important;
-    border-bottom-right-radius: 12px !important;
+/* --- ULTIMATE CLEAN SLIDER (V6) --- */
+.wp-slider-wrapper {
+    width: 100%;
+    padding: 5px 0;
 }
 
-/* Final & Clean Slider Implementation (v6.8) */
-.wp-slider-track-labels {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-top: 5px;
-}
-
-.wp-slider-container {
-    position: relative !important;
-    display: block !important;
-    width: 100% !important;
-    padding: 5px 0 !important;
-    z-index: 5 !important;
-    overflow: visible !important;
-}
-
-.wp-slider {
+.wp-clean-slider {
     -webkit-appearance: none !important;
-    -moz-appearance: none !important;
     appearance: none !important;
     width: 100% !important;
-    height: 6px !important;
-    background: transparent !important; /* KHÔNG ĐƯỢC để màu nền ở đây */
+    background: transparent !important;
+    height: 20px !important;
     border: none !important;
     outline: none !important;
-    margin: 12px 0 !important;
-    cursor: pointer !important;
+    margin: 0 !important;
     padding: 0 !important;
-    box-shadow: none !important;
+    cursor: pointer;
 }
 
-/* Reset triệt để các pseudo-elements ma (Nguyên nhân gây ô vuông trắng) */
-.wp-slider::-webkit-slider-runnable-track,
-.wp-slider::-webkit-slider-thumb,
-.wp-slider::-webkit-slider-container,
-.wp-slider::-webkit-media-slider-container,
-.wp-slider::-webkit-slider-runnable-track::before,
-.wp-slider::-webkit-slider-runnable-track::after {
-    background: none !important;
-    border: none !important;
-    box-shadow: none !important;
-}
-
-/* Track chuẩn */
-.wp-slider::-webkit-slider-runnable-track {
+/* Chrome, Safari, Edge, Opera */
+.wp-clean-slider::-webkit-slider-runnable-track {
     width: 100%;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.15) !important;
-    border-radius: 5px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    border: none;
 }
 
-/* Thumb chuẩn */
-.wp-slider::-webkit-slider-thumb {
+.wp-clean-slider::-webkit-slider-thumb {
     -webkit-appearance: none !important;
     appearance: none !important;
-    width: 20px !important;
-    height: 20px !important;
-    background: #4db8ff !important;
-    border: 3px solid #fff !important;
-    border-radius: 50% !important;
-    cursor: pointer !important;
-    margin-top: -7px !important;
-    box-shadow: 0 0 10px rgba(77, 184, 255, 0.8) !important;
-    transition: transform 0.2s;
-}
-
-.wp-slider::-webkit-slider-thumb:hover {
-    transform: scale(1.1);
-}
-
-/* Mozilla Support */
-.wp-slider::-moz-range-track {
-    width: 100%;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 5px;
-}
-
-.wp-slider::-moz-range-thumb {
-    width: 20px;
-    height: 20px;
-    background: #4db8ff;
-    border: 3px solid #fff;
+    height: 18px;
+    width: 18px;
     border-radius: 50%;
+    background: #E50914 !important;
+    border: 3px solid #fff;
+    box-shadow: 0 0 10px rgba(229, 9, 20, 0.5);
+    margin-top: -7px;
+    transition: all 0.2s ease;
+}
+
+.wp-clean-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2) !important;
+    box-shadow: 0 0 15px rgba(229, 9, 20, 0.8) !important;
+}
+
+/* Firefox */
+.wp-clean-slider::-moz-range-track {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    border: none;
+}
+
+.wp-clean-slider::-moz-range-thumb {
+    height: 18px;
+    width: 18px;
+    border-radius: 50%;
+    background: #E50914;
+    border: 3px solid #fff;
+    box-shadow: 0 0 10px rgba(229, 9, 20, 0.5);
     cursor: pointer;
+}
+
+/* IE/Edge (Old) */
+.wp-clean-slider::-ms-track {
+    width: 100%;
+    height: 4px;
+    background: transparent;
+    border-color: transparent;
+    border-width: 10px 0;
+    color: transparent;
+}
+
+.wp-clean-slider::-ms-fill-lower { background: rgba(255, 255, 255, 0.1); }
+.wp-clean-slider::-ms-fill-upper { background: rgba(255, 255, 255, 0.1); }
+.wp-clean-slider::-ms-thumb {
+    height: 18px;
+    width: 18px;
+    border-radius: 50%;
+    background: #E50914;
+    border: 3px solid #fff;
+}
+
+/* Reset triệt để mọi bóng ma UI mặc định */
+.wp-clean-slider::-webkit-slider-container,
+.wp-clean-slider::-webkit-media-slider-container,
+.wp-clean-slider::-webkit-slider-runnable-track::before,
+.wp-clean-slider::-webkit-slider-runnable-track::after {
+    display: none !important;
+    background: none !important;
+}
+
+/* ĐỒNG BỘ MÀU ĐỎ THƯƠNG HIỆU */
+.wallpaper-tabs {
+    display: flex;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 5px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.wp-tab {
+    flex: 1;
+    padding: 8px !important;
+    border: none !important;
+    background: transparent;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.85rem;
+    border-radius: 6px;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.wp-tab.active {
+    background: #E50914 !important;
+    color: #fff !important;
+    box-shadow: 0 4px 15px rgba(229, 9, 20, 0.4) !important;
+    transform: translateY(-1px);
+}
+
+.wallpaper-tabs {
+    display: flex;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 4px;
+    border-radius: 10px;
+    margin-bottom: 15px; /* Giảm từ 25px xuống 15px */
+}
+
+.wp-pos-btn.active {
+    background: #E50914 !important;
+    border-color: #E50914 !important;
+    color: #fff !important;
+    box-shadow: 0 0 10px rgba(229, 9, 20, 0.3);
+}
+
+.wp-controls-persistent {
+    background: #121419 !important;
+    border-top: 1px solid var(--border-color) !important;
+    padding: 12px 15px !important; /* Đồng bộ với HTML */
 }
 
 .wp-position-picker {
@@ -4547,12 +4598,7 @@ body.comm-chat-active .community-wrapper {
     border-color: rgba(255, 255, 255, 0.2);
 }
 
-.wp-pos-btn.active {
-    background: var(--accent-primary);
-    color: white;
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 10px rgba(77, 184, 255, 0.3);
-}
+
 
 @keyframes slideInRight {
     from { transform: translateX(100%); }
