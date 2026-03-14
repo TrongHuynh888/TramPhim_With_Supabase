@@ -2088,7 +2088,7 @@ async function loadEpisodesForMovie(movieIdFromGrid, resetPage = true) {
           .from('episodes')
           .select('*')
           .eq('movie_id', movieId)
-          .order('episode_number', { ascending: true });
+          .order('episode_index', { ascending: true });
 
       if (epError) throw epError;
 
@@ -2155,7 +2155,7 @@ async function loadEpisodesForMovie(movieIdFromGrid, resetPage = true) {
                   </td>
                   <td>
                       <input type="text" class="quick-edit-input ${isSingle ? 'is-single' : ''}" 
-                        value="${ep.episode_name || ep.episode_number || ep.episodeNumber || ""}" 
+                        value="${ep.title || ep.episode_number || ep.episode_name || ep.episodeNumber || ""}" 
                         onblur="saveQuickEditEpisodeNumber(${globalIdx}, this.value)"
                         title="Sửa nhanh tên tập">
                   </td>
@@ -2467,8 +2467,9 @@ async function saveBatchImportedEpisodes() {
 
         episodesToInsert.push({
              movie_id: movieId,
-             episode_name: labelName,
-             episode_number: existingCount + idx,
+             title: labelName, // Đổi từ episode_name -> title theo schema thực tế
+             episode_index: existingCount + idx, // Cột integer
+             episode_number: labelName.replace(/\D/g, '') || (existingCount + idx).toString(), 
              duration: "0 giờ 45 phút", 
              quality: "1080p",
              sources: sources,
@@ -2792,7 +2793,7 @@ function openEpisodeModal(index = null) {
     if (episode) {
       // Đổ dữ liệu vào modal
       if (document.getElementById("episodeNumber")) {
-          document.getElementById("episodeNumber").value = episode.episodeNumber || (isSingle ? "1" : "");
+          document.getElementById("episodeNumber").value = episode.title || episode.episode_name || episode.episode_number || episode.episodeNumber || (isSingle ? "1" : "");
       }
       
       // Xử lý tự động thêm "Tập" khi nhập số
@@ -2942,7 +2943,7 @@ async function handleEpisodeSubmit(event) {
   })();
 
   const episodeData = {
-    episode_name: document.getElementById("episodeNumber").value,
+    title: document.getElementById("episodeNumber").value, // Đổi từ episode_name -> title
     duration: (() => {
         const h = parseInt(document.getElementById("episodeDurationHour").value) || 0;
         const m = parseInt(document.getElementById("episodeDurationMinute").value) || 0;
@@ -2985,7 +2986,9 @@ async function handleEpisodeSubmit(event) {
     } else {
       // Create
       episodeData.movie_id = selectedMovieForEpisodes;
-      episodeData.episode_number = episodes.length; // Lưu thứ tự chỉ mục tự động
+      // Gán cả 2 cột để chắc chắn
+      episodeData.episode_index = episodes.length; 
+      episodeData.episode_number = (episodes.length + 1).toString(); 
       
       const { error } = await supabase.from('episodes').insert(episodeData);
       if (error) throw error;
@@ -8034,21 +8037,21 @@ async function saveQuickEditEpisodeNumber(index, newNumber) {
     const targetEpisode = movie.episodes[index];
     if (!targetEpisode) return;
 
-    const oldNumber = targetEpisode.episode_name || targetEpisode.episode_number || targetEpisode.episodeNumber;
+    const oldNumber = targetEpisode.title || targetEpisode.episode_name || targetEpisode.episode_number || targetEpisode.episodeNumber;
     if (oldNumber === newNumber) return;
 
     try {
         const { error } = await supabase
             .from('episodes')
             .update({ 
-                episode_name: newNumber, 
-                updated_at: new Date().toISOString() 
+                title: newNumber, // Đổi từ episode_name -> title
             })
             .eq('id', targetEpisode.id);
 
         if (error) throw error;
 
         // Cập nhật local
+        targetEpisode.title = newNumber;
         targetEpisode.episode_name = newNumber;
         targetEpisode.episodeNumber = newNumber;
 

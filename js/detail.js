@@ -175,7 +175,7 @@ async function viewMovieDetail(movieId, updateHistory = true) {
         .from('movies')
         .select('*, episodes(*)')
         .eq('id', movieId)
-        .order('episode_number', { foreignTable: 'episodes', ascending: true })
+        .order('episode_index', { foreignTable: 'episodes', ascending: true })
         .single();
       
       if (data) {
@@ -195,7 +195,7 @@ async function viewMovieDetail(movieId, updateHistory = true) {
         .from('episodes')
         .select('*')
         .eq('movie_id', movieId)
-        .order('episode_number', { ascending: true });
+        .order('episode_index', { ascending: true });
       
       if (data) {
         movie.episodes = data;
@@ -1191,8 +1191,8 @@ function renderEpisodes(episodes) {
       container.innerHTML = episodes
         .map((ep, index) => {
             const isActive = index === currentEpisode;
-            const epNum = ep.episode_number !== undefined ? ep.episode_number : (ep.episodeNumber !== undefined ? ep.episodeNumber : index + 1);
-            const label = String(epNum).toLowerCase().includes("tập") ? epNum : `Tập ${epNum}`;
+            const epLabel = ep.title || ep.episode_name || ep.episode_number || ep.episodeNumber || (index + 1);
+            const label = String(epLabel).toLowerCase().includes("tập") ? epLabel : `Tập ${epLabel}`;
             return `
                 <div class="episode-item ${isActive ? "active" : ""}" 
                      data-index="${index}"
@@ -1239,8 +1239,8 @@ function renderEpisodes(episodes) {
     .map((ep, index) => {
         const realIndex = startIdx + index;
         const isActive = realIndex === currentEpisode;
-        const epNum = ep.episode_number !== undefined ? ep.episode_number : (ep.episodeNumber !== undefined ? ep.episodeNumber : index + 1);
-        const label = String(epNum).toLowerCase().includes("tập") ? epNum : `Tập ${epNum}`;
+        const epLabel = ep.title || ep.episode_name || ep.episode_number || ep.episodeNumber || (realIndex + 1);
+        const label = String(epLabel).toLowerCase().includes("tập") ? epLabel : `Tập ${epLabel}`;
         return `
             <div class="episode-item ${isActive ? "active" : ""}" 
                  data-index="${realIndex}"
