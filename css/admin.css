@@ -1189,6 +1189,17 @@
     color: #aaa;
 }
 
+/* Badge Cloudflare R2 - màu cam đặc trưng của Cloudflare */
+.image-source-indicator.cloudflare {
+    color: #fff;
+    background: rgba(244, 129, 32, 0.85);
+    border-color: rgba(244, 129, 32, 0.6);
+    box-shadow: 0 0 10px rgba(244, 129, 32, 0.4);
+    font-weight: bold;
+    font-size: 8px;
+    letter-spacing: -0.3px;
+}
+
 .image-source-indicator:hover {
     background: rgba(0, 0, 0, 0.9);
     transform: scale(1.1);

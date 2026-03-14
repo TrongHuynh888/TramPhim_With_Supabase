@@ -208,12 +208,14 @@
           <h3 style="margin-bottom: 15px; font-size: 1.1rem;"><i class="fas fa-upload" style="color: var(--accent-primary);"></i> Thêm Avatar mới</h3>
           
           <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 15px;">
-            <!-- Preview Box -->
-            <div id="adminAvatarPreviewBox" style="display: none; flex-direction: column; align-items: center; gap: 8px;">
-              <div style="width: 80px; height: 80px; border-radius: 12px; border: 2px solid var(--accent-primary); overflow: hidden; background: rgba(0,0,0,0.2);">
-                <img id="adminAvatarPreview" src="" style="width: 100%; height: 100%; object-fit: cover;" />
+            <!-- Preview Box (Đã cải tiến cho nhiều ảnh) -->
+            <div id="adminAvatarPreviewBox" style="display: none; flex-direction: column; gap: 10px; width: 100%; max-width: 500px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px; border: 1px dashed var(--accent-primary);">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.9rem; color: var(--accent-primary); font-weight: 600;"><i class="fas fa-eye"></i> Xem trước ảnh đang chờ (<span id="adminAvatarPreviewCount">0</span>)</span>
               </div>
-              <span style="font-size: 0.75rem; color: var(--accent-primary);">Xem trước</span>
+              <div id="adminAvatarPreviewGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 10px; max-height: 200px; overflow-y: auto; padding: 5px;">
+                <!-- Các thumbnail sẽ được thêm vào đây bằng JS -->
+              </div>
             </div>
 
             <div style="flex: 1; display: grid; grid-template-columns: minmax(150px, 1fr) 3fr; gap: 15px; align-items: flex-end;">
@@ -227,11 +229,11 @@
               <div class="form-group" style="margin-bottom: 0;">
                 <label class="form-label">Link hoặc Tải ảnh lên</label>
                 <div class="input-with-action" style="display: flex; gap: 8px; align-items: stretch; margin-bottom: 0;">
-                  <input type="url" class="form-input" id="newAdminAvatarUrl" placeholder="https://..." style="flex: 1; padding: 10px 15px;" oninput="adminHandleAvatarUrlInputDebounced(this)" />
+                  <input type="url" class="form-input" id="newAdminAvatarUrl" placeholder="https://..." style="flex: 1; padding: 10px 15px;" oninput="adminHandleAvatarUrlInput(this)" />
                   <button type="button" class="btn btn-action-glass" onclick="document.getElementById('adminAvatarFileUpload').click()" style="padding: 10px 15px; white-space: nowrap;">
                     <i class="fas fa-file-upload"></i> Chọn ảnh
                   </button>
-                  <input type="file" id="adminAvatarFileUpload" accept="image/*" style="display: none;" onchange="adminHandleAvatarFileSelect(this)" />
+                  <input type="file" id="adminAvatarFileUpload" accept="image/*" multiple style="display: none;" onchange="adminHandleAvatarFileSelect(this)" />
                 </div>
               </div>
             </div>
@@ -293,6 +295,9 @@
               </select>
               <button class="btn btn-sm btn-primary" onclick="adminBulkUpdateAvatarCategory()">
                 <i class="fas fa-check"></i> Cập nhật
+              </button>
+              <button class="btn btn-sm btn-danger" onclick="adminBulkDeleteAvatars()" style="background: #e50914;">
+                <i class="fas fa-trash"></i> Xóa chọn
               </button>
             </div>
           </div>

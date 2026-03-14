@@ -373,6 +373,13 @@ function closeModal(modalId) {
     } else {
       modal.classList.remove("active");
     }
+    
+    // Dọn dẹp hàng đợi upload nếu đóng movieModal hoặc episodeModal
+    if (modalId === "movieModal" || modalId === "episodeModal") {
+        if (window.pendingUploads) window.pendingUploads = {};
+        if (window.pendingR2Uploads) window.pendingR2Uploads = {};
+    }
+
     // Kiểm tra xem còn modal nào mở không trước khi gỡ class modal-open
     setTimeout(() => {
         const anyActiveModal = document.querySelector(".modal-overlay.active, .custom-popup-overlay.active");

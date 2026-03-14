@@ -7,7 +7,7 @@
 let isCommunityLoaded = false;
 let currentCommView = 'feed'; // feed | chat | profile
 let communityPresenceChannel = null;
-let userPresenceMap = new Map(); // userId -> { online: boolean, last_seen: string }
+let userPresenceMap = new Map(); // userId (string) -> { online: boolean, last_seen: string }
 let currentChatTarget = null; // Thông tin người đang chat cùng
 let replyingTo = null; // { id, name, text }
 let currentPinnedMessages = []; // Danh sách tin nhắn gim hiện tại [{id, content, senderName}]
@@ -25,6 +25,13 @@ let startX, startY, scrollLeft, scrollTop;
 let forwardingMsgId = null; // ID tin nhắn đang được chuẩn bị chuyển tiếp
 let forwardFriendsData = []; // Cache danh sách bạn bè để filter nhanh
 let selectedForwardUserIds = []; // Danh sách các ID người dùng được chọn để chuyển tiếp
+let myAppBlocks = []; // [MỚI] Lưu trữ toàn bộ danh sách chặn của tôi để dùng chung cho Sidebar/Chat
+
+// Trạng thái typing indicator
+let typingTimeout = null;
+let isCurrentlyTyping = false;
+let hideTypingIndicatorTimeout = null;
+let lastTypingBroadcastTime = 0; // [MỚI] Thời điểm gửi tín hiệu typing gần nhất
 
 const WALLPAPER_GALLERY = [
     "images/backgroundChat/bg1.png",
@@ -129,6 +136,48 @@ function closeCommConfirm(result) {
     currentConfirmActionId = null;
 }
 
+// --- NEW FIX: CUSTOM BLOCK MODAL LOGIC ---
+let blockModalResolver = null;
+
+function showBlockConfirmModal() {
+    return new Promise((resolve) => {
+        const modal = document.getElementById("commBlockModal");
+        const msgEl = document.getElementById("commBlockMessage");
+        
+        if (!modal || !msgEl || !currentChatTarget) {
+            resolve({ confirmed: false, duration: null });
+            return;
+        }
+
+        // Fix lỗi hiển thị undefined tên:
+        const targetName = currentChatTarget.name || currentChatTarget.display_name || "người dùng này";
+        msgEl.textContent = `Bạn có chắc chắn muốn chặn ${targetName}? Người này sẽ không thể nhắn tin cho bạn nữa.`;
+        
+        modal.classList.add("active");
+        blockModalResolver = resolve;
+    });
+}
+
+function closeCommBlockModal(isConfirmed) {
+    const modal = document.getElementById("commBlockModal");
+    const durationSelect = document.getElementById("commBlockDuration");
+    
+    let result = {
+        confirmed: false,
+        duration: null
+    };
+
+    if (isConfirmed && durationSelect) {
+        result.confirmed = true;
+        result.duration = parseInt(durationSelect.value); // -1 (vĩnh viễn) hoặc số giờ
+    }
+
+    if (modal) modal.classList.remove("active");
+    if (blockModalResolver) {
+        blockModalResolver(result);
+        blockModalResolver = null;
+    }
+}
 
 // 1. MODULE LOADER (Tương tự Watch Party)
 async function initCommunityModule() {
@@ -228,6 +277,11 @@ async function initCommunity() {
 
     // Khởi tạo tính năng kéo cho Lightbox
     initLightBoxDrag();
+
+    // [MỚI] Tải danh sách chat ngay từ đầu để sẵn sàng dữ liệu chặn cho Sidebar/Real-time
+    if (currentUser) {
+        loadChatList().catch(err => console.error("Lỗi loadChatList ban đầu:", err));
+    }
 }
 
 // Global Init cho PeerJS ngay khi file script được load (Nếu đã login)
@@ -283,10 +337,10 @@ function switchCommView(viewName) {
             // Kích hoạt trạng thái khóa cuộn và ẩn footer
             document.body.classList.add('comm-chat-active');
             
-            // Nếu chưa chọn người chat, ẩn sidebar thông tin
+            // Nếu chưa chọn người chat hoặc session đang ẩn, ẩn sidebar thông tin
             const layout = document.getElementById("commChatView");
             if (layout) {
-                if (!currentChatUserId) {
+                if (!currentChatUserId || isChatInfoSidebarHiddenInSession) {
                     layout.classList.add("info-hidden");
                     const icon = document.getElementById("iconToggleChatInfo");
                     if (icon) icon.className = 'far fa-address-card';
@@ -470,7 +524,11 @@ async function submitPost() {
 
 // Hàm format thời gian giống MXH
 function formatTimeAgo(date) {
-    const seconds = Math.floor((new Date() - date) / 1000);
+    const diff = new Date() - date;
+    const seconds = Math.floor(diff / 1000);
+    
+    if (seconds < 30) return "vừa xong";
+    
     let interval = seconds / 31536000;
     if (interval > 1) return Math.floor(interval) + " năm trước";
     interval = seconds / 2592000;
@@ -490,6 +548,10 @@ function formatTimeAgo(date) {
 
 function initPresence() {
     if (!currentUser) return;
+    if (communityPresenceChannel) return; // Prevent multiple initializations
+    
+    // Bắt đầu bộ đếm làm mới trạng thái realtime
+    if (typeof startStatusRefresh === 'function') startStatusRefresh();
 
     communityPresenceChannel = supabase.channel('community_presence', {
         config: {
@@ -506,19 +568,28 @@ function initPresence() {
             
             // Duyệt qua tất cả các key (user_id) đang hiện diện
             for (const id in newState) {
-                userPresenceMap.set(id, { online: true });
+                userPresenceMap.set(String(id).trim(), { online: true });
             }
             
             // Cập nhật UI nếu đang ở trang cá nhân hoặc chat
             refreshPresenceUI();
         })
         .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-            userPresenceMap.set(key, { online: true });
+            userPresenceMap.set(String(key), { online: true });
             refreshPresenceUI();
         })
         .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-            userPresenceMap.set(key, { online: false, last_seen: new Date().toISOString() });
+            // Anti-flicker: check if the user is truly out of presence state
+            const newState = communityPresenceChannel.presenceState();
+            if (!newState[key] || newState[key].length === 0) {
+                userPresenceMap.set(String(key), { online: false, last_seen: new Date().toISOString() });
+            }
             refreshPresenceUI();
+        })
+        .on('broadcast', { event: 'typing' }, (payload) => {
+            if (typeof handleTypingEvent === 'function') {
+                handleTypingEvent(payload.payload);
+            }
         })
         .subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
@@ -531,15 +602,45 @@ function initPresence() {
         });
 }
 
+// Xử lý sự kiện khi có người đang nhập tin nhắn
+function handleTypingEvent({ sender_id, receiver_id, is_typing }) {
+    if (!currentUser || receiver_id !== currentUser.id || sender_id !== currentChatUserId) return;
+    
+    const indicator = document.getElementById('commTypingIndicator');
+    if (!indicator) return;
+
+    if (is_typing) {
+        indicator.style.display = 'flex';
+        scrollToBottomChat();
+        
+        clearTimeout(hideTypingIndicatorTimeout);
+        hideTypingIndicatorTimeout = setTimeout(() => {
+            indicator.style.display = 'none';
+        }, 1500); // Rút ngắn còn 1.5s để tắt liền nếu lỡ bị rớt mạng
+    } else {
+        indicator.style.display = 'none';
+        clearTimeout(hideTypingIndicatorTimeout);
+    }
+}
+
+// Gọi hàm này từ main.js hoặc auth.js ngay khi đăng nhập thành công
+window.initGlobalCommunityPresence = function() {
+    if (!currentUser) return;
+    initPresence();
+    startHeartbeat();
+};
+
 // Cập nhật database last_seen mỗi khi hoạt động
+let heartbeatCommunityInterval = null;
 function startHeartbeat() {
     if (!currentUser) return;
     
     // Cập nhật ngay khi vào
     updateLastSeen();
     
-    // Chạy định kỳ mỗi 2 phút
-    setInterval(updateLastSeen, 2 * 60 * 1000);
+    // Chạy định kỳ mỗi 30 giây để đảm bảo luôn Online khi treo máy
+    if (heartbeatCommunityInterval) clearInterval(heartbeatCommunityInterval);
+    heartbeatCommunityInterval = setInterval(updateLastSeen, 30 * 1000);
 }
 
 async function updateLastSeen() {
@@ -550,30 +651,65 @@ async function updateLastSeen() {
             .update({ last_seen: new Date().toISOString() })
             .eq('id', currentUser.id);
     } catch (e) {
-        console.error("Heartbeat error:", e);
+        console.error("Lỗi cập nhật last_seen:", e);
     }
+}
+let statusRefreshInterval = null;
+
+function startStatusRefresh() {
+    if (statusRefreshInterval) clearInterval(statusRefreshInterval);
+    statusRefreshInterval = setInterval(() => {
+        refreshPresenceUI();
+    }, 2000);
 }
 
 function refreshPresenceUI() {
     // 1. Cập nhật trong danh sách chat (CineChat)
     const chatItems = document.querySelectorAll('.comm-chat-item');
     chatItems.forEach(item => {
-        const userId = item.getAttribute('data-user-id');
+        const userId = item.getAttribute('data-user-id')?.trim();
         if (userId) {
             const indicator = item.querySelector('.comm-online-indicator');
-            const statusText = item.querySelector('.comm-chat-item-status'); // Assuming this element exists
-            const isOnline = userPresenceMap.get(userId)?.online;
+            const statusText = item.querySelector('.comm-chat-item-status'); 
+            const presence = userPresenceMap.get(userId);
             
-            if (indicator) {
-                indicator.style.background = isOnline ? '#4caf50' : '#888';
+            let isOnline = false;
+            let forceLastSeen = null;
+
+            if (presence) {
+                if (presence.online) {
+                    isOnline = true;
+                } else {
+                    isOnline = false;
+                    forceLastSeen = presence.last_seen;
+                }
+            } else {
+                const lastSeenStr = item.getAttribute('data-last-seen') || statusText?.getAttribute('data-last-seen');
+                if (lastSeenStr && (new Date() - new Date(lastSeenStr) < 80000)) {
+                    isOnline = true;
+                }
             }
+
+            // 1. Cập nhật chấm xanh trên avatar
+            if (indicator) {
+                indicator.style.backgroundColor = isOnline ? '#4caf50' : '#888';
+            }
+            
+            // 2. Cập nhật văn bản trạng thái (Đảm bảo LUÔN cập nhật để tránh treo chữ "Đang hoạt động" ảo)
             if (statusText) {
                 if (isOnline) {
-                    statusText.textContent = 'Đang hoạt động';
-                    statusText.style.color = '#4caf50';
+                    statusText.innerHTML = ''; 
+                    if (presence?.last_seen) {
+                        statusText.setAttribute('data-last-seen', presence.last_seen);
+                    }
                 } else {
-                    // If offline, try to fetch last_seen from DB for more accurate info
-                    fetchUserLastSeen(userId, statusText);
+                    statusText.innerHTML = ''; // Xóa bỏ văn bản "Truy cập..." theo yêu cầu
+                    if (forceLastSeen) {
+                        statusText.setAttribute('data-last-seen', forceLastSeen);
+                    } else {
+                        const existingLastSeen = statusText.getAttribute('data-last-seen');
+                        // Vẫn giữ attribute để logic JS hoạt động ngầm nhưng không hiện text
+                    }
                 }
             }
         }
@@ -583,21 +719,54 @@ function refreshPresenceUI() {
     if (currentChatTarget) {
         const headerStatus = document.getElementById('commChatTargetStatus');
         const infoStatus = document.getElementById('commInfoStatus');
-        const isOnline = userPresenceMap.get(currentChatTarget.id)?.online;
+        const targetId = String(currentChatTarget.id);
+        const presence = userPresenceMap.get(targetId);
         
+        let isOnline = false;
+        let forceLastSeen = null;
+
+        if (presence) {
+            if (presence.online) isOnline = true;
+            else {
+                isOnline = false;
+                forceLastSeen = presence.last_seen;
+            }
+        } else {
+            const lastSeenStr = (headerStatus || infoStatus)?.getAttribute('data-last-seen');
+            if (lastSeenStr && (new Date() - new Date(lastSeenStr) < 80000)) {
+                isOnline = true;
+            }
+        }
+
         if (isOnline) {
             const onlineHTML = '<span style="color: #4caf50;"><i class="fas fa-circle" style="font-size: 8px;"></i> Đang hoạt động</span>';
-            if (headerStatus) headerStatus.innerHTML = onlineHTML;
-            if (infoStatus) infoStatus.innerHTML = onlineHTML;
+            if (headerStatus) {
+                headerStatus.innerHTML = onlineHTML;
+                headerStatus.classList.remove('comm-last-seen-realtime');
+            }
+            if (infoStatus) {
+                infoStatus.innerHTML = onlineHTML;
+                infoStatus.classList.remove('comm-last-seen-realtime');
+            }
         } else {
-            // Nếu offline, hiển thị thời gian cuối cùng từ db (nếu đã có) hoặc mặc định
-            if (headerStatus) fetchUserLastSeen(currentChatTarget.id, headerStatus);
-            if (infoStatus) fetchUserLastSeen(currentChatTarget.id, infoStatus);
+            const setOffline = (el) => {
+                if (!el) return;
+                if (forceLastSeen) {
+                    el.innerHTML = `Truy cập ${formatTimeAgo(new Date(forceLastSeen))}`;
+                    el.setAttribute('data-last-seen', forceLastSeen);
+                    el.classList.add('comm-last-seen-realtime');
+                } else {
+                    fetchUserLastSeen(targetId, el);
+                }
+            };
+            setOffline(headerStatus);
+            setOffline(infoStatus);
         }
     }
 }
 
 async function fetchUserLastSeen(userId, element) {
+    if (!element) return; // Bảo vệ nếu element bị null
     try {
         const { data } = await supabase
             .from('profiles')
@@ -605,7 +774,14 @@ async function fetchUserLastSeen(userId, element) {
             .eq('id', userId)
             .single();
         
+        // RACE CONDITION PROTECT: Nếu đang cập nhật Header/Info, phải kiểm tra xem có còn đúng người đó không
+        if (element.id === 'commChatTargetStatus' || element.id === 'commInfoStatus') {
+            if (String(currentChatTarget?.id) !== String(userId)) return;
+        }
+        
         if (data && data.last_seen) {
+            element.setAttribute('data-last-seen', data.last_seen);
+            element.classList.add('comm-last-seen-realtime');
             element.innerHTML = `Truy cập ${formatTimeAgo(new Date(data.last_seen))}`;
             element.style.color = 'var(--text-muted)';
         } else {
@@ -613,8 +789,10 @@ async function fetchUserLastSeen(userId, element) {
             element.style.color = 'var(--text-muted)';
         }
     } catch (e) {
-        element.innerHTML = 'Ngoại tuyến';
-        element.style.color = 'var(--text-muted)';
+        if (element) {
+            element.innerHTML = 'Ngoại tuyến';
+            element.style.color = 'var(--text-muted)';
+        }
     }
 }
 
@@ -837,7 +1015,14 @@ async function confirmSendImage() {
  * Gửi tin nhắn chứa ảnh
  */
 async function sendImageMessage(imageUrl) {
-    const content = `[IMAGE]${imageUrl}`;
+    let content = `[IMAGE]${imageUrl}`;
+
+    // [MỚI] Kiểm tra người kia có chặn mình không để gắn nhãn
+    const theyBlockedMe = currentChatBlocks.some(b => b.user_id === currentChatUserId);
+    if (theyBlockedMe) {
+        content = `[BLOCKED_MSG] ${content}`;
+    }
+
     const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     
     // Giả lập tempId để UI mượt
@@ -924,41 +1109,42 @@ function parseMessageContent(content) {
     if (content === null || content === undefined) return "";
     let str = String(content);
 
-    // Chuẩn hóa hiển thị cho tin nhắn đã thu hồi (cả cũ và mới)
+    // Chuẩn hóa hiển thị cho tin nhắn đã thu hồi
     if (str === '[TIN NHẮN ĐÃ THU HỒI]' || str === 'Tin nhắn đã được thu hồi' || str === 'Tin nhắn đã thu hồi') {
         return 'Tin nhắn đã thu hồi';
     }
 
-    // Pattern 1: [STICKER]http://... - hiển thị ảnh sticker
+    // Biến để lưu nhãn chặn nếu có
+    let blockedLabelHtml = "";
+    if (str.startsWith("[BLOCKED_MSG]")) {
+        str = str.replace("[BLOCKED_MSG]", "").trim();
+        blockedLabelHtml = `<span class="comm-msg-blocked-label"><i class="fas fa-history"></i> Gửi lúc bị chặn</span>`;
+    }
+
+    // Pattern 1: [STICKER]http://...
     const stickerMatch = str.match(/^\[STICKER\](.+)$/);
     if (stickerMatch) {
         const url = stickerMatch[1].trim();
-        
-        // v9.5: LỌC BỎ CHỦ ĐỘNG các link sticker đã biết chắc chắn là lỗi để tránh trình duyệt báo lỗi GET đỏ
-        // v10.0: Cho phép các link nội bộ từ images/stickers/
         if (url.includes('images/stickers/')) {
-            // Hợp lệ, không lọc
+            // Hợp lệ
         } else if (url.includes('popcorn_1.png') || url.includes('127.0.0.1:5501') || url.includes('githubusercontent.com')) {
-            console.warn("🚫 Silent Filter: Đã loại bỏ link sticker chết để tránh lỗi Console:", url);
-            return '<span style="font-style:italic; color:var(--text-muted); font-size:0.8rem;">(Sticker không tồn tại)</span>';
+            return '<span style="font-style:italic; color:var(--text-muted); font-size:0.8rem;">(Sticker không tồn tại)</span>' + blockedLabelHtml;
         }
-
-        // v9.0: Thêm onerror để tự ẩn sticker nếu link bị lỗi bất ngờ
         return `<img src="${escapeHtml(url)}" class="comm-msg-sticker" alt="sticker" 
                      style="max-width:120px;max-height:120px;border-radius:8px;display:block;" 
-                     onerror="this.style.display='none';">`;
+                     onerror="this.style.display='none';">` + blockedLabelHtml;
     }
 
-    // Pattern 2: [IMAGE]url - hiển thị ảnh chất lượng cao
+    // Pattern 2: [IMAGE]url
     const imageMatch = str.match(/^\[IMAGE\](.+)$/);
     if (imageMatch) {
         const url = imageMatch[1].trim();
         return `<img src="${escapeHtml(url)}" class="comm-msg-image-content" alt="image" 
                      style="max-width:350px; max-height:320px; border-radius:12px; display:block; cursor:pointer; object-fit: cover;" 
-                     onclick="openImageViewer('${escapeHtml(url)}')">`;
+                     onclick="openImageViewer('${escapeHtml(url)}')">` + blockedLabelHtml;
     }
 
-    // Pattern 3: [REPLY:msgId:SenderName:nội_dung_gốc] nội_dung_reply
+    // Pattern 3: [REPLY:...]
     const replyMatch = str.match(/^\[REPLY:([^:]+):([^:]+):([^\]]+)\](.*)$/s);
     if (replyMatch) {
         const replyMsgId   = escapeHtml(replyMatch[1].trim());
@@ -971,11 +1157,11 @@ function parseMessageContent(content) {
                 <span class="comm-msg-reply-text">${replyPreview}</span>
             </div>
             <div class="comm-msg-reply-body">${mainContent}</div>
-        </div>`;
+        </div>` + blockedLabelHtml;
     }
 
-    // Mặc định: escape HTML thông thường, giữ nguyên xuống dòng
-    return escapeHtml(str).replace(/\n/g, '<br>');
+    // Mặc định
+    return (escapeHtml(str).replace(/\n/g, '<br>')) + blockedLabelHtml;
 }
 
 // Scroll đến tin nhắn được reply
@@ -2053,10 +2239,23 @@ async function toggleFollow(targetUserId) {
 
 let currentChatUserId = null;
 let chatSubscription = null;
+let blockCountdownInterval = null;
 
 // Cập nhật trạng thái "Đã xem" cho các tin nhắn
 async function markMessagesAsSeen(senderId) {
-    if (!currentUser) return;
+    if (!currentUser || !senderId) return;
+
+    // [BẢO MẬT NÂNG CAO] Kiểm tra xem mình có đang chặn người này không
+    const iBlockedThem = myAppBlocks.some(b => 
+        String(b.user_id).trim() === String(currentUser.id).trim() && 
+        String(b.blocked_id).trim() === String(senderId).trim()
+    );
+
+    if (iBlockedThem) {
+        console.log("🛡️ Chế độ chặn đang bật: Từ chối đánh dấu 'Đã xem'.");
+        return;
+    }
+
     try {
         await supabase
             .from('community_messages')
@@ -2115,6 +2314,13 @@ async function openChat(targetUserId, targetUserName, targetAvatar) {
             }
         }
 
+        // [MỚI] Reset UI banner nếu đổi người chat để tránh "nhảy" banner cũ
+        const chatBox = document.querySelector('.comm-chat-box');
+        if (chatBox && currentChatUserId !== targetUserId) {
+            chatBox.removeAttribute('data-last-block-status');
+            updateBlockUI(null);
+        }
+
         // 3. Tìm các phần tử giao diện (Dùng ID mới tránh xung đột)
         const nameEl = document.getElementById("commChatTargetName");
         const avatarEl = document.getElementById("commChatTargetAvatar");
@@ -2140,12 +2346,28 @@ async function openChat(targetUserId, targetUserName, targetAvatar) {
         const infoDetails = document.querySelector(".comm-info-details > div > div > div:first-child");
         if(infoDetails) infoDetails.textContent = "@" + targetUserName.toLowerCase().replace(/\s/g, "");
 
-        if (inputEl) inputEl.disabled = false;
+        if (inputEl) {
+            inputEl.disabled = false;
+            inputEl.value = ""; // Clear input khi chuyển người chat
+            inputEl.focus();    // Auto focus vào ô nhập
+        }
         
-        // Cập nhật Status
+        // Cập nhật Status (Xóa sạch dấu vết người cũ nhưng giữ lại dữ liệu gợi ý của người mới từ Sidebar)
+        const sidebarItem = document.querySelector(`.comm-chat-item[data-user-id="${targetUserId}"]`);
+        const suggestedLastSeen = sidebarItem ? sidebarItem.getAttribute('data-last-seen') : null;
+
         const setStatus = (statusHTML) => {
-            if (chatBoxStatus) chatBoxStatus.innerHTML = statusHTML;
-            if (infoStatusEl) infoStatusEl.innerHTML = statusHTML;
+            [chatBoxStatus, infoStatusEl].forEach(el => {
+                if (el) {
+                    el.innerHTML = statusHTML;
+                    if (suggestedLastSeen) {
+                        el.setAttribute('data-last-seen', suggestedLastSeen);
+                    } else {
+                        el.removeAttribute('data-last-seen');
+                    }
+                    el.classList.remove('comm-last-seen-realtime');
+                }
+            });
         };
 
         setStatus('<span style="color: var(--text-muted);">Đang tải trạng thái...</span>');
@@ -2192,14 +2414,21 @@ async function openChat(targetUserId, targetUserName, targetAvatar) {
         
         console.log("✅ Fetched messages:", messages?.length || 0);
         
-        // 5. Hiển thị
+        // 5. Kiểm tra trạng thái chặn 2 chiều (LẤY TRƯỚC KHI RENDER ĐỂ LỌC TIN NHẮN)
+        console.log("🛡️ Checking block status for:", targetUserId);
+        const blockStatus = await fetchBlockStatusDB(targetUserId);
+        updateBlockUI(blockStatus);
+
+        // 6. Hiển thị
         renderMessages(messages || []);
         isPinnedListExpanded = false; // Reset trạng thái khi đổi chat
         loadPinnedMessages();
         scrollToBottomChat();
         
         // 6. Tác vụ phụ (không block UI)
-        markMessagesAsSeen(targetUserId).catch(err => console.error("Lỗi markAsSeen:", err));
+        if (blockStatus !== 'i_blocked' && blockStatus !== 'both') {
+            markMessagesAsSeen(targetUserId).catch(err => console.error("Lỗi markAsSeen:", err));
+        }
         fetchChatMediaStats(targetUserId); // Luôn đếm ảnh khi mở chat
         subscribeToChat(targetUserId);
         cancelReply(); // Reset trạng thái reply khi chuyển người chat
@@ -2207,6 +2436,7 @@ async function openChat(targetUserId, targetUserName, targetAvatar) {
         // Nâng cấp V2: Cập nhật hình nền riêng cho cuộc trò chuyện này
         initChatWallpaper();
 
+        // initChatWallpaper() đã gọi updateBlockUI thông qua openChat -> fetchBlockStatusDB -> updateBlockUI
     } catch (e) {
         console.error("❌ CRITICAL ERROR in openChat:", e);
         showNotification("Lỗi mở chat: " + e.message, "error");
@@ -2229,14 +2459,37 @@ function renderMessages(messages) {
     const container = document.getElementById("commChatMessages");
     if (!container) return;
     
-    if(!messages || messages.length === 0) {
+    // Lọc tin nhắn dựa trên logic chặn
+    const filteredMessages = messages.filter(msg => {
+        const isMe = msg.sender_id === currentUser.id;
+        if (isMe) return true; // Tin nhắn của mình luôn hiện
+
+        // Kiểm tra xem tin nhắn này có nằm trong bất kỳ khoảng thời gian chặn nào của mình không
+        const myBlockOnThem = currentChatBlocks.find(b => String(b.user_id).trim() === String(currentUser.id).trim());
+        if (myBlockOnThem) {
+            const blockTime = new Date(myBlockOnThem.created_at).getTime();
+            const msgTime = new Date(msg.created_at).getTime();
+            
+            // Nếu tin nhắn gửi sau khi chặn
+            if (msgTime >= blockTime) {
+                // Nếu vẫn đang chặn (hiện diện trong currentChatBlocks) -> Ẩn
+                return false;
+            }
+        }
+        return true;
+    });
+
+    if (filteredMessages.length === 0) {
         container.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin: auto;">Hãy gửi lời chào đầu tiên!</div>';
         return;
     }
-    
-    container.innerHTML = messages.map(msg => {
+
+    container.innerHTML = filteredMessages.map(msg => {
         const isMe = msg.sender_id === currentUser.id;
         const time = new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        // logic nhãn chặn đã chuyển vào parseMessageContent
+        let displayContent = msg.content || "";
         
         let statusHtml = '';
         if (isMe) {
@@ -2252,7 +2505,9 @@ function renderMessages(messages) {
         return `
             <div class="comm-msg ${isMe ? 'sent' : 'received'} ${msg.status === 'recalled' ? 'recalled-style' : ''}" id="msg-${msg.id}">
                 <div class="comm-msg-body-wrapper">
-                    <div class="comm-msg-bubble">${parseMessageContent(msg.content)}</div>
+                    <div class="comm-msg-bubble">
+                        ${parseMessageContent(displayContent)}
+                    </div>
                     <div class="comm-msg-actions-quick">
                         <button onclick="prepareReply('${msg.id}')" title="Trả lời"><i class="fas fa-quote-left"></i></button>
                         <button onclick="shareMsg('${msg.id}')" title="Chia sẻ"><i class="fas fa-share"></i></button>
@@ -2284,9 +2539,265 @@ function scrollToBottomChat() {
     if (container) container.scrollTop = container.scrollHeight;
 }
 
+// State block 
+let isCurrentlyBlocked = false;
+let currentChatBlocks = []; // Lưu trữ lịch sử chặn để lọc tin nhắn
+
+/**
+ * Kiểm tra trạng thái chặn từ Database (Supabase)
+ * @returns {string|null} 'i_blocked' | 'they_blocked' | 'both' | null
+ */
+async function fetchBlockStatusDB(targetUserId) {
+    if (!currentUser || !targetUserId) return null;
+
+    // [CẬP NHẬT] Sử dụng dữ liệu tập trung myAppBlocks thay vì query riêng lẻ
+    const targetUserIdStr = String(targetUserId).trim();
+    currentChatBlocks = myAppBlocks.filter(block => {
+        const uId = String(block.user_id).trim();
+        const bId = String(block.blocked_id).trim();
+        
+        // Lấy các block liên quan đến cặp (tôi, người kia)
+        const isRelevant = (uId === String(currentUser.id).trim() && bId === targetUserIdStr) ||
+                           (uId === targetUserIdStr && bId === String(currentUser.id).trim());
+        
+        if (!isRelevant) return false;
+
+        if (block.duration_hours === -1) return true; // Vĩnh viễn
+        
+        const expiryTime = new Date(block.created_at).getTime() + (block.duration_hours * 3600 * 1000);
+        const isExpired = Date.now() > expiryTime;
+        
+        if (isExpired) {
+            if (uId === String(currentUser.id).trim()) removeBlockDB(block.blocked_id);
+            return false;
+        }
+        return true;
+    });
+    
+    let iBlocked = currentChatBlocks.some(b => String(b.user_id).trim() === String(currentUser.id).trim());
+    let theyBlocked = currentChatBlocks.some(b => String(b.user_id).trim() === targetUserIdStr);
+
+    const status = (iBlocked && theyBlocked) ? 'both' : (iBlocked ? 'i_blocked' : (theyBlocked ? 'they_blocked' : null));
+    isCurrentlyBlocked = (status === 'i_blocked' || status === 'both');
+    
+    return status;
+}
+
+/**
+ * Lưu trạng thái chặn vào Database
+ */
+async function saveBlockDB(blockedId, durationHours) {
+    if (!currentUser || !blockedId) return;
+    try {
+        const blockData = {
+            user_id: currentUser.id,
+            blocked_id: blockedId,
+            duration_hours: durationHours,
+            created_at: new Date().toISOString()
+        };
+
+        const { error } = await supabase.from('community_blocks').upsert(blockData);
+        if (error) throw error;
+
+        // Cập nhật local state
+        myAppBlocks = myAppBlocks.filter(b => !(String(b.user_id).trim() === String(currentUser.id).trim() && String(b.blocked_id).trim() === String(blockedId).trim()));
+        myAppBlocks.push(blockData);
+
+    } catch (e) {
+        console.error("Lỗi lưu block vào DB:", e);
+    }
+}
+
+/**
+ * Xóa trạng thái chặn khỏi Database
+ */
+async function removeBlockDB(blockedId) {
+    if (!currentUser || !blockedId) return;
+    try {
+        const { error } = await supabase
+            .from('community_blocks')
+            .delete()
+            .eq('user_id', currentUser.id)
+            .eq('blocked_id', blockedId);
+        
+        if (error) throw error;
+
+        // Cập nhật local state
+        myAppBlocks = myAppBlocks.filter(b => !(String(b.user_id).trim() === String(currentUser.id).trim() && String(b.blocked_id).trim() === String(blockedId).trim()));
+    } catch (e) {
+        console.error("Lỗi xóa block khỏi DB:", e);
+    }
+}
+
+/**
+ * Cập nhật UI Chat khi bị chặn
+ */
+function updateBlockUI(blockStatus) {
+    const chatBox = document.querySelector('.comm-chat-box');
+    if (!chatBox) return;
+
+    // [TỐI ƯU] Chỉ cập nhật nếu trạng thái thực sự thay đổi để tránh "nhảy" giao diện
+    const lastStatus = chatBox.getAttribute('data-last-block-status');
+    const lastUser = chatBox.getAttribute('data-last-block-user');
+    if (lastStatus === String(blockStatus) && lastUser === String(currentChatUserId)) return; 
+    
+    chatBox.setAttribute('data-last-block-status', String(blockStatus));
+    chatBox.setAttribute('data-last-block-user', String(currentChatUserId));
+
+    const inputWrapper = document.querySelector('.comm-chat-input-wrapper');
+    const sendBtn = document.querySelector('.comm-btn-send');
+    
+    // Xóa TẤT CẢ banner cũ
+    document.querySelectorAll('.comm-block-banner').forEach(el => el.remove());
+
+    if (blockStatus) {
+        isCurrentlyBlocked = (blockStatus === 'i_blocked' || blockStatus === 'both');
+        
+        // Tạo banner cảnh báo
+        let bannerMsg = "";
+        let bannerIcon = "fa-ban";
+        
+        if (blockStatus === 'both') {
+            bannerMsg = "Bạn đã chặn người này và bạn cũng đã bị chặn.";
+            if (inputWrapper) inputWrapper.style.display = 'none';
+            if (sendBtn) sendBtn.style.display = 'none';
+        } else if (blockStatus === 'i_blocked') {
+            // [MỚI] Theo yêu cầu người dùng: Không hiện banner khi mình chặn họ (tránh phiền khi spam click)
+            bannerMsg = ""; 
+            if (inputWrapper) inputWrapper.style.display = 'flex';
+            if (sendBtn) sendBtn.style.display = 'flex';
+        } else if (blockStatus === 'they_blocked') {
+            bannerMsg = "Bạn đã bị chặn. Bạn vẫn có thể gửi tin nhắn nhưng người kia sẽ không nhận được ngay.";
+            bannerIcon = "fa-exclamation-circle";
+            if (inputWrapper) inputWrapper.style.display = 'flex';
+            if (sendBtn) sendBtn.style.display = 'flex';
+        }
+
+        const chatBox = document.querySelector('.comm-chat-box');
+        if (chatBox && bannerMsg) {
+            const banner = document.createElement('div');
+            banner.id = 'commBlockBanner';
+            banner.className = 'comm-block-banner';
+            banner.innerHTML = `<i class="fas ${bannerIcon}"></i> <span>${bannerMsg}</span>`;
+            chatBox.appendChild(banner);
+        }
+    } else {
+        isCurrentlyBlocked = false;
+        if (inputWrapper) inputWrapper.style.display = 'flex';
+        if (sendBtn) sendBtn.style.display = 'flex';
+    }
+
+    // [MỚI] Đồng bộ nút Danger Zone và Bộ đếm ngược trong sidebar
+    const dangerItem = document.querySelector('.comm-info-danger-item');
+    const countdownEl = document.getElementById('commBlockCountdown');
+    
+    if (blockCountdownInterval) {
+        clearInterval(blockCountdownInterval);
+        blockCountdownInterval = null;
+    }
+
+    if (dangerItem) {
+        if (blockStatus === 'i_blocked' || blockStatus === 'both') {
+            dangerItem.innerHTML = '<i class="fas fa-unlock"></i> <span>Bỏ chặn người dùng</span>';
+            dangerItem.setAttribute('onclick', 'unblockCurrentUser()');
+
+            // Hiển thị đếm ngược nếu có thời hạn, hoặc báo "Vĩnh viễn"
+            const myBlock = currentChatBlocks.find(b => String(b.user_id).trim() === String(currentUser.id).trim());
+            const countdownLabelEl = document.getElementById('commBlockCountdownLabel');
+            const countdownTimeEl = document.getElementById('commBlockCountdownTime');
+
+            if (myBlock) {
+                if (countdownEl) countdownEl.style.display = 'flex';
+                
+                if (myBlock.duration_hours === -1) {
+                    if (countdownLabelEl) countdownLabelEl.textContent = "Thời hạn:";
+                    if (countdownTimeEl) countdownTimeEl.innerHTML = '<span style="color: #ff4d4d;">Vĩnh viễn</span>';
+                    if (blockCountdownInterval) clearInterval(blockCountdownInterval);
+                } else {
+                    if (countdownLabelEl) countdownLabelEl.textContent = "Mở chặn sau:";
+                    updateBlockCountdownText(myBlock);
+                    blockCountdownInterval = setInterval(() => updateBlockCountdownText(myBlock), 1000);
+                }
+            } else {
+                if (countdownEl) countdownEl.style.display = 'none';
+            }
+        } else {
+            dangerItem.innerHTML = '<i class="fas fa-ban"></i> <span>Chặn người dùng</span>';
+            dangerItem.setAttribute('onclick', 'confirmBlockUser()');
+            if (countdownEl) countdownEl.style.display = 'none';
+        }
+    }
+}
+
+/**
+ * Cập nhật chuỗi thời gian đếm ngược
+ */
+function updateBlockCountdownText(blockData) {
+    const countdownTimeEl = document.getElementById('commBlockCountdownTime');
+    const countdownEl = document.getElementById('commBlockCountdown');
+    if (!countdownTimeEl || !blockData) return;
+
+    const expiryTime = new Date(blockData.created_at).getTime() + (blockData.duration_hours * 3600 * 1000);
+    const now = Date.now();
+    const diff = expiryTime - now;
+
+    if (diff <= 0) {
+        if (blockCountdownInterval) clearInterval(blockCountdownInterval);
+        if (countdownEl) countdownEl.style.display = 'none';
+        // Tự động refresh trạng thái chặn khi hết hạn
+        fetchBlockStatusDB(currentChatUserId).then(status => updateBlockUI(status));
+        return;
+    }
+
+    const days = Math.floor(diff / (24 * 3600 * 1000));
+    const hours = Math.floor((diff % (24 * 3600 * 1000)) / (3600 * 1000));
+    const minutes = Math.floor((diff % (3600 * 1000)) / (60 * 1000));
+    const seconds = Math.floor((diff % (60 * 1000)) / 1000);
+
+    const pad = (num) => String(num).padStart(2, '0');
+    
+    let timeStr = "";
+    if (days > 0) {
+        timeStr = `${days} ngày, ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+    } else {
+        timeStr = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+    }
+
+    countdownTimeEl.textContent = timeStr;
+}
+
+/**
+ * Bỏ chặn người đang chat hiện tại
+ */
+async function unblockCurrentUser() {
+    if (!currentUser || !currentChatUserId) return;
+    
+    // Clear countdown interval
+    if (blockCountdownInterval) {
+        clearInterval(blockCountdownInterval);
+        blockCountdownInterval = null;
+    }
+
+    await removeBlockDB(currentChatUserId);
+    showNotification("Đã bỏ chặn người dùng này", "success");
+    
+    // Refresh lại trạng thái và tin nhắn
+    const blockStatus = await fetchBlockStatusDB(currentChatUserId);
+    updateBlockUI(blockStatus);
+    
+    // Refresh tin nhắn để hiện những tin bị ẩn
+    openChat(currentChatUserId, currentChatTarget.display_name, currentChatTarget.avatar);
+    if(typeof loadChatList === 'function') loadChatList();
+}
+
+
 // Gửi tin nhắn
 async function sendMessage() {
     if(!currentChatUserId || !currentUser) return;
+    if(isCurrentlyBlocked) {
+        showNotification("Bạn không thể trả lời cuộc trò chuyện này.", "error");
+        return;
+    }
     
     const input = document.getElementById("commChatInputMessage");
     let content = input.value.trim();
@@ -2295,6 +2806,12 @@ async function sendMessage() {
     // Nếu đang reply, chèn pattern [REPLY:...]
     if (replyingTo) {
         content = `[REPLY:${replyingTo.id}:${replyingTo.name}:${replyingTo.text}] ${content}`;
+    }
+
+    // [MỚI] Nếu người kia đang chặn mình, đánh dấu tin nhắn bằng prefix để sau này gỡ chặn vẫn nhận ra
+    const theyBlockedMe = currentChatBlocks.some(b => b.user_id === currentChatUserId);
+    if (theyBlockedMe) {
+        content = `[BLOCKED_MSG] ${content}`;
     }
 
     
@@ -2327,9 +2844,21 @@ async function sendMessage() {
             <div class="comm-msg-time">${time} <i class="fas fa-clock" style="font-size: 0.75rem; margin-left: 5px; color: var(--text-muted);" title="Đang gửi..."></i></div>
         </div>
     `);
-    scrollToBottomChat();
+    // Khôi phục chiều cao mặc định cho textarea
+    input.style.height = 'auto';
+    input.style.height = '48px';
     input.value = "";
+    input.focus(); // Khôi phục focus sau khi nhấn gửi
     cancelReply();
+    
+    // [MỚI] Tắt typing indicator lập tức khi gửi
+    isCurrentlyTyping = false;
+    clearTimeout(typingTimeout);
+    communityPresenceChannel?.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { sender_id: currentUser.id, receiver_id: currentChatUserId, is_typing: false }
+    });
     
     // 2. Gửi lên Supabase
     try {
@@ -2444,9 +2973,16 @@ async function sendSystemCallLog(content, targetUserId) {
 
 // Lắng nghe phím Enter khi chat, sự kiện chọn ảnh và dán ảnh
 document.addEventListener("DOMContentLoaded", () => {
-    document.body.addEventListener('keypress', function(e) {
-        if(e.target && e.target.id === 'commChatInputMessage' && e.key === 'Enter') {
-            sendMessage();
+    document.body.addEventListener('keydown', function(e) {
+        if(e.target && e.target.id === 'commChatInputMessage') {
+            if (e.key === 'Enter') {
+                if (!e.shiftKey) {
+                    e.preventDefault(); // Ngăn hiển thị dòng mới
+                    sendMessage();
+                }
+            } else if (e.key === 'Escape') {
+                cancelReply();
+            }
         }
     });
 
@@ -2454,6 +2990,71 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.addEventListener('change', function(e) {
         if(e.target && e.target.id === 'commImageInput') {
             handleImageSelect(e);
+        }
+    });
+
+    // Lắng nghe sự kiện đang gõ phím (Typing Indicator) và Auto Resize Textarea
+    document.body.addEventListener('input', function(e) {
+        if(e.target && e.target.id === 'commChatInputMessage') {
+            // Auto resize logic - reset về auto để trình duyệt tính lại scrollHeight chính xác
+            e.target.style.height = 'auto';
+            e.target.style.height = Math.max(48, e.target.scrollHeight) + 'px';
+
+            if (!currentChatUserId || isCurrentlyBlocked) return;
+            
+            // Nếu xóa hết chữ, tắt typing ngay lập tức
+            if (e.target.value.trim() === '') {
+                if (isCurrentlyTyping) {
+                    isCurrentlyTyping = false;
+                    lastTypingBroadcastTime = 0;
+                    clearTimeout(typingTimeout);
+                    communityPresenceChannel?.send({
+                        type: 'broadcast',
+                        event: 'typing',
+                        payload: { sender_id: currentUser.id, receiver_id: currentChatUserId, is_typing: false }
+                    });
+                }
+                return;
+            }
+
+            const now = Date.now();
+            // Đạt chuẩn Realtime tuyệt đối bằng cách báo cáo lại liên tục mỗi 0.5s nếu vẫn đang liên tục gõ
+            if (!isCurrentlyTyping || (now - lastTypingBroadcastTime > 500)) {
+                isCurrentlyTyping = true;
+                lastTypingBroadcastTime = now;
+                communityPresenceChannel?.send({
+                    type: 'broadcast',
+                    event: 'typing',
+                    payload: { sender_id: currentUser.id, receiver_id: currentChatUserId, is_typing: true }
+                });
+            }
+
+            // Chỉ cần ngưng tay 0.8 giây là lập tức báo "không gõ nữa" cho đầu bên kia
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                isCurrentlyTyping = false;
+                lastTypingBroadcastTime = 0;
+                communityPresenceChannel?.send({
+                    type: 'broadcast',
+                    event: 'typing',
+                    payload: { sender_id: currentUser.id, receiver_id: currentChatUserId, is_typing: false }
+                });
+            }, 800);
+        }
+    });
+
+    // Khi người dùng click ra ngoài hoặc ô nhập liệu mất focus -> Tắt typing
+    document.body.addEventListener('focusout', function(e) {
+        if(e.target && e.target.id === 'commChatInputMessage') {
+            if (isCurrentlyTyping) {
+                isCurrentlyTyping = false;
+                clearTimeout(typingTimeout);
+                communityPresenceChannel?.send({
+                    type: 'broadcast',
+                    event: 'typing',
+                    payload: { sender_id: currentUser.id, receiver_id: currentChatUserId, is_typing: false }
+                });
+            }
         }
     });
 
@@ -2558,20 +3159,40 @@ function subscribeToChat(targetUserId) {
                     if (isDeleted) return;
 
                     // Nếu mình là người nhận, VÀ ĐANG Ở TRONG TAB CHAT VỚI ĐÚNG NGƯỜI ĐÓ
-                    if (msg.receiver_id === currentUser.id && currentCommView === 'chat' && currentChatUserId === targetUserId) {
+                    // [MỚI] CHỈ ĐÁNH DẤU ĐÃ XEM NẾU KHÔNG CHẶN HỌ
+                    const iBlockedThem = currentChatBlocks.some(b => b.user_id === currentUser.id);
+                    if (msg.receiver_id === currentUser.id && currentCommView === 'chat' && currentChatUserId === targetUserId && !iBlockedThem) {
                         markMessagesAsSeen(targetUserId);
                     }
 
                     // Tránh render đúp tin nhắn của chính mình
                     if(msg.sender_id !== currentUser.id) {
+                        // [MỚI] LỌC TIN NHẮN THEO TRẠNG THÁI CHẶN (REAL-TIME)
+                        const myBlockOnThem = currentChatBlocks.find(b => b.user_id === currentUser.id);
+                        if (myBlockOnThem) {
+                            const blockTime = new Date(myBlockOnThem.created_at).getTime();
+                            const msgTime = new Date(msg.created_at).getTime();
+                            // Nếu tin nhắn gửi sau khi mình bắt đầu chặn -> Không hiển thị lên UI
+                            if (msgTime >= blockTime) {
+                                console.log("🛡️ Realtime: Tin nhắn đã bị chặn hiển thị.");
+                                return;
+                            }
+                        }
+
                         const container = document.getElementById("commChatMessages");
                         if (container) {
                             if(container.innerHTML.includes("Hãy gửi lời chào đầu tiên!")) container.innerHTML = "";
                             const time = new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                            
+                            // Xử lý nội dung đã tập trung vào parseMessageContent
+                            let displayContent = msg.content || "";
+
                             container.insertAdjacentHTML('beforeend', `
                                 <div class="comm-msg received ${msg.status === 'recalled' ? 'recalled-style' : ''}" id="msg-${msg.id}">
                                     <div class="comm-msg-body-wrapper">
-                                        <div class="comm-msg-bubble">${parseMessageContent(msg.content)}</div>
+                                        <div class="comm-msg-bubble">
+                                            ${parseMessageContent(displayContent)}
+                                        </div>
                                         <div class="comm-msg-actions-quick">
                                             <button onclick="prepareReply('${msg.id}')" title="Trả lời"><i class="fas fa-quote-left"></i></button>
                                             <button onclick="shareMsg('${msg.id}')" title="Chia sẻ"><i class="fas fa-share"></i></button>
@@ -2644,6 +3265,35 @@ function subscribeToMessageNotifications() {
                 // Nếu đang ở màn hình chat (sidebar hiện), load lại list để cập nhật tin mới nhất/bỏ ẩn
                 if (currentCommView === 'chat') {
                     loadChatList();
+                }
+            }
+        )
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'community_blocks'
+            },
+            async (payload) => {
+                const uId = payload.new ? payload.new.user_id : (payload.old ? payload.old.user_id : null);
+                const bId = payload.new ? payload.new.blocked_id : (payload.old ? payload.old.blocked_id : null);
+                
+                if (uId === currentUser.id || bId === currentUser.id) {
+                    console.log("🛡️ Cập nhật danh sách chặn (Realtime)");
+                    const { data: allBlocks } = await supabase
+                        .from('community_blocks')
+                        .select('*')
+                        .or(`user_id.eq.${currentUser.id},blocked_id.eq.${currentUser.id}`);
+                        
+                    if (allBlocks) {
+                        myAppBlocks = allBlocks;
+                        // Cập nhật giao diện nếu đang mở khung chat với người liên quan
+                        if (currentChatUserId && (uId === currentChatUserId || bId === currentChatUserId)) {
+                            const status = await fetchBlockStatusDB(currentChatUserId);
+                            updateBlockUI(status);
+                        }
+                    }
                 }
             }
         )
@@ -2961,12 +3611,37 @@ async function loadChatList() {
         const friendIds = activeChats.map(c => c.user_id === currentUser.id ? c.friend_id : c.user_id);
         const { data: profiles, error: pError } = await supabase
             .from('profiles')
-            .select('id, display_name, avatar')
+            .select('id, display_name, avatar, last_seen')
             .in('id', friendIds);
 
         if (pError) throw pError;
+        
+        // 4. [CẬP NHẬT] Lấy TOÀN BỘ danh sách chặn liên quan (cả người chặn và người bị chặn)
+        try {
+            const { data: allBlocks, error: bError } = await supabase
+                .from('community_blocks')
+                .select('*')
+                .or(`user_id.eq.${currentUser.id},blocked_id.eq.${currentUser.id}`);
+            
+            if (bError) {
+                console.error("[CineChat] Lỗi lấy danh sách chặn:", bError);
+                myAppBlocks = [];
+            } else {
+                myAppBlocks = allBlocks || [];
+            }
+        } catch (e) {
+            console.error("[CineChat] Kiểm tra lại bảng community_blocks:", e);
+            myAppBlocks = [];
+        }
 
-        // 4. Lấy tin nhắn mới nhất để hiển thị preview (Lấy khoảng 100 tin gần nhất của user này)
+        const validBlocks = myAppBlocks.filter(b => {
+             if (b.user_id !== currentUser.id) return false; // Chỉ lấy những người MÌNH chặn để lọc Sidebar
+             if (b.duration_hours === -1) return true;
+             const expiryTime = new Date(b.created_at).getTime() + (b.duration_hours * 3600 * 1000);
+             return Date.now() < expiryTime;
+        });
+
+        // 5. Lấy tin nhắn mới nhất để hiển thị preview
         const { data: recentMessages, error: mError } = await supabase
             .from('community_messages')
             .select('id, sender_id, receiver_id, content, status, created_at, deleted_by_sender, deleted_by_receiver')
@@ -2985,6 +3660,14 @@ async function loadChatList() {
                 // Kiểm tra xem tin nhắn này có bị mình xóa không
                 const isDeletedByMe = (senderId === myId) ? msg.deleted_by_sender : msg.deleted_by_receiver;
                 if (isDeletedByMe) return; // Bỏ qua tin nhắn đã xóa ở phía mình
+
+                // [MỚI] Lọc tin nhắn của người bị mình chặn
+                const blockEntry = validBlocks.find(b => String(b.blocked_id).trim() === senderId);
+                if (blockEntry) {
+                    const blockTime = new Date(blockEntry.created_at).getTime();
+                    const msgTime = new Date(msg.created_at).getTime();
+                    if (msgTime >= blockTime) return; // Bỏ qua tin nhắn này nếu gửi sau lúc chặn
+                }
 
                 const friendId = (senderId === myId) ? receiverId : senderId;
                 if (!latestMsgMap[friendId]) {
@@ -3026,7 +3709,7 @@ async function loadChatList() {
                     const mainContent = mainContentMatch ? mainContentMatch[1].trim() : content;
                     lastMsgText = (isFromMe ? "Bạn: " : "") + mainContent;
                 } else {
-                    lastMsgText = (isFromMe ? "Bạn: " : "") + content;
+                    lastMsgText = (isFromMe ? "Bạn: " : "") + content.replace("[BLOCKED_MSG]", "").trim();
                 }
                 
                 // Trình bày ngắn gọn
@@ -3037,7 +3720,8 @@ async function loadChatList() {
                 ...profile,
                 rowId: row.id,
                 isPinned: isPinned,
-                lastMsg: lastMsgText
+                lastMsg: lastMsgText,
+                last_seen: profile.last_seen
             };
         });
 
@@ -3046,17 +3730,20 @@ async function loadChatList() {
 
         console.log("[CineChat] Danh sách sau khi xử lý ghim:");
         console.table(displayItems.map(i => ({ Tên: i.display_name, 'Ghim?': i.isPinned, 'FriendID': i.id })));
-
         // 6. Render HTML
         container.innerHTML = displayItems.map(item => {
             const avatar = item.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.display_name)}&background=random`;
             const isActive = currentChatUserId === item.id;
-            const isOnline = userPresenceMap.get(String(item.id))?.online;
+            const isPresenceOnline = userPresenceMap.get(String(item.id).trim())?.online;
+            const lastSeenDate = item.last_seen ? new Date(item.last_seen) : null;
+            const isRecentlyActive = lastSeenDate && (new Date() - lastSeenDate < 80000);
+            const isOnline = isPresenceOnline || isRecentlyActive;
             
             return `
                 <div class="comm-chat-item ${isActive ? 'active' : ''} ${item.isPinned ? 'pinned' : ''}" 
                      id="chat-item-${item.id}"
                      data-user-id="${item.id}"
+                     data-last-seen="${item.last_seen || ''}"
                      onclick="openChat('${item.id}', '${item.display_name.replace(/'/g, "\\'")}', '${avatar}')">
                     
                     ${item.isPinned ? '<div class="comm-pinned-badge"><i class="fas fa-thumbtack"></i> GHIM</div>' : ''}
@@ -3067,6 +3754,7 @@ async function loadChatList() {
                     </div>
                     <div class="comm-chat-item-info">
                         <div class="comm-chat-item-name">${item.display_name}</div>
+                        <div class="comm-chat-item-status" data-last-seen="${item.last_seen || ''}"></div>
                         <div class="comm-chat-item-msg">${item.lastMsg}</div>
                     </div>
 
@@ -4849,13 +5537,24 @@ async function sendMultiForward() {
 
         // 2. Gửi cho tất cả người đã chọn
         const sendPromises = selectedForwardUserIds.map(async (targetUserId) => {
+            let finalContent = originalMsg.content;
+            
+            // [MỚI] Kiểm tra chặn cho từng người nhận khi gửi hàng loạt
+            const theirBlockOnMe = myAppBlocks.find(b => 
+                String(b.user_id).trim() === String(targetUserId).trim() && 
+                String(b.blocked_id).trim() === String(currentUser.id).trim()
+            );
+            if (theirBlockOnMe && !finalContent.startsWith("[BLOCKED_MSG]")) {
+                finalContent = `[BLOCKED_MSG] ${finalContent}`;
+            }
+
             const isTargetOnline = userPresenceMap.get(targetUserId)?.online;
             return supabase
                 .from('community_messages')
                 .insert({
                     sender_id: currentUser.id,
                     receiver_id: targetUserId,
-                    content: originalMsg.content,
+                    content: finalContent,
                     status: isTargetOnline ? 'delivered' : 'sent'
                 });
         });
@@ -4908,13 +5607,24 @@ async function processForward(targetUserId, btn) {
         if (fetchErr) throw fetchErr;
 
         // 2. Gửi tin nhắn mới tới người nhận
+        let finalContent = originalMsg.content;
+        
+        // [MỚI] Kiểm tra chặn cho người nhận cụ thể
+        const theirBlockOnMe = myAppBlocks.find(b => 
+            String(b.user_id).trim() === String(targetUserId).trim() && 
+            String(b.blocked_id).trim() === String(currentUser.id).trim()
+        );
+        if (theirBlockOnMe && !finalContent.startsWith("[BLOCKED_MSG]")) {
+            finalContent = `[BLOCKED_MSG] ${finalContent}`;
+        }
+
         const isTargetOnline = userPresenceMap.get(targetUserId)?.online;
         const { error: sendErr } = await supabase
             .from('community_messages')
             .insert({
                 sender_id: currentUser.id,
                 receiver_id: targetUserId,
-                content: originalMsg.content,
+                content: finalContent,
                 status: isTargetOnline ? 'delivered' : 'sent'
             });
 
@@ -5201,6 +5911,43 @@ function cancelWallpaperPreview() {
         chatContainer.style.setProperty('--wp-position', originalWallpaperState.position);
     }
     closeWallpaperModal();
+}
+
+/**
+ * Xử lý chặn người dùng (Danger Zone)
+ */
+async function confirmBlockUser() {
+    if (!currentChatTarget || !currentUser) return;
+
+    const result = await showBlockConfirmModal();
+
+    if (result && result.confirmed) {
+        const targetName = currentChatTarget.display_name || currentChatTarget.name || 'người dùng này';
+        let durationText = "vĩnh viễn";
+        if (result.duration !== -1) {
+            durationText = result.duration >= 24 ? `${result.duration / 24} ngày` : `${result.duration} giờ`;
+        }
+        
+        // [MỚI] Lưu trạng thái chặn vào Database (Supabase)
+        await saveBlockDB(currentChatTarget.id, result.duration);
+        
+        showNotification(`Đã chặn ${targetName} ${durationText}`, "error");
+
+        // [MỚI] Fetch lại trạng thái mới nhất từ DB
+        const blockStatus = await fetchBlockStatusDB(currentChatTarget.id);
+        updateBlockUI(blockStatus);
+
+        // Cập nhật nút Danger Zone trong sidebar
+        const dangerItem = document.querySelector('.comm-info-danger-item');
+        if (dangerItem) {
+            dangerItem.innerHTML = '<i class="fas fa-unlock"></i> <span>Bỏ chặn người dùng</span>';
+            dangerItem.setAttribute('onclick', 'unblockCurrentUser()');
+        }
+        
+        // Refresh tin nhắn để ẩn tin nhắn từ người vừa chặn
+        openChat(currentChatTarget.id, targetName, currentChatTarget.avatar);
+        if(typeof loadChatList === 'function') loadChatList();
+    }
 }
 
 function initChatWallpaper() {

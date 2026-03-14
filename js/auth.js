@@ -265,8 +265,18 @@ async function handleAuthStateChange(user) {
       if (isAdmin) loadAdminData();
 
       // Render lại giao diện
-      renderAllInitialMovies();
+      if (typeof renderAllInitialMovies === 'function') renderAllInitialMovies();
       
+      // Khởi tạo trạng thái online lập tức
+      if (typeof initGlobalCommunityPresence === 'function') {
+          initGlobalCommunityPresence();
+      }
+
+      // [MỚI] Tự động load Community nếu đang ở hash community
+      if (window.location.hash.includes('community') && typeof initCommunity === 'function') {
+          initCommunity();
+      }
+
       if (typeof updateAllWatchProgress === 'function') {
           setTimeout(updateAllWatchProgress, 100);
       }
