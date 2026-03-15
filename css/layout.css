@@ -1675,12 +1675,18 @@
 /* ----------------------------------
    5. COUNTRY SECTIONS (PHÂN LOẠI QUỐC GIA) 
    ---------------------------------- */
+/* Container chung - phủ nền đồng nhất để không lộ khoảng hở sáng */
+#countrySections {
+  background: var(--bg-primary);
+  padding: 10px 0;
+}
+
 .country-section {
   display: flex;
-  margin: var(--spacing-xxl) 40px;
+  margin: 0 40px 20px 40px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 20px;
-  overflow: visible !important; /* Force hiển thị tràn khung */
+  overflow: visible !important;
   border: 1px solid rgba(255, 255, 255, 0.05);
   min-height: 320px;
   position: relative;
@@ -1783,6 +1789,10 @@
   transition: all 0.3s ease;
   position: relative;
   z-index: 10;
+  background: var(--bg-primary); /* Nền đồng màu che hở sáng */
+  border: 1px solid rgba(255, 255, 255, 0.08); /* Viền mỏng */
+  border-radius: 14px;
+  padding: 8px 8px 12px;
 }
 
 .movie-card-landscape:hover {
@@ -1797,7 +1807,7 @@
   position: relative;
   background-size: cover;
   background-position: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: none;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
@@ -1805,7 +1815,10 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
+  background: linear-gradient(to top, rgba(0,0,0,0.6), transparent 50%);
+  box-shadow: inset 0 0 30px 10px rgba(0, 0, 0, 0.5); /* Vignette sậm rìa */
+  border-radius: 12px;
+  pointer-events: none;
 }
 
 .movie-card-landscape:hover .landscape-img-container {
