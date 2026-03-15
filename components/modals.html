@@ -312,9 +312,13 @@
                   oninput="updateImagePreview(this.value, 'posterPreview')"
                 />
                 <button type="button" class="btn btn-secondary btn-upload" onclick="document.getElementById('posterInput').click()" style="white-space: nowrap;">
-                  <i class="fas fa-upload"></i> Tải lên
+                  <i class="fas fa-image"></i> Cloudinary
+                </button>
+                <button type="button" class="btn btn-primary btn-upload" onclick="document.getElementById('posterInputR2').click()" style="white-space: nowrap; background: #f48120; border-color: #f48120;">
+                  <i class="fas fa-cloud-upload-alt"></i> Cloudflare
                 </button>
                 <input type="file" id="posterInput" accept="image/*" style="display: none;" onchange="uploadMovieImage(this, 'moviePoster', 'posterPreview')">
+                <input type="file" id="posterInputR2" accept="image/*" style="display: none;" onchange="uploadImageToR2(this, 'moviePoster', 'posterPreview', 'poster')">
               </div>
               <div id="posterPreview" class="image-upload-preview" style="margin-top: 8px; display: none;">
                 <!-- Chỉ báo nguồn ảnh -->
@@ -337,9 +341,13 @@
                   oninput="updateImagePreview(this.value, 'bgPreview')"
                 />
                 <button type="button" class="btn btn-secondary btn-upload" onclick="document.getElementById('bgInput').click()" style="white-space: nowrap;">
-                  <i class="fas fa-upload"></i> Tải lên
+                  <i class="fas fa-image"></i> Cloudinary
+                </button>
+                <button type="button" class="btn btn-primary btn-upload" onclick="document.getElementById('bgInputR2').click()" style="white-space: nowrap; background: #f48120; border-color: #f48120;">
+                  <i class="fas fa-cloud-upload-alt"></i> Cloudflare
                 </button>
                 <input type="file" id="bgInput" accept="image/*" style="display: none;" onchange="uploadMovieImage(this, 'movieBackground', 'bgPreview')">
+                <input type="file" id="bgInputR2" accept="image/*" style="display: none;" onchange="uploadImageToR2(this, 'movieBackground', 'bgPreview', 'background')">
               </div>
               <div id="bgPreview" class="image-upload-preview" style="margin-top: 8px; display: none;">
                 <!-- Chỉ báo nguồn ảnh -->

@@ -1625,6 +1625,12 @@ async function handleMovieSubmit(event) {
       if (!uploadSuccess) return; 
   }
 
+  // Chờ tải ảnh lên Cloudflare R2 nếu có (Thực sự upload khi bấm Lưu)
+  if (typeof window.uploadPendingR2Images === "function") {
+      const r2Success = await window.uploadPendingR2Images();
+      if (!r2Success) return;
+  }
+
   const movieId = document.getElementById("movieId").value;
   
   // Thu thập Categories
@@ -1892,12 +1898,22 @@ async function deleteMovie(movieId) {
   if (!supabase) return;
 
   try {
-    showLoading(true, "Đang xóa...");
+    showLoading(true, "Đang xử lý dọn dẹp và xóa phim...");
 
+    // 1. Lấy thông tin phim trước để lấy URL ảnh R2 (nếu có) để xóa file vật lý
+    const { data: movie } = await supabase.from('movies').select('poster_url, background_url').eq('id', movieId).single();
+    
+    // 2. Xóa ảnh trên Cloudflare R2 nếu có
+    if (movie) {
+        if (movie.poster_url) await window.deleteImageFromR2(movie.poster_url);
+        if (movie.background_url) await window.deleteImageFromR2(movie.background_url);
+    }
+
+    // 3. Xóa phim khỏi Database
     const { error } = await supabase.from('movies').delete().eq('id', movieId);
     if (error) throw error;
 
-    showNotification("Đã xóa phim!", "success");
+    showNotification("Đã xóa phim và dọn dẹp ảnh R2 (nếu có)!", "success");
     notifyDataChange("movies"); 
 
     if (typeof loadMovies === 'function') await loadMovies();
@@ -1981,26 +1997,20 @@ function renderMovieSelectionGrid(movies) {
         const currentEps = m._episodeCount || (m.episodes ? m.episodes.length : 0);
         const totalEps = parseInt(m.totalEpisodes || m.total_episodes) || 0;
         
+        // Badge hiển thị giống trang chủ (dùng class episode-badge)
         let statusHtml = "";
-        let badgeClass = "";
-        let badgeText = "";
 
-        if (currentEps === 0) {
-            badgeClass = "bg-danger";
-            badgeText = "CHƯA CÓ TẬP";
-        } else if (m.type === 'series' && currentEps < totalEps) {
-            badgeClass = "bg-warning text-dark";
-            badgeText = `ĐANG CẬP NHẬT (${currentEps}/${totalEps})`;
-        } else if (m.type === 'series' && currentEps >= totalEps) {
-            badgeClass = "bg-success";
-            badgeText = `HOÀN TẤT (${currentEps}/${totalEps})`;
-        } else if (m.type === 'single') {
-            badgeClass = "bg-info text-dark";
-            badgeText = "PHIM LẺ";
-        }
-
-        if (badgeText) {
-            statusHtml = `<span class="status-badge ${badgeClass}">${badgeText}</span>`;
+        if (m.type === 'series') {
+            if (totalEps > 0 && currentEps >= totalEps) {
+                // Hoàn tất - xanh lá
+                statusHtml = `<span class="episode-badge episode-badge-full">Hoàn Tất (${currentEps}/${totalEps})</span>`;
+            } else if (totalEps > 0) {
+                // Đang cập nhật - xanh dương
+                statusHtml = `<span class="episode-badge">Tập ${currentEps}/${totalEps}</span>`;
+            } else if (currentEps > 0) {
+                // Chưa set tổng - xanh dương, chỉ hiện số tập hiện tại
+                statusHtml = `<span class="episode-badge">Tập ${currentEps}</span>`;
+            }
         }
 
         return `
@@ -2072,7 +2082,7 @@ async function loadEpisodesForMovie(movieIdFromGrid, resetPage = true) {
           .from('episodes')
           .select('*')
           .eq('movie_id', movieId)
-          .order('episode_number', { ascending: true });
+          .order('episode_index', { ascending: true });
 
       if (epError) throw epError;
 
@@ -2139,7 +2149,7 @@ async function loadEpisodesForMovie(movieIdFromGrid, resetPage = true) {
                   </td>
                   <td>
                       <input type="text" class="quick-edit-input ${isSingle ? 'is-single' : ''}" 
-                        value="${ep.episode_name || ep.episode_number || ep.episodeNumber || ""}" 
+                        value="${ep.title || ep.episode_number || ep.episode_name || ep.episodeNumber || ""}" 
                         onblur="saveQuickEditEpisodeNumber(${globalIdx}, this.value)"
                         title="Sửa nhanh tên tập">
                   </td>
@@ -2451,8 +2461,9 @@ async function saveBatchImportedEpisodes() {
 
         episodesToInsert.push({
              movie_id: movieId,
-             episode_name: labelName,
-             episode_number: existingCount + idx,
+             title: labelName, // Đổi từ episode_name -> title theo schema thực tế
+             episode_index: existingCount + idx, // Cột integer
+             episode_number: labelName.replace(/\D/g, '') || (existingCount + idx).toString(), 
              duration: "0 giờ 45 phút", 
              quality: "1080p",
              sources: sources,
@@ -2776,7 +2787,7 @@ function openEpisodeModal(index = null) {
     if (episode) {
       // Đổ dữ liệu vào modal
       if (document.getElementById("episodeNumber")) {
-          document.getElementById("episodeNumber").value = episode.episodeNumber || (isSingle ? "1" : "");
+          document.getElementById("episodeNumber").value = episode.title || episode.episode_name || episode.episode_number || episode.episodeNumber || (isSingle ? "1" : "");
       }
       
       // Xử lý tự động thêm "Tập" khi nhập số
@@ -2926,7 +2937,7 @@ async function handleEpisodeSubmit(event) {
   })();
 
   const episodeData = {
-    episode_name: document.getElementById("episodeNumber").value,
+    title: document.getElementById("episodeNumber").value, // Đổi từ episode_name -> title
     duration: (() => {
         const h = parseInt(document.getElementById("episodeDurationHour").value) || 0;
         const m = parseInt(document.getElementById("episodeDurationMinute").value) || 0;
@@ -2969,7 +2980,9 @@ async function handleEpisodeSubmit(event) {
     } else {
       // Create
       episodeData.movie_id = selectedMovieForEpisodes;
-      episodeData.episode_number = episodes.length; // Lưu thứ tự chỉ mục tự động
+      // Gán cả 2 cột để chắc chắn
+      episodeData.episode_index = episodes.length; 
+      episodeData.episode_number = (episodes.length + 1).toString(); 
       
       const { error } = await supabase.from('episodes').insert(episodeData);
       if (error) throw error;
@@ -5268,18 +5281,33 @@ window.updateSourceIndicator = function(url, previewId) {
     if (!indicator) return;
 
     const isCloudinary = url && (url.includes("cloudinary.com") || url.startsWith("blob:") || url.startsWith("data:"));
+    // Nhận dạng URL từ Cloudflare R2 Worker (workers.dev hoặc r2.dev)
+    const isCloudflare = url && (url.includes("workers.dev") || url.includes(".r2.dev"));
+    // Nhận dạng file đang chờ upload lên R2
+    const isPendingR2 = url && url.startsWith("[File R2 chờ tải lên]");
     const isPending = url && url.startsWith("[File chờ tải lên]");
 
     const icon = indicator.querySelector('i');
     
-    if (isCloudinary || isPending) {
+    if (isCloudflare || isPendingR2) {
+        indicator.className = "image-source-indicator cloudflare";
+        indicator.title = isPendingR2 ? "Ảnh chờ tải lên Cloudflare R2 (sẽ upload khi bấm Lưu)" : "Ảnh lưu trên Cloudflare R2";
+        // Hiển thị logo Cloudflare (chữ CF)
+        if (icon) {
+            icon.className = "";
+            icon.textContent = "CF";
+            icon.style.fontWeight = "bold";
+            icon.style.fontSize = "8px";
+            icon.style.fontFamily = "Arial, sans-serif";
+        }
+    } else if (isCloudinary || isPending) {
         indicator.className = "image-source-indicator cloudinary";
         indicator.title = "Ảnh từ Cloudinary (Hoặc file cục bộ sẵn sàng upload)";
-        if (icon) icon.className = "fas fa-cloud";
+        if (icon) { icon.className = "fas fa-cloud"; icon.textContent = ""; icon.style = ""; }
     } else {
         indicator.className = "image-source-indicator direct-link";
         indicator.title = "Link ảnh trực tiếp từ bên ngoài";
-        if (icon) icon.className = "fas fa-link";
+        if (icon) { icon.className = "fas fa-link"; icon.textContent = ""; icon.style = ""; }
     }
 }
 
@@ -5362,6 +5390,154 @@ window.uploadMovieImage = async function(input, targetUrlId, previewId) {
 
   input.value = ""; // Reset để có thể chọn lại cùng 1 file
 }
+
+/**
+ * Chọn ảnh để tải lên Cloudflare R2 - CHỈ PREVIEW CỤC BỘ, không upload ngay.
+ * Ảnh thực sự được upload khi Admin bấm nút "Lưu" (uploadPendingR2Images).
+ * @param {HTMLInputElement} input - Input file vừa chọn
+ * @param {string} targetUrlId - ID của ô input nhận URL ảnh
+ * @param {string} previewId - ID của vùng chứa ảnh xem trước (nếu có)
+ * @param {string} folderMode - Thư mục lưu trên R2: 'poster' hoặc 'background'
+ */
+window.uploadImageToR2 = function(input, targetUrlId, previewId, folderMode = 'poster') {
+  const file = input.files[0];
+  if (!file) return;
+
+  // 1. Kiểm tra định dạng
+  if (!file.type.startsWith('image/')) {
+    showNotification("Vui lòng chọn file hình ảnh (Cloudflare R2)!", "error");
+    return;
+  }
+
+  // 2. Hiển thị Preview cục bộ ngay lập tức (không cần upload)
+  const previewContainer = document.getElementById(previewId);
+  if (previewContainer) {
+    const previewImg = previewContainer.querySelector('img');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (previewImg) previewImg.src = e.target.result;
+      previewContainer.style.display = "block";
+      // Hiển thị badge "CF" chờ upload
+      window.updateSourceIndicator("[File R2 chờ tải lên]", previewId);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // 3. Lưu file vào hàng đợi R2, chờ khi bấm Lưu mới thực sự upload
+  window.pendingR2Uploads = window.pendingR2Uploads || {};
+  window.pendingR2Uploads[targetUrlId] = { file, folderMode, previewId };
+
+  // 4. Đánh dấu input đang chờ để bỏ qua validate URL
+  const targetInput = document.getElementById(targetUrlId);
+  if (targetInput) {
+    targetInput.value = `[File R2 chờ tải lên] ${file.name}`;
+    targetInput.type = "text";
+
+    // Nếu admin sửa tay URL thì hủy hàng đợi R2 cho field này
+    targetInput.oninput = () => {
+      if (!targetInput.value.startsWith("[File R2 chờ tải lên]")) {
+        delete window.pendingR2Uploads[targetUrlId];
+        targetInput.oninput = null;
+      }
+    };
+  }
+
+  input.value = ""; // Reset để có thể chọn lại cùng file
+  showNotification("Ảnh đã sẵn sàng! Bấm Lưu để tải lên Cloudflare R2. 🟠", "info");
+};
+
+/**
+ * Thực sự upload tất cả ảnh đang chờ trong hàng đợi R2 lên Cloudflare Worker.
+ * Gọi khi admin bấm nút Lưu trong form phim.
+ * @returns {Promise<boolean>} true nếu upload hết thành công, false nếu có lỗi
+ */
+window.uploadPendingR2Images = async function() {
+  if (!window.pendingR2Uploads || Object.keys(window.pendingR2Uploads).length === 0) {
+    return true; // Không có gì cần upload R2
+  }
+
+  const WORKER_URL = "https://r2-uploader.thinhnd-2003.workers.dev/upload";
+  showLoading(true, "Đang tải ảnh lên Cloudflare R2...");
+
+  try {
+    for (const [targetUrlId, { file, folderMode, previewId }] of Object.entries(window.pendingR2Uploads)) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", folderMode);
+
+      const response = await fetch(WORKER_URL, {
+        method: "POST",
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Lỗi HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      const downloadURL = data.url;
+
+      // Gán URL thực vào input
+      const targetInput = document.getElementById(targetUrlId);
+      if (targetInput) {
+        targetInput.value = downloadURL;
+        targetInput.type = "url";
+        targetInput.oninput = null;
+      }
+
+      // Cập nhật preview và badge thành Cloudflare chính thức
+      window.updateSourceIndicator(downloadURL, previewId);
+
+      console.log(`✅ R2 Upload OK [${folderMode}]: ${downloadURL}`);
+    }
+
+    // Xóa hàng đợi sau khi upload xong
+    window.pendingR2Uploads = {};
+    return true;
+  } catch (error) {
+    console.error("Lỗi upload R2:", error);
+    showNotification("Lỗi khi tải ảnh lên Cloudflare R2: " + error.message, "error");
+    return false;
+  } finally {
+    showLoading(false);
+  }
+}
+
+/**
+ * Xóa ảnh khỏi Cloudflare R2 thông qua Worker DELETE endpoint
+ * @param {string} url - URL của ảnh cần xóa (phải là từ R2 Worker)
+ */
+window.deleteImageFromR2 = async function(url) {
+  if (!url || (!url.includes("workers.dev") && !url.includes(".r2.dev"))) return;
+
+  try {
+    const urlObj = new URL(url);
+    // Lấy key từ pathname (bỏ dấu / ở đầu)
+    const key = urlObj.pathname.substring(1);
+    
+    if (!key) return;
+
+    const WORKER_DELETE_URL = "https://r2-uploader.thinhnd-2003.workers.dev/delete";
+    
+    console.log(`📡 Đang gửi yêu cầu xóa file trên R2: ${key}`);
+
+    const response = await fetch(WORKER_DELETE_URL, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key })
+    });
+
+    if (response.ok) {
+      console.log(`✅ Đã xóa file trên R2 thành công: ${key}`);
+    } else {
+      const errText = await response.text();
+      console.warn(`⚠️ Không thể xóa file trên R2: ${key}`, errText);
+    }
+  } catch (error) {
+    console.warn("⚠️ Lỗi khi thực hiện yêu cầu xóa ảnh R2:", error);
+  }
+};
 
 /**
  * Tải các ảnh đang chờ lên Cloudinary, có kiểm tra trùng lặp để tiết kiệm request
@@ -7000,10 +7176,11 @@ async function adminLoadAvatarLibrary() {
     grid.innerHTML = '<div class="loading-spinner" style="margin: 20px auto;"></div>';
 
     try {
+        // Query * và joined table nếu cần, nhưng ở đây ta map text từ cache cho nhanh
         let query = supabase.from('avatar_library').select('*').order('created_at', { ascending: false });
         
         if (currentAvatarLibraryFilter !== 'all') {
-            query = query.eq('category', currentAvatarLibraryFilter);
+            query = query.eq('category_id', currentAvatarLibraryFilter);
         }
 
         const { data: avatars, error } = await query;
@@ -7013,7 +7190,7 @@ async function adminLoadAvatarLibrary() {
 
         if (avatars.length === 0) {
             grid.innerHTML = `<p class="text-muted" style="grid-column: 1/-1; text-align: center; padding: 40px;">
-                Không tìm thấy ảnh nào trong danh mục "${currentAvatarLibraryFilter === 'all' ? 'Tất cả' : currentAvatarLibraryFilter}".
+                Không tìm thấy ảnh nào.
             </p>`;
             return;
         }
@@ -7041,11 +7218,11 @@ async function adminLoadAvatarLibrary() {
 
                     <img src="${item.url}" alt="Avatar">
                     
-                    <!-- Dropdown đổi danh mục trực tiếp -->
+                    <!-- Dropdown đổi danh mục trực tiếp (Dùng category_id UUID) -->
                     <select class="avatar-cat-select" onchange="adminChangeAvatarCategory('${item.id}', this.value)">
-                        <option value="Chưa phân loại" ${!item.category || item.category === 'Chưa phân loại' ? 'selected' : ''}>Chưa phân loại</option>
+                        <option value="Chưa phân loại" ${!item.category_id ? 'selected' : ''}>Chưa phân loại</option>
                         ${categories.map(cat => `
-                            <option value="${cat}" ${item.category === cat ? 'selected' : ''}>${cat}</option>
+                            <option value="${cat.id}" ${item.category_id === cat.id ? 'selected' : ''}>${cat.name}</option>
                         `).join("")}
                     </select>
 
@@ -7070,11 +7247,12 @@ async function adminLoadAvatarLibrary() {
 function adminFilterAvatarsByCat(category) {
     currentAvatarLibraryFilter = category;
     
-    // Cập nhật class active cho nút lọc
+    // Cập nhật class active cho nút lọc (Dùng thuộc tính onclick hoặc data để so sánh chính xác)
     const buttons = document.querySelectorAll(".avatar-filter-btn");
     buttons.forEach(btn => {
-        const btnText = btn.innerText.trim();
-        if ((category === 'all' && btnText === 'Tất cả') || btnText === category) {
+        // Lấy category từ hàm onclick: adminFilterAvatarsByCat('...')
+        const onclickAttr = btn.getAttribute("onclick") || "";
+        if (onclickAttr.includes(`'${category}'`)) {
             btn.classList.add("active");
         } else {
             btn.classList.remove("active");
@@ -7086,25 +7264,26 @@ function adminFilterAvatarsByCat(category) {
 }
 
 /**
- * Đổi danh mục cho avatar hiện có
+ * Đổi danh mục cho avatar hiện có (Đã đồng bộ UUID)
  * @param {string} avatarId 
- * @param {string} newCategory 
+ * @param {string} newCategoryId 
  */
-async function adminChangeAvatarCategory(avatarId, newCategory) {
+async function adminChangeAvatarCategory(avatarId, newCategoryId) {
     try {
         showLoading(true, "Đang cập nhật danh mục...");
+        const val = newCategoryId === 'Chưa phân loại' ? null : newCategoryId;
+        
         const { error } = await supabase
             .from('avatar_library')
             .update({
-                category: newCategory,
-                updated_at: new Date().toISOString()
+                category_id: val
             })
             .eq('id', avatarId);
         
         if (error) throw error;
         
         // Nếu đang ở chế độ lọc và danh mục mới khác danh mục hiện tại -> load lại để ẩn item đó
-        if (currentAvatarLibraryFilter !== 'all' && newCategory !== currentAvatarLibraryFilter) {
+        if (currentAvatarLibraryFilter !== 'all' && newCategoryId !== currentAvatarLibraryFilter) {
             await adminLoadAvatarLibrary();
         }
         
@@ -7174,11 +7353,22 @@ function adminUpdateSelectAllState(currentAvatars) {
 /**
  * Cập nhật danh mục hàng loạt cho các avatar đã chọn
  */
+/**
+ * Cập nhật danh mục hàng loạt cho các avatar đã chọn (Đã đồng bộ UUID)
+ */
 async function adminBulkUpdateAvatarCategory() {
-    const newCat = document.getElementById("adminBulkAvatarCategory").value;
-    if (!newCat) return;
+    const bulkSelect = document.getElementById("adminBulkAvatarCategory");
+    const categoryId = bulkSelect.value;
+    if (!categoryId) {
+        showNotification("Vui lòng chọn danh mục!", "warning");
+        return;
+    }
 
-    const confirmed = await customConfirm(`Xác nhận đổi danh mục cho ${selectedAvatarIds.length} ảnh sang "${newCat}"?`, {
+    // Lấy tên danh mục để hiển thị thông báo
+    const categoryName = bulkSelect.options[bulkSelect.selectedIndex].text;
+    const finalCategoryId = categoryId === 'Chưa phân loại' ? null : categoryId;
+
+    const confirmed = await customConfirm(`Xác nhận đổi danh mục cho ${selectedAvatarIds.length} ảnh sang "${categoryName}"?`, {
         title: "Xác nhận cập nhật hàng loạt",
         type: "warning"
     });
@@ -7190,70 +7380,169 @@ async function adminBulkUpdateAvatarCategory() {
         const { error } = await supabase
             .from('avatar_library')
             .update({ 
-                category: newCat,
-                updated_at: new Date().toISOString()
+                category_id: finalCategoryId // Dùng UUID hoặc null
             })
             .in('id', selectedAvatarIds);
 
         if (error) throw error;
-        showNotification(`Đã cập nhật ${selectedAvatarIds.length} ảnh thành công!`, "success");
+        showNotification(`Đã cập nhật ${selectedAvatarIds.length} ảnh sang danh mục "${categoryName}" thành công!`, "success");
         
         // Hoàn tất
         adminClearAvatarSelection();
         adminLoadAvatarLibrary();
     } catch (error) {
         console.error("Lỗi cập nhật hàng loạt avatar:", error);
-        showNotification("Lỗi khi cập nhật hàng loạt", "error");
+        showNotification("Lỗi khi cập nhật hàng loạt. Vui lòng thử lại.", "error");
+    } finally {
+        showLoading(false);
+    }
+}
+
+/**
+ * Xóa hàng loạt avatar đã chọn
+ */
+async function adminBulkDeleteAvatars() {
+    if (selectedAvatarIds.length === 0) return;
+
+    const confirmed = await customConfirm(`Bạn có chắc chắn muốn xóa ${selectedAvatarIds.length} ảnh đã chọn? Hành động này không thể hoàn tác!`, {
+        title: "Xác nhận xóa hàng loạt",
+        type: "danger"
+    });
+    if (!confirmed) return;
+
+    try {
+        showLoading(true, `Đang xóa ${selectedAvatarIds.length} ảnh...`);
+        
+        const { error } = await supabase
+            .from('avatar_library')
+            .delete()
+            .in('id', selectedAvatarIds);
+
+        if (error) throw error;
+
+        showNotification(`Đã xóa ${selectedAvatarIds.length} ảnh thành công!`, "success");
+        
+        // Xóa cache để User load lại
+        if (typeof allAvatarsCache !== 'undefined') allAvatarsCache = [];
+        
+        adminClearAvatarSelection();
+        adminLoadAvatarLibrary();
+    } catch (error) {
+        console.error("Lỗi xóa hàng loạt avatar:", error);
+        showNotification("Lỗi khi xóa hàng loạt dữ liệu.", "error");
     } finally {
         showLoading(false);
     }
 }
 
 // Biến tạm để lưu file được chọn
-let pendingAvatarFile = null;
+// Biến tạm để lưu danh sách file được chọn
+let pendingAvatarFiles = [];
 
 // Xử lý khi Admin dán URL
 function adminHandleAvatarUrlInput(input) {
     const url = input.value.trim();
     const previewBox = document.getElementById("adminAvatarPreviewBox");
-    const previewImg = document.getElementById("adminAvatarPreview");
+    const previewGrid = document.getElementById("adminAvatarPreviewGrid");
+    const previewCount = document.getElementById("adminAvatarPreviewCount");
     const saveBtn = document.getElementById("btnSaveAdminAvatar");
     const cancelBtn = document.getElementById("btnCancelAdminAvatar");
 
     if (url) {
-        previewImg.src = url;
+        // Nếu dán URL, xóa hết các file đang chờ
+        pendingAvatarFiles = [];
+        document.getElementById("adminAvatarFileUpload").value = "";
+        
+        previewGrid.innerHTML = `
+            <div style="width: 70px; height: 70px; border-radius: 8px; overflow: hidden; border: 2px solid var(--accent-primary); position: relative;">
+                <img src="${url}" style="width: 100%; height: 100%; object-fit: cover;" />
+                <div onclick="adminCancelAvatarAdd()" style="position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; background: #ff4757; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; z-index: 10;">
+                    <i class="fas fa-times"></i>
+                </div>
+            </div>
+        `;
+        previewCount.innerText = "1";
         previewBox.style.display = "flex";
         saveBtn.style.display = "block";
         cancelBtn.style.display = "block";
-        pendingAvatarFile = null; // Xóa file nếu đang có bộ nhớ tạm
-    } else if (!pendingAvatarFile) {
+    } else if (pendingAvatarFiles.length === 0) {
         previewBox.style.display = "none";
         saveBtn.style.display = "none";
         cancelBtn.style.display = "none";
     }
 }
 
-// Xử lý khi Admin chọn tệp từ máy
+// Xử lý khi Admin chọn tệp từ máy (Hỗ trợ nhiều tệp)
 function adminHandleAvatarFileSelect(input) {
-    if (!input.files || !input.files[0]) return;
+    if (!input.files || input.files.length === 0) return;
 
-    pendingAvatarFile = input.files[0];
+    // Chuyển FileList thành Array và cộng dồn vào danh sách đang chờ (để có thể chọn nhiều lần)
+    const newFiles = Array.from(input.files);
+    pendingAvatarFiles = [...pendingAvatarFiles, ...newFiles];
+    
+    // Clear input để có thể chọn lại cùng 1 file nếu đã xóa
+    input.value = "";
+
+    // Xóa URL input nếu đang chọn file
+    document.getElementById("newAdminAvatarUrl").value = "";
+    
+    renderAdminAvatarPreviews();
+}
+
+/**
+ * Hàm render danh sách ảnh xem trước với nút xóa từng ảnh
+ */
+function renderAdminAvatarPreviews() {
     const previewBox = document.getElementById("adminAvatarPreviewBox");
-    const previewImg = document.getElementById("adminAvatarPreview");
+    const previewGrid = document.getElementById("adminAvatarPreviewGrid");
+    const previewCount = document.getElementById("adminAvatarPreviewCount");
     const saveBtn = document.getElementById("btnSaveAdminAvatar");
     const cancelBtn = document.getElementById("btnCancelAdminAvatar");
 
-    // Tạo URL tạm để xem trước
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        previewImg.src = e.target.result;
-        previewBox.style.display = "flex";
-        saveBtn.style.display = "block";
-        cancelBtn.style.display = "block";
-        // Bỏ giá trị URL input nếu đang chọn file
-        document.getElementById("newAdminAvatarUrl").value = "";
+    if (pendingAvatarFiles.length === 0) {
+        previewBox.style.display = "none";
+        saveBtn.style.display = "none";
+        cancelBtn.style.display = "none";
+        previewGrid.innerHTML = "";
+        return;
     }
-    reader.readAsDataURL(pendingAvatarFile);
+
+    previewGrid.innerHTML = "";
+    previewCount.innerText = pendingAvatarFiles.length;
+
+    pendingAvatarFiles.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const thumb = document.createElement("div");
+            thumb.style.cssText = "width: 70px; height: 70px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.2); position: relative; group:";
+            thumb.className = "preview-thumb-container"; 
+            
+            thumb.innerHTML = `
+                <img src="${e.target.result}" style="width: 100%; height: 100%; object-fit: cover;" />
+                <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.6); font-size: 8px; color: white; text-align: center; padding: 2px;">
+                    ${(file.size / 1024).toFixed(0)}KB
+                </div>
+                <!-- Nút xóa từng ảnh -->
+                <div onclick="adminRemovePendingAvatar(${index})" style="position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; background: #ff4757; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10;">
+                    <i class="fas fa-times"></i>
+                </div>
+            `;
+            previewGrid.appendChild(thumb);
+        };
+        reader.readAsDataURL(file);
+    });
+
+    previewBox.style.display = "flex";
+    saveBtn.style.display = "block";
+    cancelBtn.style.display = "block";
+}
+
+/**
+ * Xóa một ảnh cụ thể khỏi danh sách chờ
+ */
+function adminRemovePendingAvatar(index) {
+    pendingAvatarFiles.splice(index, 1);
+    renderAdminAvatarPreviews();
 }
 
 // Hủy bỏ việc thêm avatar
@@ -7261,49 +7550,55 @@ function adminCancelAvatarAdd() {
     document.getElementById("newAdminAvatarUrl").value = "";
     document.getElementById("adminAvatarFileUpload").value = "";
     document.getElementById("adminAvatarPreviewBox").style.display = "none";
+    document.getElementById("adminAvatarPreviewGrid").innerHTML = "";
     document.getElementById("btnSaveAdminAvatar").style.display = "none";
     document.getElementById("btnCancelAdminAvatar").style.display = "none";
-    pendingAvatarFile = null;
+    pendingAvatarFiles = [];
 }
 
-// Lưu avatar vào kho (Xử lý upload nếu cần)
+// Lưu avatar vào kho (Xử lý upload hàng loạt - Đã đồng bộ UUID)
 async function adminSaveAvatarToLibrary() {
     const urlInput = document.getElementById("newAdminAvatarUrl");
     const categorySelect = document.getElementById("newAdminAvatarCategory");
-    const category = categorySelect.value;
+    const categoryId = categorySelect.value; // Đây là UUID hoặc 'Chưa phân loại'
     
-    let finalUrl = urlInput.value.trim();
+    const finalUrls = [];
+    const urlFromInput = urlInput.value.trim();
 
-    // 1. Nếu có file đang chờ, tải lên Cloudinary trước
-    if (pendingAvatarFile) {
-        showLoading(true, "Đang tải ảnh lên Cloudinary...");
-        try {
-            finalUrl = await adminPerformCloudinaryUpload(pendingAvatarFile);
-        } catch (error) {
-            console.error("Lỗi upload:", error);
-            showNotification("Không thể tải ảnh lên Cloudinary.", "error");
-            showLoading(false);
+    try {
+        // 1. Nếu có file đang chờ, tải lên Cloudinary hàng loạt
+        if (pendingAvatarFiles.length > 0) {
+            showLoading(true, `Đang tải ${pendingAvatarFiles.length} ảnh lên Cloudinary...`);
+            
+            for (let i = 0; i < pendingAvatarFiles.length; i++) {
+                showLoading(true, `Đang tải ảnh (${i + 1}/${pendingAvatarFiles.length})...`);
+                const file = pendingAvatarFiles[i];
+                const uploadedUrl = await adminPerformCloudinaryUpload(file);
+                finalUrls.push(uploadedUrl);
+            }
+        } else if (urlFromInput) {
+            finalUrls.push(urlFromInput);
+        }
+
+        if (finalUrls.length === 0) {
+            showNotification("Vui lòng chọn ảnh hoặc nhập link!", "warning");
             return;
         }
-        showLoading(false);
-    }
 
-    if (!finalUrl) {
-        showNotification("Vui lòng chọn ảnh hoặc nhập link!", "warning");
-        return;
-    }
-
-    // 2. Lưu vào Supabase
-    try {
-        const { error } = await supabase.from('avatar_library').insert({
-            url: finalUrl,
-            category: category,
+        // 2. Lưu vào Supabase hàng loạt
+        showLoading(true, `Đang lưu ${finalUrls.length} ảnh vào cơ sở dữ liệu...`);
+        
+        const insertData = finalUrls.map(url => ({
+            url: url,
+            category_id: categoryId === 'Chưa phân loại' ? null : categoryId,
             created_at: new Date().toISOString()
-        });
+        }));
+
+        const { error } = await supabase.from('avatar_library').insert(insertData);
 
         if (error) throw error;
 
-        showNotification(`Đã lưu avatar vào danh mục ${category}!`, "success");
+        showNotification(`Đã lưu thành công ${finalUrls.length} avatar!`, "success");
         adminCancelAvatarAdd(); // Reset UI
         
         // Xóa cache để User load lại danh sách mới nhất
@@ -7311,8 +7606,10 @@ async function adminSaveAvatarToLibrary() {
         
         adminLoadAvatarLibrary();
     } catch (error) {
-        console.error("Lỗi lưu avatar Supabase:", error);
-        showNotification("Lỗi khi lưu vào cơ sở dữ liệu.", "error");
+        console.error("Lỗi lưu avatar hàng loạt:", error);
+        showNotification("Lỗi khi tải lên hoặc lưu dữ liệu.", "error");
+    } finally {
+        showLoading(false);
     }
 }
 
@@ -7370,15 +7667,16 @@ async function adminLoadAvatarCategories() {
     try {
         const { data, error } = await supabase
             .from('avatar_categories')
-            .select('name')
+            .select('id, name') // Lấy cả ID (UUID)
             .order('name', { ascending: true });
         
         if (error) throw error;
         
-        window.avatarCategoriesCache = (data || []).map(cat => cat.name);
+        window.avatarCategoriesCache = data || []; // Lưu object để có cả ID
         renderAvatarCategoriesTable(data || []);
     } catch (error) {
         console.error("Lỗi tải danh mục avatar Supabase:", error);
+        showNotification("Lỗi khi tải danh sách danh mục.", "error");
     }
 }
 
@@ -7386,49 +7684,112 @@ async function adminLoadAvatarCategories() {
  * Thêm danh mục mới
  */
 async function adminAddAvatarCategory() {
-    const input = document.getElementById("newAvatarCatName");
-    if (!input || !input.value.trim()) return;
+    const input = document.getElementById("newAvatarCategoryName"); // Đã sửa ID cho đúng với HTML
+    if (!input || !input.value.trim()) {
+        showNotification("Vui lòng nhập tên danh mục!", "warning");
+        return;
+    }
     
     const name = input.value.trim();
     
     try {
+        showLoading(true, "Đang thêm danh mục...");
         const { error } = await supabase.from('avatar_categories').insert({ name: name });
         if (error) throw error;
         
         showNotification(`Đã thêm danh mục "${name}"`, "success");
         input.value = "";
-        adminLoadAvatarCategories();
+        await adminLoadAvatarCategories();
     } catch (error) {
         console.error("Lỗi thêm danh mục avatar Supabase:", error);
-        showNotification("Lỗi khi thêm danh mục.", "error");
+        showNotification("Lỗi khi thêm danh mục. Có thể tên đã tồn tại.", "error");
+    } finally {
+        showLoading(false);
+    }
+}
+
+/**
+ * Hiển thị danh sách danh mục dưới dạng Badge có nút xóa
+ */
+function renderAvatarCategoriesTable(categories) {
+    const listContainer = document.getElementById("adminAvatarCategoryList");
+    if (!listContainer) return;
+
+    if (categories.length === 0) {
+        listContainer.innerHTML = '<span class="text-muted" style="font-size: 0.85rem;">Chưa có danh mục nào.</span>';
+        return;
+    }
+
+    listContainer.innerHTML = categories.map(cat => `
+        <div class="category-badge" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 4px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); font-size: 0.85rem;">
+            <span>${cat.name}</span>
+            <i class="fas fa-times" onclick="adminDeleteAvatarCategory('${cat.id}', '${cat.name}')" style="cursor: pointer; color: #ff6b6b; font-size: 10px;" title="Xóa danh mục"></i>
+        </div>
+    `).join("");
+
+    // Cập nhật các dropdown chọn danh mục trong modal thêm mới
+    const catSelect = document.getElementById("newAdminAvatarCategory");
+    if (catSelect) {
+        catSelect.innerHTML = `
+            <option value="Chưa phân loại">Sơ khai...</option>
+            ${categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join("")}
+        `;
+    }
+
+    // Cập nhật dropdown bulk update
+    const bulkCatSelect = document.getElementById("adminBulkAvatarCategory");
+    if (bulkCatSelect) {
+        bulkCatSelect.innerHTML = `
+            <option value="">Đổi danh mục...</option>
+            <option value="Chưa phân loại">Chưa phân loại</option>
+            ${categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join("")}
+        `;
+    }
+
+    // Cập nhật bộ lọc (Filter buttons)
+    const filterContainer = document.getElementById("adminAvatarFilters");
+    if (filterContainer) {
+        const currentFilter = currentAvatarLibraryFilter;
+        filterContainer.innerHTML = `
+            <button class="avatar-filter-btn ${currentFilter === 'all' ? 'active' : ''}" onclick="adminFilterAvatarsByCat('all')">Tất cả</button>
+            ${categories.map(cat => `
+                <button class="avatar-filter-btn ${currentFilter === cat.id ? 'active' : ''}" onclick="adminFilterAvatarsByCat('${cat.id}')">
+                    ${cat.name}
+                </button>
+            `).join("")}
+        `;
     }
 }
 
 /**
  * Xóa danh mục
  */
+// Xóa danh mục (Sửa để dùng ID - UUID)
 async function adminDeleteAvatarCategory(id, name) {
     if (!await customConfirm(`Xóa danh mục "${name}"? Các avatar thuộc danh mục này sẽ chuyển về "Chưa phân loại".`, { title: "Xóa danh mục", type: "warning" })) return;
 
     try {
-        // 1. Cập nhật các avatar thuộc danh mục này về 'Chưa phân loại'
+        showLoading(true, "Đang xóa danh mục...");
+        // 1. Cập nhật các avatar thuộc danh mục này về 'null' (Chưa phân loại)
         const { error: updError } = await supabase
             .from('avatar_library')
-            .update({ category: 'Chưa phân loại' })
-            .eq('category', name);
+            .update({ category_id: null })
+            .eq('category_id', id);
             
         if (updError) throw updError;
 
         // 2. Xóa danh mục
-        const { error: delError } = await supabase.from('avatar_categories').delete().eq('name', name);
+        const { error: delError } = await supabase.from('avatar_categories').delete().eq('id', id);
         if (delError) throw delError;
 
         showNotification(`Đã xóa danh mục "${name}"`, "success");
-        adminLoadAvatarCategories();
+        await adminLoadAvatarCategories();
         adminLoadAvatarLibrary();
     } catch (error) {
         console.error("Lỗi xóa danh mục avatar Supabase:", error);
         showNotification("Lỗi khi xóa danh mục.", "error");
+    } finally {
+        showLoading(false);
     }
 }
 
@@ -7670,21 +8031,21 @@ async function saveQuickEditEpisodeNumber(index, newNumber) {
     const targetEpisode = movie.episodes[index];
     if (!targetEpisode) return;
 
-    const oldNumber = targetEpisode.episode_name || targetEpisode.episode_number || targetEpisode.episodeNumber;
+    const oldNumber = targetEpisode.title || targetEpisode.episode_name || targetEpisode.episode_number || targetEpisode.episodeNumber;
     if (oldNumber === newNumber) return;
 
     try {
         const { error } = await supabase
             .from('episodes')
             .update({ 
-                episode_name: newNumber, 
-                updated_at: new Date().toISOString() 
+                title: newNumber, // Đổi từ episode_name -> title
             })
             .eq('id', targetEpisode.id);
 
         if (error) throw error;
 
         // Cập nhật local
+        targetEpisode.title = newNumber;
         targetEpisode.episode_name = newNumber;
         targetEpisode.episodeNumber = newNumber;
 

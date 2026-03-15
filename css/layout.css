@@ -332,6 +332,7 @@
   margin: 0;
   position: relative;
   z-index: 10;
+  background: var(--bg-primary); /* Đảm bảo nền liền mạch giữa các section */
 }
 
 .section-header {
@@ -893,6 +894,10 @@
     cursor: pointer;
     z-index: 3;
     margin: 0;
+    padding: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
 }
 
 /* Tooltip */
@@ -1427,7 +1432,8 @@
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
   padding: var(--spacing-xxl) var(--spacing-xl);
-  margin-top: var(--spacing-xxl);
+  padding-top: calc(var(--spacing-xxl) + var(--spacing-xxl)); /* Thay margin-top bằng padding-top */
+  margin-top: 0; /* Xóa margin-top để không lộ nền body */
 }
 .footer-content {
   display: grid;
@@ -2113,17 +2119,18 @@
    ============================================================ */
 .player-episode-panel {
   position: absolute;
-  top: 0;
+  top: 0; /* Nằm sát đỉnh video */
+  bottom: 105px; /* Dừng trên thanh controls, bằng mí hình ảnh video */
   right: -320px; /* Ẩn ngoài màn hình */
   width: 300px;
   max-width: 80vw;
-  height: 100%;
   background: rgba(15, 15, 20, 0.96);
   z-index: 10001;
   display: flex;
   flex-direction: column;
   transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-left: 1px solid rgba(255,255,255,0.1);
+  border-radius: 0 0 0 12px;
   backdrop-filter: blur(10px);
 }
 
@@ -2487,9 +2494,11 @@ body.has-pseudo-fullscreen::-webkit-scrollbar {
 .video-container.pseudo-fullscreen .player-episode-panel {
   position: fixed !important;
   top: 0 !important;
+  bottom: 55px !important;
   right: -320px !important;
-  height: 100dvh !important;
+  height: auto !important;
   z-index: 100000 !important;
+  border-radius: 0 0 0 12px !important;
 }
 .video-container.pseudo-fullscreen .player-episode-panel.open {
   right: 0 !important;

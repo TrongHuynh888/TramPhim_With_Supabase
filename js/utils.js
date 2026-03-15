@@ -276,6 +276,9 @@ function showPage(pageName, addToHistory = true) {
     page.classList.remove("active");
   });
 
+  // [FIX] Khôi phục cuộn trang (Xóa sạch các class gây khóa body từ các tính năng khác)
+  document.body.classList.remove("comm-chat-active", "watch-party-active", "has-pseudo-fullscreen", "modal-open");
+
   // 2. Hiện trang cần đến
   const targetPage = document.getElementById(`${pageName}Page`);
   if (targetPage) {
@@ -370,6 +373,13 @@ function closeModal(modalId) {
     } else {
       modal.classList.remove("active");
     }
+    
+    // Dọn dẹp hàng đợi upload nếu đóng movieModal hoặc episodeModal
+    if (modalId === "movieModal" || modalId === "episodeModal") {
+        if (window.pendingUploads) window.pendingUploads = {};
+        if (window.pendingR2Uploads) window.pendingR2Uploads = {};
+    }
+
     // Kiểm tra xem còn modal nào mở không trước khi gỡ class modal-open
     setTimeout(() => {
         const anyActiveModal = document.querySelector(".modal-overlay.active, .custom-popup-overlay.active");

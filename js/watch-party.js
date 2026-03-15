@@ -73,21 +73,7 @@ const response = await fetch("./components/watch-party.html?v=" + new Date().get
     }
   }
 
-  const navMenu = document.getElementById("navMenu");
-  if (!navMenu.querySelector('[data-page="watchParty"]')) {
-    const link = document.createElement("a");
-    link.href = "#";
-    link.className = "nav-link";
-    link.dataset.page = "watchParty";
-    link.innerHTML = '<i class="fas fa-users"></i> Xem Chung';
-    link.onclick = (e) => {
-      e.preventDefault();
-      loadRooms();
-      showPage("watchParty");
-    };
-    const adminLink = document.getElementById("adminNavLink");
-    navMenu.insertBefore(link, adminLink);
-  }
+  // Navbar: Đã chuyển sang HTML tĩnh trong index.html (dễ tìm code)
 
   const urlParams = new URLSearchParams(window.location.search);
   const inviteRoomId = urlParams.get("room");

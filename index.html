@@ -6,16 +6,14 @@
     <link rel="stylesheet" href="css/variables.css?v=3" />
     <link rel="stylesheet" href="css/base.css?v=3" />
     <link rel="stylesheet" href="css/components.css?v=18" />
-    <link rel="stylesheet" href="css/layout.css?v=5" />
+    <link rel="stylesheet" href="css/layout.css?v=6" />
     <link rel="stylesheet" href="css/admin.css?v=3" />
-    <link rel="stylesheet" href="css/responsive.css?v=158" />
+    <link rel="stylesheet" href="css/responsive.css?v=160" />
     <link rel="stylesheet" href="css/detail-redesign.css?v=3" />
     <link rel="stylesheet" href="css/intro.css?v=3" />
+    <link rel="stylesheet" href="css/community.css?v=4.9" />
     
-    <!-- Preload Critical Assets -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" as="style">
-    <link rel="preload" href="https://cdn.jsdelivr.net/npm/hls.js@latest" as="script" crossorigin>
-    <link rel="preload" href="js/main.js?v=2" as="script">
+    <!-- Preload: Đã loại bỏ do trùng với các thẻ load bên dưới -->
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
     <!--<link rel="stylesheet" href="css/style.css" />-->
@@ -76,6 +74,7 @@
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest" crossorigin></script>
     <!-- SortableJS for Drag & Drop -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
+    <script src="js/emoji-picker.js" defer></script>
 
     <!-- Custom CSS -->
   </head>
@@ -138,6 +137,24 @@
             onclick="showPage('actors')"
           >
             <i class="fas fa-users"></i> Diễn Viên
+          </a>
+          <!-- Xem Chung (Watch Party) -->
+          <a
+            href="javascript:void(0)"
+            class="nav-link"
+            data-page="watchParty"
+            onclick="loadRooms(); showPage('watchParty')"
+          >
+            <i class="fas fa-tv"></i> Xem Chung
+          </a>
+          <!-- Cộng Đồng -->
+          <a
+            href="javascript:void(0)"
+            class="nav-link"
+            data-page="community"
+            onclick="showPage('community'); if(!isCommunityLoaded){initCommunity();isCommunityLoaded=true;}"
+          >
+            <i class="fas fa-globe"></i> Cộng Đồng
           </a>
           <!-- Admin Link - Chỉ hiện khi là Admin -->
           <a
@@ -911,6 +928,84 @@
         <p>&copy; 2026 Trạm Phim. Powered by Blockchain Technology.</p>
       </div>
     </footer>
+    
+    <!-- MODAL: CUỘC GỌI ĐẾN (INCOMING CALL) - Redesign v2.0 -->
+    <div id="incomingCallModal" class="comm-modal incoming-call-modal" style="display: none;">
+        <div class="comm-modal-content text-center call-modal-content">
+            <!-- Hiệu ứng nền -->
+            <div class="call-bg-glow"></div>
+            
+            <!-- Avatar với ring wave 3 lớp -->
+            <div class="call-avatar-wrapper">
+                <img src="https://ui-avatars.com/api/?name=User" id="incomingCallAvatar" alt="Caller">
+                <div class="call-ring-wave"></div>
+                <div class="call-ring-wave"></div>
+                <div class="call-ring-wave"></div>
+            </div>
+
+            <!-- Thông tin người gọi -->
+            <div class="call-caller-info">
+                <h3 id="incomingCallName">Tên người gọi</h3>
+                <p id="incomingCallDesc"><i class="fas fa-phone-volume call-phone-shake"></i> Cuộc gọi đến...</p>
+            </div>
+
+            <!-- Nút chấp nhận / từ chối kiểu iOS -->
+            <div class="call-actions-group">
+                <div class="call-action-item">
+                    <button class="btn-call-decline" onclick="declineCall()"><i class="fas fa-phone-slash"></i></button>
+                    <span class="call-action-label">Từ chối</span>
+                </div>
+                <div class="call-action-item">
+                    <button class="btn-call-accept" onclick="acceptCall()"><i class="fas fa-phone"></i></button>
+                    <span class="call-action-label">Chấp nhận</span>
+                </div>
+            </div>
+        </div>
+    </div>
+  
+    <!-- CỬA SỔ PEERJS CALL (PICTURE-IN-PICTURE) - Redesign v2.0 -->
+    <div id="activeCallWindow" class="active-call-window" style="display: none;">
+        <!-- Biểu tượng khi thu nhỏ: icon + timer + nút mở rộng -->
+        <div class="call-minimized-icon">
+            <span class="call-mini-pulse"></span>
+            <i class="fas fa-phone-alt call-mini-phone"></i>
+            <span class="call-mini-timer" id="callTimerDisplay">00:00</span>
+            <button class="call-mini-expand" onclick="toggleMinimizeCall()" title="Mở rộng"><i class="fas fa-expand-alt"></i></button>
+        </div>
+
+        <!-- Header với gradient + trạng thái -->
+        <div class="call-window-header" id="activeCallHeader">
+            <div class="call-header-left">
+                <span class="call-status-dot"></span>
+                <span id="activeCallStatus">Đang gọi...</span>
+            </div>
+            <button class="btn-minimize-call" onclick="toggleMinimizeCall()"><i class="fas fa-compress-alt"></i></button>
+        </div>
+
+        <!-- Video body -->
+        <div class="call-window-body">
+            <div class="call-video-container">
+                <video id="remoteVideo" class="call-video remote-video" autoplay playsinline></video>
+                <video id="localVideo" class="call-video local-video" autoplay playsinline muted></video>
+                
+                <!-- Placeholder khi chỉ gọi Audio hoặc khi tắt cam -->
+                <div id="audioCallPlaceholder" class="audio-call-placeholder" style="display: none;">
+                    <img src="https://ui-avatars.com/api/?name=User" id="activeCallAvatar" alt="Avatar">
+                    <div class="audio-wave-animation">
+                        <span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls tách riêng bên dưới -->
+        <div class="call-window-controls">
+            <button id="btnToggleMic" class="call-ctrl-btn" onclick="toggleCallMic()" title="Tắt/Bật Mic"><i class="fas fa-microphone"></i></button>
+            <button id="btnToggleCam" class="call-ctrl-btn" onclick="toggleCallCam()" title="Tắt/Bật Camera"><i class="fas fa-video"></i></button>
+            <button class="call-ctrl-btn btn-end-call" onclick="endCall()" title="Kết thúc cuộc gọi"><i class="fas fa-phone-slash"></i></button>
+        </div>
+    </div>
+    
     <div id="modals-container"></div>
 
     <!-- PeerJS for WebRTC -->
@@ -927,11 +1022,12 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/supabase-config.js?v=2"></script>
     
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="js/globals.js?v=2"></script>
     <script src="js/utils.js?v=2"></script>
     <script src="js/data.js?v=2"></script>
 
-    <script src="js/auth.js?v=2"></script>
+    <script src="js/auth.js?v=3.1"></script>
     <script src="js/notifications.js?v=2"></script>
     <script src="js/user.js?v=8"></script>
     <script src="js/home.js?v=2"></script>
@@ -941,6 +1037,7 @@
     <script src="js/upgrade.js?v=2"></script>
     <script src="js/intro.js?v=2"></script>
     <script src="js/watch-party.js?v=5"></script>
+    <script src="js/community.js?v=7.1"></script>
     <script src="js/series-movies.js?v=2"></script>
     <script src="js/single-movies.js?v=2"></script>
     <script src="js/banner-slider.js?v=2"></script>
@@ -948,8 +1045,7 @@
 
     <script src="js/main.js?v=2"></script>
     <script src="js/loader.js?v=2"></script>
-    <!-- YouTube IFrame API -->
-    <script src="https://www.youtube.com/iframe_api"></script>
+    <!-- YouTube IFrame API: Lazy load trong detail.js khi cần, tránh lỗi postMessage trên localhost -->
     
     <script>
       // Buộc trình duyệt phải dùng hàm này (Ghi đè mọi hàm cũ bị lỗi)

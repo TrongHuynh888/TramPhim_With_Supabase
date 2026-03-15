@@ -92,11 +92,36 @@ body.watch-party-active #watchPartyPage {
     padding-right: 20px !important;
   }
 
+  /* FIX: Xóa vệt hở sáng giữa các section trên Tablet */
+  #homePage {
+    background: var(--bg-primary) !important;
+  }
+  #homePage .section {
+    background: var(--bg-primary) !important;
+  }
+  #countrySections {
+    background: var(--bg-primary) !important;
+    padding: 20px 0 !important; /* Thay thế margin của .country-section */
+  }
+  #countrySections .country-section {
+    margin-top: 0 !important;
+    margin-bottom: 20px !important;
+  }
+  .footer {
+    background: var(--bg-secondary) !important;
+    margin-top: 0 !important; /* Xóa khoảng hở sáng */
+    padding-top: 30px !important;
+  }
+  #mainContent {
+    background: var(--bg-primary) !important;
+  }
+
   /* Banner Slider Tablet */
   .hero-banner {
     aspect-ratio: 16 / 9 !important;
     max-height: 70vh !important;
     margin-top: 80px !important;
+    background-color: var(--bg-primary) !important;
   }
   .banner-content {
     left: 30px !important;
@@ -403,7 +428,7 @@ body.watch-party-active #watchPartyPage {
   /* --- A. HEADER (FINAL: FIX LỖI CHỒNG ICON) --- */
   .nav-container {
     padding: 5px 8px !important;
-    gap: 4px;
+    gap: 6px;
     height: 70px;
     z-index: 2000;
     justify-content: space-between !important;
@@ -417,6 +442,30 @@ body.watch-party-active #watchPartyPage {
     background: var(--bg-primary) !important;
   }
 
+  /* FIX: Xóa vệt hở sáng giữa banner và các section */
+  #homePage {
+    background: var(--bg-primary) !important;
+  }
+  #homePage .section {
+    background: var(--bg-primary) !important;
+  }
+  #countrySections {
+    background: var(--bg-primary) !important;
+    padding: 20px 0 !important; /* Thay thế margin của .country-section */
+  }
+  #countrySections .country-section {
+    margin-top: 0 !important;
+    margin-bottom: 15px !important;
+  }
+  .footer {
+    background: var(--bg-secondary) !important;
+    margin-top: 0 !important; /* Xóa khoảng hở sáng */
+    padding-top: 20px !important;
+  }
+  #mainContent {
+    background: var(--bg-primary) !important;
+  }
+
   /* 1. Logo */
   .nav-logo {
     display: flex !important;
@@ -424,7 +473,8 @@ body.watch-party-active #watchPartyPage {
     gap: 4px;
     flex: 1; /* Tự động chiếm khoảng trống thừa */
     min-width: 0;
-    margin-right: 5px;
+    max-width: none !important; /* Override max-content từ global → logo dãn hết chỗ trống */
+    margin-right: 2px;
     justify-content: flex-start !important;
   }
   .nav-logo .logo-img {
@@ -471,7 +521,7 @@ body.watch-party-active #watchPartyPage {
   .nav-utilities {
     display: flex !important;
     align-items: center !important;
-    gap: 8px !important;
+    gap: 6px !important;
     flex-shrink: 0 !important;
   }
 
@@ -480,7 +530,7 @@ body.watch-party-active #watchPartyPage {
     display: flex !important;
     align-items: center !important;
     flex-direction: row !important;
-    gap: 8px !important;
+    gap: 6px !important;
     margin: 0 !important;
   }
 
@@ -680,6 +730,7 @@ body.watch-party-active #watchPartyPage {
     aspect-ratio: 16 / 9 !important;
     max-height: 50vh !important;
     margin-top: 60px !important;
+    background-color: var(--bg-primary) !important; /* Chống hở sáng dưới banner */
   }
   .banner-content {
     bottom: 50px !important;
@@ -1981,19 +2032,24 @@ body[data-theme="light"] .chat-msg .author {
       background: rgba(124, 58, 237, 0.1) !important;
     }
     #chatMessages,
+    #commChatMessages,
     #memberList {
       flex: 1 !important;
       overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch !important; /* Mượt ngang/dọc cho iOS */
+      overscroll-behavior-y: contain !important; /* Chống cuộn dội ngược lây lan lên body trên iOS */
       padding: 10px !important;
       min-height: 0 !important; /* Quan trọng: cho phép co lại trong flex */
+      padding-bottom: 20px !important; /* Tạo thêm khoảng trống ở cuối phòng hờ */
     }
-    /* Ô nhập tin nhắn - CỐ ĐỊNH DƯớI MÀN HÌNH MOBILE */
-    .chat-input-area {
+    /* Ô nhập tin nhắn - CỐ ĐỊNH DƯỚI MÀN HÌNH MOBILE */
+    .chat-input-area,
+    .comm-chat-input-area {
       position: fixed !important;
       bottom: 0 !important;
       left: 0 !important;
       right: 0 !important;
-      padding: 8px 10px !important;
+      padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 10px)) 10px !important;
       background: var(--bg-secondary) !important;
       border-top: 1px solid var(--border-color) !important;
       z-index: 9500 !important;
@@ -2179,7 +2235,8 @@ body[data-theme="light"] .chat-msg .author {
       display: flex !important;
       align-items: center !important;
     }
-    #chatMessages {
+    #chatMessages,
+    #commChatMessages {
       font-size: 11px !important;
       flex: 1 !important;
       overflow-y: auto !important;
@@ -2187,9 +2244,10 @@ body[data-theme="light"] .chat-msg .author {
     }
 
     /* Chat input - TRONG SIDEBAR, KHÔNG FIXED */
-    .chat-input-area {
+    .chat-input-area,
+    .comm-chat-input-area {
       position: static !important;
-      padding: 8px !important;
+      padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 15px)) 10px !important;
       background: var(--bg-secondary) !important;
       border-top: 1px solid var(--border-color) !important;
       flex-shrink: 0 !important;
@@ -2353,5 +2411,93 @@ body[data-theme="light"] .chat-msg .author {
   }
   .timeline-year {
     font-size: 1.2rem !important;
+  }
+}
+
+/* ============================================
+   RESPONSIVE: CỘNG ĐỒNG (COMMUNITY PAGE)
+   ============================================ */
+
+/* TABLET (iPad, <1024px) */
+@media (max-width: 1024px) {
+  .community-wrapper {
+    grid-template-columns: 200px 1fr !important; /* Thu nhỏ sidebar trái */
+  }
+  .comm-chat-layout {
+    grid-template-columns: 250px 1fr !important;
+  }
+  /* Tablet dọc (portrait): dùng slide-view thay vì grid */
+  @media (orientation: portrait) {
+    .comm-chat-layout {
+      display: flex !important;
+      flex-direction: column !important;
+      grid-template-columns: none !important;
+    }
+  }
+  .comm-chat-info-sidebar {
+    /* Panel 1/3 bên phải khung chat */
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: auto !important;
+    width: 33% !important;
+    min-width: 280px !important;
+    height: 100% !important;
+    z-index: 500 !important;
+    border-radius: 0 !important;
+    overflow-y: auto !important;
+    background: var(--bg-secondary) !important;
+    border-left: 1px solid var(--border-color) !important;
+    box-shadow: -4px 0 15px rgba(0, 0, 0, 0.2) !important;
+    padding-top: 0 !important;
+  }
+  .comm-chat-layout.info-hidden .comm-chat-info-sidebar {
+    display: none !important;
+  }
+}
+
+/* MOBILE (<768px) */
+@media (max-width: 768px) {
+  .community-wrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    height: calc(100vh - 80px) !important;
+    overflow-y: auto !important; /* Cho phép cuộn dọc tự nhiên */
+  }
+  
+  .comm-left-sidebar {
+    flex-direction: row !important; /* Chuyển nav bar sang ngang */
+    overflow-x: auto !important;
+    padding: 10px !important;
+    border-radius: 0 !important;
+    margin-bottom: 10px !important;
+  }
+  .comm-nav-item span {
+    display: none !important; /* Ẩn chữ, chỉ để icon */
+  }
+  .comm-section-title, .comm-tags-list {
+    display: none !important; /* Ẩn thẻ tags */
+  }
+
+  .comm-chat-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    grid-template-columns: none !important;
+    gap: 0 !important;
+  }
+  
+  .comm-chat-sidebar {
+    max-height: none !important;
+    border-radius: 0 !important;
+    margin-bottom: 0 !important;
+    flex: 1 !important;
+  }
+  
+  .comm-chat-box {
+    flex: 1 !important;
+    min-height: 50vh !important;
+    border-radius: 0 !important;
   }
 }

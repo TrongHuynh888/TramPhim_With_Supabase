@@ -1189,6 +1189,17 @@
     color: #aaa;
 }
 
+/* Badge Cloudflare R2 - màu cam đặc trưng của Cloudflare */
+.image-source-indicator.cloudflare {
+    color: #fff;
+    background: rgba(244, 129, 32, 0.85);
+    border-color: rgba(244, 129, 32, 0.6);
+    box-shadow: 0 0 10px rgba(244, 129, 32, 0.4);
+    font-weight: bold;
+    font-size: 8px;
+    letter-spacing: -0.3px;
+}
+
 .image-source-indicator:hover {
     background: rgba(0, 0, 0, 0.9);
     transform: scale(1.1);
@@ -1228,6 +1239,8 @@
     position: relative;
     aspect-ratio: 2/3;
     width: 100%;
+    flex-shrink: 0; /* Không bị co lại bởi flexbox */
+    overflow: hidden;
 }
 
 .movie-selection-card img {
@@ -1257,6 +1270,8 @@
 .movie-selection-card .info {
     padding: 8px;
     flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
 .movie-selection-card .title {
@@ -1269,12 +1284,14 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     color: #eee;
+    min-height: 2.4em; /* Giữ chiều cao cố định = 2 dòng để các thẻ đều nhau */
 }
 
 .movie-selection-card .stats {
     font-size: 11px;
     color: #888;
-    margin-top: 4px;
+    margin-top: auto; /* Luôn đẩy xuống đáy */
+    padding-top: 4px;
 }
 
 /* Tablet/Mobile optimization */

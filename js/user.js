@@ -648,31 +648,71 @@ window.deleteSelectedMovies = async function() {
     }
 };
 
+let selectedAvatarUrl = "";
+
+/**
+ * Mở Modal Kho ảnh và tải dữ liệu
+ */
+function openAvatarLibraryModal() {
+    openModal("avatarLibraryModal");
+    loadAvatarFilterTabs();
+    loadAvatarLibrary();
+}
+
+/**
+ * Lọc ảnh trong kho theo danh mục
+ */
+function filterAvatarLibrary(category, element) {
+    if (element) {
+        document.querySelectorAll(".filter-tab").forEach(tab => tab.classList.remove("active"));
+        element.classList.add("active");
+    }
+    loadAvatarLibrary(category);
+}
+
 async function loadAvatarLibrary(category = 'Tất cả') {
     const grid = document.getElementById("avatarLibraryGrid");
     if (!grid) return;
     try {
-        const { data, error } = await supabase.from('app_configs').select('value').eq('key', 'avatar_library').single();
-        const allAvatars = data ? data.value : [];
-        const filtered = category === 'Tất cả' ? allAvatars : allAvatars.filter(a => a.category === category);
+        let query = supabase.from('avatar_library').select('*').order('created_at', { ascending: false });
         
-        grid.innerHTML = filtered.map(a => `
+        // Nếu lọc theo danh mục cụ thể (không phải 'Tất cả')
+        if (category !== 'Tất cả' && category !== 'all') {
+            // Lưu ý: 'category' ở đây lúc này là ID (UUID) từ tab
+            query = query.eq('category_id', category);
+        }
+
+        const { data: avatars, error } = await query;
+        if (error) throw error;
+
+        grid.innerHTML = avatars.map(a => `
             <div class="avatar-item" onclick="selectAvatarItem('${a.url}', this)">
                 <img src="${a.url}">
             </div>
         `).join("");
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+        console.error("Lỗi load kho ảnh:", e); 
+        grid.innerHTML = '<p class="text-error">Không thể tải kho ảnh.</p>';
+    }
 }
 
 async function loadAvatarFilterTabs() {
     const tabContainer = document.querySelector(".avatar-filter-tabs");
     if (!tabContainer) return;
     try {
-        const { data } = await supabase.from('app_configs').select('value').eq('key', 'avatar_categories').single();
-        const categories = data ? data.value : ["Hoạt hình", "Meme", "Anime"];
+        // Đọc từ bảng avatar_categories thay vì app_configs
+        const { data: categories, error } = await supabase
+            .from('avatar_categories')
+            .select('id, name')
+            .order('name', { ascending: true });
+            
+        if (error) throw error;
+
         tabContainer.innerHTML = `<button class="filter-tab active" onclick="filterAvatarLibrary('Tất cả', this)">Tất cả</button>` + 
-            categories.map(cat => `<button class="filter-tab" onclick="filterAvatarLibrary('${cat}', this)">${cat}</button>`).join("");
-    } catch (e) { console.error(e); }
+            categories.map(cat => `<button class="filter-tab" onclick="filterAvatarLibrary('${cat.id}', this)">${cat.name}</button>`).join("");
+    } catch (e) { 
+        console.error("Lỗi load danh mục ảnh:", e); 
+    }
 }
 
 function selectAvatarItem(url, element) {
