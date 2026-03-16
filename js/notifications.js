@@ -4,6 +4,14 @@ let notificationsUnsubscribeUser = null;
 let notificationsUnsubscribeAdmin = null;
 
 let allNotifications = []; // Lưu trữ mảng notifs hiện tại
+let currentNotifTab = 'movie'; // Tab hiện tại: 'movie' hoặc 'community'
+
+// Danh sách type thuộc nhóm Cộng đồng
+const COMMUNITY_NOTIF_TYPES = [
+    'community_post', 'community_comment', 'community_like',
+    'friend_request', 'friend_accepted', 'new_comment', 'new_like',
+    'mention', 'chat_message'
+];
 
 /**
  * Khởi tạo listener thông báo
@@ -83,8 +91,8 @@ function renderNotifications() {
     
     if (!listEl) return;
 
-    // Cập nhật badge
-    const unreadCount = allNotifications.filter(n => !n.isRead).length;
+    // Cập nhật badge tổng (đếm tất cả loại)
+    const unreadCount = allNotifications.filter(n => !n.is_read).length;
     if (badgeEl) {
         if (unreadCount > 0) {
             badgeEl.textContent = unreadCount > 99 ? "99+" : unreadCount;
@@ -94,22 +102,49 @@ function renderNotifications() {
         }
     }
 
-    // Nếu không có thông báo
-    if (allNotifications.length === 0) {
-        listEl.innerHTML = `<li style="padding: 15px; text-align: center; color: var(--text-muted);">Không có thông báo mới</li>`;
+    // Cập nhật badge riêng cho từng tab
+    const movieUnread = allNotifications.filter(n => !n.is_read && !isCommunityType(n.type)).length;
+    const communityUnread = allNotifications.filter(n => !n.is_read && isCommunityType(n.type)).length;
+    
+    const movieBadge = document.getElementById('notifTabBadgeMovie');
+    const communityBadge = document.getElementById('notifTabBadgeCommunity');
+    
+    if (movieBadge) {
+        movieBadge.textContent = movieUnread > 0 ? (movieUnread > 99 ? '99+' : movieUnread) : '';
+        movieBadge.style.display = movieUnread > 0 ? 'inline-flex' : 'none';
+    }
+    if (communityBadge) {
+        communityBadge.textContent = communityUnread > 0 ? (communityUnread > 99 ? '99+' : communityUnread) : '';
+        communityBadge.style.display = communityUnread > 0 ? 'inline-flex' : 'none';
+    }
+
+    // Lọc thông báo theo tab hiện tại
+    const filteredNotifs = allNotifications.filter(n => isCommunityType(n.type) === (currentNotifTab === 'community'));
+
+    // Nếu không có thông báo ở tab hiện tại
+    if (filteredNotifs.length === 0) {
+        const emptyMsg = currentNotifTab === 'movie' ? 'Không có thông báo phim' : 'Không có thông báo cộng đồng';
+        listEl.innerHTML = `<li style="padding: 15px; text-align: center; color: var(--text-muted);">${emptyMsg}</li>`;
         return;
     }
 
     listEl.innerHTML = "";
-    allNotifications.forEach(notif => {
+    filteredNotifs.forEach(notif => {
         const li = document.createElement("li");
-        li.className = `notification-item ${notif.isRead ? "read" : "unread"}`;
+        li.className = `notification-item ${notif.is_read ? "read" : "unread"}`;
         
         // Icon theo loại thông báo
         let iconHtml = '<i class="fas fa-bell text-info"></i>';
         if (notif.type === "vip_request") iconHtml = '<i class="fas fa-star text-warning"></i>';
         if (notif.type === "vip_approved") iconHtml = '<i class="fas fa-check-circle text-success"></i>';
         if (notif.type === "new_movie") iconHtml = '<i class="fas fa-film" style="color: #e50914;"></i>';
+        // Icon cho nhóm cộng đồng
+        if (notif.type === "friend_request" || notif.type === "friend_accepted") iconHtml = '<i class="fas fa-user-friends" style="color: #3b82f6;"></i>';
+        if (notif.type === "community_comment" || notif.type === "new_comment") iconHtml = '<i class="fas fa-comment" style="color: #10b981;"></i>';
+        if (notif.type === "community_like" || notif.type === "new_like") iconHtml = '<i class="fas fa-heart" style="color: #ef4444;"></i>';
+        if (notif.type === "community_post") iconHtml = '<i class="fas fa-pen-fancy" style="color: #8b5cf6;"></i>';
+        if (notif.type === "mention") iconHtml = '<i class="fas fa-at" style="color: #f59e0b;"></i>';
+        if (notif.type === "chat_message") iconHtml = '<i class="fas fa-envelope" style="color: #06b6d4;"></i>';
 
         // Format thời gian
         let timeStr = "Vừa xong";
@@ -139,18 +174,100 @@ function renderNotifications() {
 }
 
 /**
+ * Kiểm tra type có thuộc nhóm Cộng đồng không
+ */
+function isCommunityType(type) {
+    if (!type) return false;
+    return COMMUNITY_NOTIF_TYPES.includes(type) || type.startsWith('community_');
+}
+
+/**
+ * Chuyển đổi tab thông báo (Phim / Cộng đồng)
+ */
+function switchNotifTab(tab) {
+    currentNotifTab = tab;
+    // Cập nhật UI nút tab
+    document.querySelectorAll('.notif-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+    // Re-render danh sách theo tab mới
+    renderNotifications();
+}
+
+/**
  * Xử lý click trên thông báo tuỳ theo type
  */
 function handleNotificationClick(type) {
     const dropdown = document.getElementById("notificationDropdown");
     if (dropdown) dropdown.classList.add("hidden");
 
-    // Chỉ cho Admin chuyển sang trang quản lý VIP, user thường bỏ qua
+    // Admin: chuyển sang trang quản lý VIP
     if (type === "vip_request" && typeof isAdmin !== "undefined" && isAdmin && typeof showPage === "function" && typeof window.showAdminPanel === "function") {
         showPage('admin');
         setTimeout(() => {
             window.showAdminPanel('vipRequests');
         }, 100);
+        return;
+    }
+
+    // Cộng đồng: chuyển sang trang Community
+    if (isCommunityType(type) && typeof showPage === 'function') {
+        showPage('community');
+        if (!isCommunityLoaded && typeof initCommunity === 'function') {
+            initCommunity();
+            isCommunityLoaded = true;
+        }
+        
+        // Chat message → mở tab Chat
+        if (type === 'chat_message' && typeof switchCommView === 'function') {
+            setTimeout(() => switchCommView('chat'), 300);
+        }
+        // Bài đăng → mở tab Feed
+        else if (type === 'community_post' && typeof switchCommView === 'function') {
+            setTimeout(() => switchCommView('feed'), 300);
+        }
+        // Kết bạn → mở tab Friends
+        else if ((type === 'friend_request' || type === 'friend_accepted') && typeof switchCommView === 'function') {
+            setTimeout(() => switchCommView('friends'), 300);
+        }
+    }
+}
+
+/**
+ * Đánh dấu đã đọc tất cả notification chat_message từ 1 sender (theo tên hiển thị)
+ * Gọi khi user mở chat với người đó
+ * @param {string} senderName Tên người gửi (xuất hiện trong title notification)
+ */
+async function markChatNotifAsRead(senderName) {
+    if (!supabase || !currentUser || !senderName) return;
+    try {
+        // Tìm tất cả notification chat_message chưa đọc có chứa tên sender
+        const { data: chatNotifs } = await supabase
+            .from('notifications')
+            .select('id, title')
+            .eq('user_id', currentUser.id)
+            .eq('type', 'chat_message')
+            .eq('is_read', false);
+        
+        if (!chatNotifs || chatNotifs.length === 0) return;
+        
+        // Lọc theo tên sender trong title (format: "💬 TênSender")
+        const matchIds = chatNotifs
+            .filter(n => n.title && n.title.includes(senderName))
+            .map(n => n.id);
+        
+        if (matchIds.length > 0) {
+            await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .in('id', matchIds);
+            
+            console.log(`✅ Đánh dấu đã đọc ${matchIds.length} notification chat từ ${senderName}`);
+            // Reload để cập nhật badge
+            loadInitialNotifications(currentUser.id, typeof isAdmin !== 'undefined' && isAdmin);
+        }
+    } catch (e) {
+        console.warn('Lỗi markChatNotifAsRead:', e);
     }
 }
 
@@ -190,21 +307,32 @@ async function deleteNotification(event, notifId) {
     if (!supabase) return;
     try {
         await supabase.from('notifications').delete().eq('id', notifId);
+        // Reload UI ngay lập tức
+        loadInitialNotifications(currentUser.id, typeof isAdmin !== 'undefined' && isAdmin);
     } catch(err) {
         console.error("Lỗi xóa thông báo:", err);
     }
 }
 
 /**
- * Xóa TẤT CẢ thông báo
+ * Xóa TẤT CẢ thông báo (chỉ xóa tab đang mở)
  */
 async function deleteAllNotifications() {
     if (!supabase || !currentUser || allNotifications.length === 0) return;
     
-    if (await customConfirm("Bạn có chắc chắn muốn xoá TẤT CẢ thông báo không?", { title: "Xóa thông báo", type: "danger", confirmText: "Xóa tất cả" })) {
+    const tabLabel = currentNotifTab === 'movie' ? 'Phim' : 'Cộng đồng';
+    
+    if (await customConfirm(`Bạn có chắc chắn muốn xoá tất cả thông báo "${tabLabel}" không?`, { title: "Xóa thông báo", type: "danger", confirmText: "Xóa tất cả" })) {
         try {
-            await supabase.from('notifications').delete().eq('user_id', currentUser.id);
-            showNotification("Đã xoá tất cả thông báo", "success");
+            // Lọc ID thông báo thuộc tab hiện tại để xóa
+            const idsToDelete = allNotifications
+                .filter(n => isCommunityType(n.type) === (currentNotifTab === 'community'))
+                .map(n => n.id);
+            
+            if (idsToDelete.length === 0) return;
+            
+            await supabase.from('notifications').delete().in('id', idsToDelete);
+            showNotification(`Đã xoá tất cả thông báo ${tabLabel}`, "success");
             loadInitialNotifications(currentUser.id, isAdmin);
         } catch(err) {
             console.error("Lỗi xóa tất cả thông báo:", err);
@@ -224,6 +352,11 @@ async function sendNotification(userId, title, message, type = "system") {
             type: type,
             is_read: false
         });
+        
+        // Luôn cập nhật UI ngay lập tức (refresh badge + danh sách)
+        if (currentUser && typeof loadInitialNotifications === 'function') {
+            loadInitialNotifications(currentUser.id, typeof isAdmin !== 'undefined' && isAdmin);
+        }
     } catch(err) {
         console.error("Lỗi thêm thông báo:", err);
     }

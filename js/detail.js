@@ -3197,12 +3197,11 @@ async function updateMovieViews(movieId) {
   if (!supabase) return;
 
   try {
-    // Tăng lượt xem (Dùng RPC nếu có, hoặc fetch then update)
-    // 👇 3. LOGIC MỚI: TĂNG LƯỢT XEM (Supabase) 👇
+    // Tăng lượt xem (giữ nguyên logic cũ)
   if (!window.viewedMovies) window.viewedMovies = new Set();
   if (!window.viewedMovies.has(movieId)) {
     window.viewedMovies.add(movieId);
-    // Thực hiện cập nhật lượt xem lên Supabase
+    // Cập nhật lượt xem lên Supabase
     const movie = allMovies.find(m => m.id === movieId);
     const currentViews = (movie && movie.views) ? movie.views : 0;
     
@@ -3214,6 +3213,18 @@ async function updateMovieViews(movieId) {
       .eq('id', movieId);
       
     if (movie) movie.views = currentViews + 1;
+
+    // Ghi log lượt xem vào bảng view_logs (thống kê theo thời gian)
+    const countryId = movie ? (movie.countryId || movie.country_id || movie.country || null) : null;
+    const userId = (typeof currentUser !== 'undefined' && currentUser && currentUser.id) ? String(currentUser.id) : null;
+    
+    supabase.from('view_logs').insert({
+      movie_id: String(movieId),
+      user_id: userId,
+      country_id: countryId ? String(countryId) : null
+    }).then(({ error }) => {
+      if (error) console.warn('Lỗi ghi view_log:', error.message);
+    });
   }    
   } catch (error) {
     console.error("Lỗi cập nhật views lên Supabase:", error);

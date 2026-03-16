@@ -2432,6 +2432,17 @@ body[data-theme="light"] .chat-msg .author {
       display: flex !important;
       flex-direction: column !important;
       grid-template-columns: none !important;
+      overflow-x: hidden !important;
+    }
+    .comm-sidebar-toggle-btn {
+      display: none !important;
+    }
+    .comm-chat-sidebar.collapsed {
+      width: 100% !important;
+      min-width: unset !important;
+    }
+    .comm-chat-layout.sidebar-collapsed {
+      grid-template-columns: none !important;
     }
   }
   .comm-chat-info-sidebar {
@@ -2463,7 +2474,8 @@ body[data-theme="light"] .chat-msg .author {
     display: flex !important;
     flex-direction: column !important;
     height: calc(100vh - 80px) !important;
-    overflow-y: auto !important; /* Cho phép cuộn dọc tự nhiên */
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
   }
   
   .comm-left-sidebar {
@@ -2486,6 +2498,15 @@ body[data-theme="light"] .chat-msg .author {
     height: 100% !important;
     grid-template-columns: none !important;
     gap: 0 !important;
+    overflow-x: hidden !important;
+  }
+  /* Force reset collapsed trên mobile */
+  .comm-chat-sidebar.collapsed {
+    width: 100% !important;
+    min-width: unset !important;
+  }
+  .comm-chat-layout.sidebar-collapsed {
+    grid-template-columns: none !important;
   }
   
   .comm-chat-sidebar {
@@ -2493,6 +2514,12 @@ body[data-theme="light"] .chat-msg .author {
     border-radius: 0 !important;
     margin-bottom: 0 !important;
     flex: 1 !important;
+    width: 100% !important;
+    min-width: unset !important;
+  }
+  /* Ẩn nút thu gọn trên mobile */
+  .comm-sidebar-toggle-btn {
+    display: none !important;
   }
   
   .comm-chat-box {

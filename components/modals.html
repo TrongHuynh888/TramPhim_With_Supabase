@@ -992,19 +992,39 @@
           </button>
         </div>
         <div class="modal-body text-center">
-          <img
-            id="profileCurrentAvatar"
-            src=""
-            alt="Avatar"
-            style="
-              width: 100px;
-              height: 100px;
-              border-radius: 50%;
-              object-fit: cover;
-              margin-bottom: 15px;
-              border: 3px solid var(--accent-secondary);
-            "
-          />
+          <!-- Avatar + QR badge overlay -->
+          <div class="profile-avatar-qr-wrapper" style="position: relative; display: inline-block; margin-bottom: 15px;">
+            <img
+              id="profileCurrentAvatar"
+              src=""
+              alt="Avatar"
+              style="
+                width: 110px;
+                height: 110px;
+                border-radius: 50%;
+                object-fit: cover;
+                border: 3px solid var(--accent-secondary);
+                display: block;
+              "
+            />
+            <!-- QR mini badge góc phải dưới -->
+            <div id="profileQRMini" onclick="openMyQRFromProfile()" title="Nhấn để xem mã QR" style="
+              position: absolute;
+              bottom: -4px;
+              right: -16px;
+              width: 48px;
+              height: 48px;
+              background: #fff;
+              border-radius: 8px;
+              padding: 3px;
+              cursor: pointer;
+              box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+              border: 2px solid var(--accent-primary, #4fb8ff);
+              transition: transform 0.2s ease, box-shadow 0.2s ease;
+              overflow: hidden;
+            ">
+            </div>
+          </div>
 
           <h3 id="profileDisplayName" style="margin-bottom: 5px">Tên User</h3>
           <p id="profileEmail" class="text-muted" style="margin-bottom: 20px">

@@ -309,6 +309,9 @@ function showPage(pageName, addToHistory = true) {
     if (footer) footer.style.display = "none";
     // Load data admin nếu cần
     if (typeof loadAdminData === "function") loadAdminData();
+  } else if (pageName === "community" && typeof currentCommView !== 'undefined' && currentCommView === 'chat') {
+    // Nếu quay lại Cộng Đồng mà đang ở tab Chat thì ẩn footer
+    if (footer) footer.style.display = "none";
   } else {
     if (footer) footer.style.display = "block";
   }

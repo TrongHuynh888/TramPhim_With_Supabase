@@ -3,26 +3,26 @@
    ThÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœng nhÃƒÂ¡Ã‚ÂºÃ‚Â¥t vÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºi variables.css cho dark mode (TÃƒÆ’Ã‚Â´ng Ãƒâ€žÃ‚Âen - Ãƒâ€žÃ‚ÂÃƒÂ¡Ã‚Â»Ã‚Â - XÃƒÆ’Ã‚Â¡m)
 ========================================================================== */
 
-/* Container chÃƒÂ­nh cÃ¡Â»Â§a Community */
+/* Container chinh cua Community */
 .community-wrapper {
   display: grid;
   grid-template-columns: 240px 1fr; /* Left Sidebar, Main Content */
   gap: 20px;
   max-width: 100%;
-  margin: 50px auto 0; /* Đẩy xuống dưới Navbar fixed (height 100px) */
-  padding: 20px 30px;
-  height: calc(100vh - 120px); /* Trừ đi Navbar (100px) + padding (20px) */
-  overflow: hidden; /* TrÃƒÂ¡nh scroll toÃƒÂ n trang, cuÃ¡Â»â„¢n tÃ¡Â»Â«ng section */
+  margin: 25px auto 0; /* Khoảng hở vừa phải với Navbar */
+  padding: 8px 30px;
+  height: calc(100vh - 75px); /* Navbar (~50px) + margin-top (25px) */
+  overflow: hidden; /* Tránh scroll toàn trang, cuộn từng section */
 }
 
-/* VÃƒÆ’Ã‚Â¹ng hiÃƒÂ¡Ã‚Â»Ã†â€™n thÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¹ nÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢i dung theo tÃƒÂ¡Ã‚Â»Ã‚Â«ng Tab */
+/* Vung hien thi noi dung theo tung Tab */
 .comm-content-area {
   position: relative;
   height: 100%;
   overflow: hidden;
 }
 
-/* Layout cÃƒÂ¡Ã‚Â»Ã‚Â§a Feed */
+/* Layout cua Feed */
 #commFeedView {
   display: grid;
   grid-template-columns: 1fr 300px; /* Main Feed, Right Sidebar */
@@ -45,6 +45,144 @@
   overflow-y: auto;
   border: 1px solid var(--glass-border);
   box-shadow: var(--shadow-sm);
+  transition: all 0.3s ease;
+}
+
+/* Brand header cho left sidebar */
+.comm-left-brand {
+  display: flex;
+  align-items: center;
+  padding: 0 2px 14px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  gap: 8px;
+}
+
+.comm-left-brand-text {
+  flex: 1;
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  background: linear-gradient(135deg, #4fb8ff, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  white-space: nowrap;
+  padding-right: 36px;
+}
+
+/* Collapsed: ẩn text brand, nút căn giữa */
+.comm-left-sidebar.collapsed .comm-left-brand {
+  justify-content: center;
+  padding: 0 0 10px;
+  margin-bottom: 4px;
+}
+.comm-left-sidebar.collapsed .comm-left-brand-text {
+  display: none;
+}
+
+/* Nút toggle left sidebar */
+.comm-left-toggle-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-secondary);
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.comm-left-toggle-btn:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-primary);
+}
+
+/* === LEFT SIDEBAR THU GỌN === */
+.comm-left-sidebar.collapsed {
+  padding: 12px 6px;
+  gap: 2px;
+  align-items: center;
+}
+
+.comm-left-sidebar.collapsed .comm-left-toggle-btn {
+  align-self: center;
+  margin-bottom: 6px;
+}
+
+.comm-left-sidebar.collapsed .comm-left-sidebar-extra {
+  display: none !important;
+}
+
+.comm-left-sidebar.collapsed .comm-nav-item {
+  justify-content: center;
+  padding: 10px;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  gap: 0;
+  position: relative;
+}
+
+.comm-left-sidebar.collapsed .comm-nav-item span {
+  display: none;
+}
+
+.comm-left-sidebar.collapsed .comm-nav-item i {
+  font-size: 1.1rem;
+}
+
+/* Tooltip hover khi collapsed */
+.comm-left-sidebar.collapsed .comm-nav-item::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 100;
+}
+.comm-left-sidebar.collapsed .comm-nav-item:hover::after {
+  opacity: 1;
+}
+
+/* Badge unread khi collapsed - chỉ style vị trí, không force hiện */
+.comm-left-sidebar.collapsed .comm-nav-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 9px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+/* Grid layout co cột trái */
+.community-wrapper.left-collapsed {
+  grid-template-columns: 52px 1fr !important;
+}
+
+[data-theme="light"] .comm-left-toggle-btn:hover {
+  background: rgba(0,0,0,0.06);
+}
+[data-theme="light"] .comm-left-sidebar.collapsed .comm-nav-item::after {
+  background: rgba(0,0,0,0.75);
 }
 
 .comm-nav-item {
@@ -72,8 +210,8 @@
 }
 
 .comm-nav-item.active {
-  background-color: rgba(229, 9, 20, 0.1); /* Ãƒâ€žÃ‚ÂÃƒÂ¡Ã‚Â»Ã‚Â nhÃƒÂ¡Ã‚ÂºÃ‚Â¡t */
-  color: var(--accent-primary); /* Ãƒâ€žÃ‚ÂÃƒÂ¡Ã‚Â»Ã‚Â */
+  background-color: rgba(229, 9, 20, 0.1); /* Mau nen */
+  color: var(--accent-primary); /* Mau do theme */
 }
 
 .comm-nav-item.active i {
@@ -171,7 +309,7 @@
   border-radius: 3px 3px 0 0;
 }
 
-/* 2.1 Post Composer (Khung Ãƒâ€žÃ¢â‚¬ËœÃƒâ€žÃ†â€™ng trÃƒÂ¡Ã‚ÂºÃ‚Â¡ng thÃƒÆ’Ã‚Â¡i) */
+/* Khu vuc Message */
 .comm-composer {
   background-color: var(--bg-secondary);
   border-radius: 12px;
@@ -218,7 +356,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-left: 55px; /* CÃƒâ€žÃ†â€™n chÃƒÂ¡Ã‚Â»Ã¢â‚¬Â°nh vÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºi input */
+  padding-left: 55px; /* Khoang dem */
 }
 
 .comm-composer-actions {
@@ -256,6 +394,182 @@
 
 .comm-btn-post:hover {
   opacity: 0.9;
+}
+
+/* 2.1.1 Preview ảnh trong Composer */
+.comm-composer-preview {
+  padding-left: 55px;
+}
+.comm-preview-img-wrapper {
+  position: relative;
+  display: inline-block;
+  max-width: 200px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+.comm-preview-img-wrapper img {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  display: block;
+}
+.comm-preview-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  line-height: 1;
+}
+.comm-preview-remove:hover {
+  background: #e50914;
+}
+
+/* 2.1.2 Thẻ phim đã chọn trong Composer */
+.comm-composer-movie-tag {
+  padding-left: 55px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.comm-movie-tag-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 12px;
+  flex: 1;
+  max-width: 400px;
+  cursor: default;
+}
+.comm-movie-tag-content img {
+  width: 36px;
+  height: 50px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.comm-movie-tag-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.comm-movie-tag-info .tag-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.comm-movie-tag-info .tag-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.comm-composer-movie-tag > .comm-preview-remove {
+  position: static;
+  flex-shrink: 0;
+}
+
+/* 2.1.3 Dropdown tìm kiếm phim */
+.comm-movie-search-dropdown {
+  margin-left: 55px;
+  margin-right: 0;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+.comm-movie-search-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+.comm-movie-search-header input {
+  flex: 1;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 7px 12px;
+  font-size: 0.9rem;
+}
+.comm-movie-search-header input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+.comm-movie-search-header .comm-preview-remove {
+  position: static;
+  flex-shrink: 0;
+}
+.comm-movie-search-results {
+  overflow-y: auto;
+  max-height: 250px;
+  padding: 4px 0;
+}
+.comm-movie-search-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.comm-movie-search-item:hover {
+  background: rgba(255,255,255,0.05);
+}
+.comm-movie-search-item img {
+  width: 32px;
+  height: 44px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.comm-movie-search-item-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.comm-movie-search-item-info .movie-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.comm-movie-search-item-info .movie-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Light mode cho composer mới */
+[data-theme="light"] .comm-movie-tag-info .tag-title,
+[data-theme="light"] .comm-movie-search-item-info .movie-title {
+  color: #1a1a2e;
+}
+[data-theme="light"] .comm-movie-search-header input {
+  background: #f0f2f5;
+  color: #1a1a2e;
+  border-color: rgba(0,0,0,0.1);
 }
 
 /* 2.2 Post Card */
@@ -378,61 +692,356 @@
   font-size: 0.95rem;
   line-height: 1.5;
   color: var(--text-primary);
-  white-space: pre-wrap; /* GiÃƒÂ¡Ã‚Â»Ã‚Â¯ dÃƒÆ’Ã‚Â²ng */
+  white-space: pre-wrap;
 }
 
-/* NÃƒÂ¡Ã‚ÂºÃ‚Â¿u bÃƒÆ’Ã‚Â i post cÃƒÆ’Ã‚Â³ nhÃƒÆ’Ã‚Âºng phim */
+/* Nếu bài post có nhúng phim */
 .comm-post-movie-ref {
   display: flex;
   background: var(--bg-dark);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   margin-top: 10px;
   border: 1px solid var(--border-color);
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-
 .comm-post-movie-ref:hover {
   border-color: var(--accent-primary);
+  box-shadow: 0 2px 12px rgba(229, 9, 20, 0.1);
 }
-
-.comm-post-movie-ref img {
+.comm-post-movie-ref > img {
   width: 100px;
+  min-height: 140px;
   object-fit: cover;
+  flex-shrink: 0;
+  cursor: pointer;
 }
-
 .comm-post-movie-info {
-  padding: 15px;
+  padding: 12px 15px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
 }
-
 .comm-post-movie-title {
   font-weight: 600;
-  color: #fff;
-  margin-bottom: 5px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
+/* Hàng meta tags (thể loại, quốc gia, thời lượng) */
+.comm-post-movie-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+.comm-movie-tag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.comm-movie-tag-badge i {
+  font-size: 0.65rem;
+}
+/* Badge loại phim + số tập */
+.comm-movie-episodes-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(229, 9, 20, 0.12);
+  color: #ff6b6b;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
 .comm-post-movie-desc {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--text-secondary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  line-height: 1.4;
+}
+/* Light mode thẻ phim */
+[data-theme="light"] .comm-post-movie-title {
+  color: #1a1a2e;
+}
+[data-theme="light"] .comm-movie-tag-badge {
+  background: rgba(0,0,0,0.06);
+  color: #555;
+}
+[data-theme="light"] .comm-movie-episodes-badge {
+  background: rgba(229, 9, 20, 0.08);
 }
 
-
-/* HÃƒÆ’Ã‚Â¬nh ÃƒÂ¡Ã‚ÂºÃ‚Â£nh trong bÃƒÆ’Ã‚Â i Ãƒâ€žÃ¢â‚¬ËœÃƒâ€žÃ†â€™ng */
+/* Nút xem phim trong thẻ phim */
+.comm-post-movie-actions {
+  margin-top: 4px;
+}
+.comm-movie-watch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--accent-primary);
+  color: #fff;
+  border: none;
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+}
+.comm-movie-watch-btn:hover {
+  opacity: 0.85;
+  transform: scale(1.03);
+}
+.comm-movie-watch-btn i {
+  font-size: 0.85rem;
+}
+/* --- */
 .comm-post-image {
   width: 100%;
   border-radius: 8px;
   margin-top: 10px;
   max-height: 500px;
   object-fit: cover;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.comm-post-image:hover {
+  opacity: 0.92;
+}
+
+/* ===== Preview Grid trong Composer (chọn nhiều ảnh) ===== */
+.comm-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+}
+.comm-preview-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.comm-preview-clear {
+  background: none;
+  border: none;
+  color: #ff4d4d;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+.comm-preview-clear:hover {
+  background: rgba(255, 77, 77, 0.1);
+}
+.comm-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 6px;
+  padding: 4px 10px 10px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.comm-preview-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+.comm-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.comm-preview-remove-item {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  border: none;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.2s;
+}
+.comm-preview-remove-item:hover {
+  background: #e50914;
+}
+.comm-preview-index {
+  position: absolute;
+  bottom: 3px;
+  left: 3px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+/* ===== Post Gallery (hiển thị nhiều ảnh trong bài viết) ===== */
+.comm-post-gallery {
+  display: grid;
+  gap: 3px;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+/* 2 ảnh: chia đôi ngang */
+.comm-post-gallery.count-2 {
+  grid-template-columns: 1fr 1fr;
+}
+/* 3 ảnh: 1 ảnh lớn trên, 2 ảnh nhỏ dưới */
+.comm-post-gallery.count-3 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+}
+.comm-post-gallery.count-3 .comm-gallery-item.full-row {
+  grid-column: 1 / -1;
+}
+/* 4+ ảnh: grid 2x2 */
+.comm-post-gallery.count-4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.comm-gallery-item {
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  aspect-ratio: 16/10;
+}
+.comm-gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s, opacity 0.2s;
+}
+.comm-gallery-item:hover img {
+  transform: scale(1.03);
+  opacity: 0.9;
+}
+/* Overlay +N khi có nhiều hơn 4 ảnh */
+.comm-gallery-more {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.8rem;
+  font-weight: 700;
+  backdrop-filter: blur(2px);
+}
+
+/* ===== Fullscreen Image Viewer ===== */
+.post-image-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.92);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+}
+.post-image-viewer-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.post-image-viewer-content img {
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 6px;
+  user-select: none;
+}
+.post-viewer-close {
+  position: fixed;
+  top: 15px;
+  right: 20px;
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  z-index: 10001;
+}
+.post-viewer-close:hover {
+  background: rgba(255,255,255,0.25);
+}
+.post-viewer-counter {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255,255,255,0.8);
+  font-size: 0.9rem;
+  font-weight: 500;
+  z-index: 10001;
+}
+.post-viewer-prev, .post-viewer-next {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  z-index: 10001;
+}
+.post-viewer-prev { left: 15px; }
+.post-viewer-next { right: 15px; }
+.post-viewer-prev:hover, .post-viewer-next:hover {
+  background: rgba(255,255,255,0.25);
 }
 
 .comm-post-footer {
@@ -488,6 +1097,102 @@
   flex-direction: column;
   gap: 15px;
 }
+
+/* === SEARCH BOX SIDEBAR === */
+.comm-search-box {
+  position: relative;
+  margin-bottom: 15px;
+}
+.comm-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+.comm-search-input {
+  width: 100%;
+  padding: 10px 12px 10px 36px;
+  background: var(--bg-dark, #0d0d1a);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+  box-sizing: border-box;
+}
+.comm-search-input:focus {
+  border-color: var(--accent-primary, #4db8ff);
+  box-shadow: 0 0 0 3px rgba(77, 184, 255, 0.15);
+}
+.comm-search-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* === WIDGET: PHIM ĐANG HOT === */
+.comm-trending-movie {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.comm-trending-movie:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.05));
+}
+
+.comm-trending-rank {
+  font-size: 0.9rem;
+  font-weight: 700;
+  min-width: 22px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.comm-trending-rank.hot-rank-top {
+  color: #f5c518;
+  font-size: 1rem;
+  text-shadow: 0 0 6px rgba(245, 197, 24, 0.3);
+}
+
+.comm-trending-poster {
+  width: 40px;
+  height: 56px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.comm-trending-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.comm-trending-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+.comm-trending-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
 
 .comm-user-item {
   display: flex;
@@ -553,11 +1258,11 @@
    4. CHAT INTERFACE (Khi mÃƒÂ¡Ã‚Â»Ã…Â¸ tin nhÃƒÂ¡Ã‚ÂºÃ‚Â¯n)
 ========================================== */
 .comm-chat-layout {
-  display: none; /* ÃƒÂ¡Ã‚ÂºÃ‚Â¨n Ãƒâ€žÃ¢â‚¬Ëœi mÃƒÂ¡Ã‚ÂºÃ‚Â·c Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¹nh, chÃƒÂ¡Ã‚Â»Ã¢â‚¬Â° hiÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡n khi gÃƒÂ¡Ã‚Â»Ã‚ i hÃƒÆ’Ã‚m switch */
-  grid-template-columns: 300px 1fr 380px; /* Sidebar chats, Khu chat chÃƒÆ’Ã‚Â­nh, Info bÃƒÂ¡Ã‚ÂºÃ‚Â¡n chat */
+  display: none; /* An mac dinh */
+  grid-template-columns: 300px 1fr 380px; /* Sidebar chats, Khu chat chinh, Info ban chat */
   gap: 20px;
   height: 100%;
-  position: relative; /* ThÃƒÆ’Ã‚Âªm Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã†â€™ phÃƒÂ¡Ã‚Â»Ã‚Â¥c vÃ¡Â»Â¥ absolute modal */
+  position: relative; /* Them de phuc vu absolute modal */
   overflow: hidden;
 }
 
@@ -567,6 +1272,170 @@
   border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+/* Nút toggle thu gọn sidebar */
+.comm-sidebar-toggle-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-secondary);
+  cursor: pointer;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.comm-sidebar-toggle-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-primary);
+}
+
+/* Spacing giữa title row và search */
+.comm-chat-header > div:first-child {
+  margin-bottom: 12px;
+}
+
+/* === SIDEBAR THU GỌN === */
+.comm-chat-sidebar.collapsed {
+  width: 68px;
+  min-width: 68px;
+  overflow-x: hidden;
+}
+
+.comm-chat-sidebar.collapsed .comm-chat-sidebar-title,
+.comm-chat-sidebar.collapsed .comm-chat-sidebar-extra {
+  display: none !important;
+}
+
+.comm-chat-sidebar.collapsed .comm-chat-header {
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.comm-chat-sidebar.collapsed .comm-chat-header > div:first-child {
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 0;
+}
+
+/* Chat items thu gọn: chỉ hiện avatar tròn căn giữa */
+.comm-chat-sidebar.collapsed .comm-chat-item {
+  padding: 6px 0;
+  justify-content: center;
+  border-radius: 0;
+  border-bottom: none;
+  position: relative;
+}
+
+.comm-chat-sidebar.collapsed .comm-chat-item.active {
+  background: transparent;
+}
+
+.comm-chat-sidebar.collapsed .comm-chat-item.active .comm-chat-item-avatar img {
+  border: 2px solid var(--accent-primary);
+  box-shadow: 0 0 8px rgba(79, 184, 255, 0.3);
+}
+
+.comm-chat-sidebar.collapsed .comm-chat-item-info,
+.comm-chat-sidebar.collapsed .comm-chat-item-meta,
+.comm-chat-sidebar.collapsed .comm-chat-item-actions {
+  display: none !important;
+}
+
+/* Badge GHIM thu gọn: chấm tròn nhỏ góc trên trái avatar */
+.comm-chat-sidebar.collapsed .comm-pinned-badge {
+  font-size: 0;
+  line-height: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  left: 2px;
+  z-index: 2;
+  border-radius: 50%;
+  background: var(--accent-primary, #4fb8ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: unset;
+  overflow: hidden;
+  pointer-events: none;
+}
+.comm-chat-sidebar.collapsed .comm-pinned-badge i {
+  font-size: 7px;
+  color: #fff;
+  line-height: 1;
+}
+
+.comm-chat-sidebar.collapsed .comm-chat-item-avatar {
+  margin-right: 0;
+  cursor: pointer;
+}
+
+.comm-chat-sidebar.collapsed .comm-chat-item-avatar img {
+  width: 42px;
+  height: 42px;
+  border: 2px solid transparent;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.comm-chat-sidebar.collapsed .comm-chat-item:hover .comm-chat-item-avatar img {
+  border-color: rgba(255,255,255,0.2);
+}
+
+.comm-chat-sidebar.collapsed .comm-chat-list {
+  align-items: center;
+  padding: 6px 0;
+  gap: 2px;
+}
+
+/* Tooltip tên user khi hover avatar ở chế độ thu gọn */
+.comm-chat-sidebar.collapsed .comm-chat-item::after {
+  content: attr(data-user-name);
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 100;
+}
+
+.comm-chat-sidebar.collapsed .comm-chat-item:hover::after {
+  opacity: 1;
+}
+
+/* Grid layout tự co khi sidebar collapsed */
+.comm-chat-layout.sidebar-collapsed {
+  grid-template-columns: 68px 1fr 380px;
+}
+.comm-chat-layout.sidebar-collapsed.info-hidden {
+  grid-template-columns: 68px 1fr;
+}
+
+[data-theme="light"] .comm-sidebar-toggle-btn:hover {
+  background: rgba(0,0,0,0.06);
+}
+[data-theme="light"] .comm-chat-sidebar.collapsed .comm-chat-item::after {
+  background: rgba(0,0,0,0.75);
 }
 
 .comm-chat-layout {
@@ -587,8 +1456,14 @@
 }
 
 .comm-chat-header h2 {
-  font-size: 1.2rem;
-  margin-bottom: 10px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  background: linear-gradient(135deg, #4fb8ff, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
 }
 
 .comm-chat-search {
@@ -801,19 +1676,19 @@
 /* Mobile responsive for chat actions */
 @media screen and (max-width: 768px) {
   .comm-chat-item-actions {
-    opacity: 1; /* TrÃªn mobile luÃ´n hiá»‡n Ä‘á»ƒ user tháº¥y 3 cháº¥m */
+    opacity: 1; /* Do trong suot */
     right: 10px;
   }
 }
 
-/* Khu vÃ¡Â»Â±c Message */
+/* Khu vuc Message */
 .comm-chat-box {
   background: var(--bg-secondary);
   border-radius: 12px;
   border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  height: 100%; /* Ãƒâ€žÃ‚ÂÃƒÂ¡Ã‚ÂºÃ‚Â£m bÃƒÂ¡Ã‚ÂºÃ‚Â£o lÃƒÂ¡Ã‚ÂºÃ‚Â¥p Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚ÂºÃ‚Â§y chiÃƒÂ¡Ã‚Â»Ã‚Âu cao layout */
+  height: 100%; /* Chiem het chieu cao layout */
   overflow: hidden;
 }
 
@@ -1062,7 +1937,7 @@
   display: flex;
   flex-direction: column;
   gap: 15px;
-  min-height: 0; /* QUAN TRÃƒÂ¡Ã‚Â»Ã…â€™NG: Cho phÃƒÆ’Ã‚Â©p co lÃƒÂ¡Ã‚ÂºÃ‚Â¡i trong Flexbox */
+  min-height: 0; /* Quan trong: Cho phep co lai trong Flexbox */
 }
 
 .comm-msg {
@@ -1090,7 +1965,7 @@
 }
 
 .comm-msg.sent .comm-msg-bubble {
-  background: #2196f3; /* Xanh dÃ†Â°Ã†Â¡ng giÃ¡Â»â€˜ng Ã¡ÂºÂ£nh */
+  background: #2196f3; /* Xanh dương giống ảnh */
   color: #fff;
   border-bottom-right-radius: 4px;
 }
@@ -1117,7 +1992,7 @@
   padding: 0 !important; /* Loáº¡i bá» hoÃ n toÃ n viá»n */
   background: transparent !important; /* KhÃ´ng ná»n */
   border: none !important; /* KhÃ´ng viá»n */
-  box-shadow: none !important; /* KhÃ´ng bÃ³ng Ä‘á»• Ä‘á»ƒ tá»‘i giáº£n */
+  box-shadow: none !important; /* Bong do */
   overflow: hidden;
 }
 
@@ -1133,7 +2008,7 @@
 }
 
 .comm-msg-image-content:hover {
-  transform: translateY(-2px); /* Chá»‰ nÃ¢ng nháº¹ áº£nh lÃªn thay vÃ¬ Ä‘á»•i Ä‘á»™ sÃ¡ng/má» */
+  transform: translateY(-2px); /* Bien doi vi tri/kich thuoc */
 }
 
 .comm-msg.received .comm-msg-bubble img {
@@ -1144,7 +2019,7 @@
 .comm-msg.recalled-style .comm-msg-bubble {
   color: rgba(255, 255, 255, 0.5) !important;
   font-style: italic !important;
-  opacity: 1; /* KhÃ´ng dÃ¹ng opacity cho bubble ná»¯a Ä‘á»ƒ trÃ¡nh lÃ m chá»¯ quÃ¡ má» */
+  opacity: 1; /* Do trong suot */
 }
 
 .comm-msg-time {
@@ -1153,7 +2028,7 @@
   margin-top: 5px;
   display: flex;
   align-items: center;
-  gap: 8px; /* KhoÃƒÂ¡Ã‚ÂºÃ‚Â£ng cÃƒÆ’Ã‚Â¡ch giÃƒÂ¡Ã‚Â»Ã‚Â¯a giÃƒÂ¡Ã‚Â»Ã‚Â vÃƒÆ’Ã‚Â  trÃƒÂ¡Ã‚ÂºÃ‚Â¡ng thÃƒÆ’Ã‚Â¡i */
+  gap: 8px; /* Khoang cach giua cac phan tu */
 }
 
 /* Status Labels & Icons */
@@ -1166,7 +2041,7 @@
 
 .comm-msg-status.sent { color: var(--text-muted); }
 .comm-msg-status.delivered { color: #aaa; }
-.comm-msg-status.seen { color: var(--accent-primary); } /* MÃƒÆ’Ã‚Â u Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã‚Â theme */
+.comm-msg-status.seen { color: var(--accent-primary); } /* Mau do theme */
 
 .comm-chat-input-area {
   padding: 15px;
@@ -1175,7 +2050,7 @@
   align-items: center;
   gap: 15px;
   background: var(--bg-secondary);
-  flex-shrink: 0; /* KhÃƒÆ’Ã‚Â´ng cho phÃƒÆ’Ã‚Â©p bÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¹ bÃƒÆ’Ã‚Â³p mÃƒÆ’Ã‚Â©o khi tin nhÃƒÂ¡Ã‚ÂºÃ‚Â¯n nhiÃƒÂ¡Ã‚Â»Ã‚Âu */
+  flex-shrink: 0; /* Khong cho phep bi bop meo khi tin nhan nhieu */
 }
 
 /* Tăng khoảng đệm dưới trên Tablet/Mobile để input không chìm sát đáy */
@@ -1198,14 +2073,14 @@
   width: 100%;
   background: var(--bg-dark);
   border: 1px solid var(--border-color);
-  padding: 12px 150px 12px 20px; /* padding-right Ä‘á»§ lá»›n Ä‘á»ƒ khÃ´ng che nÃºt */
+  padding: 12px 150px 12px 20px; /* Khoang dem */
   border-radius: 24px;
   color: #fff;
   transition: all 0.3s ease;
   box-sizing: border-box;
   resize: none; /* KhÃ´ng cho kÃ©o tay */
-  min-height: 48px; /* Chiá»u cao máº·c Ä‘á»‹nh 1 dÃ²ng */
-  max-height: 150px; /* Giá»›i háº¡n tá»‘i Ä‘a ~5 dÃ²ng */
+  min-height: 48px; /* Quan trong: Cho phep co lai trong Flexbox */
+  max-height: 150px; /* Gioi han toi da ~5 dong */
   overflow-y: auto; /* Cuá»™n khi vÆ°á»£t max-height */
   line-height: 1.4;
   font-family: inherit;
@@ -1265,64 +2140,199 @@
   flex: 1;
   justify-content: center;
   align-items: center;
-  text-align: center;
-  padding: 40px;
-  background: radial-gradient(circle at center, rgba(229, 9, 20, 0.03) 0%, transparent 70%);
+  overflow: hidden;
+  position: relative;
 }
 
-.comm-welcome-content {
-  max-width: 500px;
-  animation: fadeInDown 0.8s ease-out;
-}
-
-.comm-welcome-img {
-  width: 250px;
-  height: auto;
-  margin-bottom: 30px;
-  filter: drop-shadow(0 10px 20px rgba(0,0,0,0.5));
-  border-radius: 20px;
-}
-
-.comm-welcome-content h3 {
-  font-size: 1.8rem;
-  color: #fff;
-  margin-bottom: 15px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
-
-.comm-welcome-content p {
-  color: var(--text-muted);
-  font-size: 1rem;
-  line-height: 1.6;
-  margin-bottom: 30px;
-}
-
-.comm-welcome-stats {
+/* ============ CINECHAT TRAILER ============ */
+.cinechat-trailer {
+  position: relative;
+  width: 100%;
+  height: 100%;
   display: flex;
   justify-content: center;
-  gap: 20px;
-  flex-wrap: wrap;
+  align-items: center;
+  overflow: hidden;
 }
 
-.comm-welcome-stats span {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 8px 15px;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
+/* Background gradient xoay */
+.trailer-bg {
+  position: absolute;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(79, 184, 255, 0.08),
+    rgba(167, 139, 250, 0.06),
+    rgba(236, 72, 153, 0.04),
+    rgba(79, 184, 255, 0.08)
+  );
+  animation: trailerBgRotate 20s linear infinite;
+}
+
+@keyframes trailerBgRotate {
+  to { transform: rotate(360deg); }
+}
+
+/* Floating icons */
+.trailer-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.trailer-icon {
+  position: absolute;
+  color: rgba(79, 184, 255, 0.15);
+  animation: trailerFloat 8s ease-in-out infinite;
+}
+.trailer-icon.icon-1 { font-size: 1.4rem; top: 10%; left: 15%; animation-delay: 0s; animation-duration: 7s; }
+.trailer-icon.icon-2 { font-size: 1.8rem; top: 18%; right: 20%; animation-delay: 1s; animation-duration: 9s; color: rgba(167,139,250,0.15); }
+.trailer-icon.icon-3 { font-size: 1rem; top: 70%; left: 10%; animation-delay: 2s; animation-duration: 6s; color: rgba(250,204,21,0.15); }
+.trailer-icon.icon-4 { font-size: 1.6rem; bottom: 20%; right: 15%; animation-delay: 0.5s; animation-duration: 8s; color: rgba(236,72,153,0.15); }
+.trailer-icon.icon-5 { font-size: 1.2rem; top: 40%; left: 8%; animation-delay: 3s; animation-duration: 10s; color: rgba(239,68,68,0.15); }
+.trailer-icon.icon-6 { font-size: 1.5rem; top: 55%; right: 8%; animation-delay: 1.5s; animation-duration: 7.5s; }
+.trailer-icon.icon-7 { font-size: 1.1rem; bottom: 10%; left: 30%; animation-delay: 4s; animation-duration: 9s; color: rgba(167,139,250,0.12); }
+.trailer-icon.icon-8 { font-size: 1.3rem; top: 8%; left: 55%; animation-delay: 2.5s; animation-duration: 8.5s; color: rgba(250,204,21,0.12); }
+
+@keyframes trailerFloat {
+  0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.4; }
+  25% { transform: translateY(-15px) rotate(5deg); opacity: 0.8; }
+  50% { transform: translateY(-8px) rotate(-3deg); opacity: 0.6; }
+  75% { transform: translateY(-20px) rotate(8deg); opacity: 1; }
+}
+
+/* Logo trung tâm */
+.trailer-center {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.trailer-logo-ring {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4fb8ff, #a78bfa);
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  font-size: 2.2rem;
+  color: #fff;
+  box-shadow: 0 0 40px rgba(79,184,255,0.3), 0 0 80px rgba(167,139,250,0.15);
+  animation: trailerPulse 3s ease-in-out infinite;
+  position: relative;
 }
 
-.comm-welcome-stats i {
-  color: var(--accent-primary);
+.trailer-logo-ring::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: rgba(79,184,255,0.4);
+  border-right-color: rgba(167,139,250,0.4);
+  animation: trailerRingSpin 4s linear infinite;
 }
 
-@keyframes fadeInDown {
-  from { opacity: 0; transform: translateY(-20px); }
+@keyframes trailerPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(79,184,255,0.3), 0 0 80px rgba(167,139,250,0.15); }
+  50% { transform: scale(1.05); box-shadow: 0 0 50px rgba(79,184,255,0.4), 0 0 100px rgba(167,139,250,0.25); }
+}
+
+@keyframes trailerRingSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Text slider */
+.trailer-text-slider {
+  position: relative;
+  height: 80px;
+  width: 400px;
+  max-width: 80vw;
+  overflow: hidden;
+}
+
+.trailer-slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  animation: trailerSlide 16s ease-in-out infinite;
+}
+
+.trailer-slide.slide-1 { animation-delay: 0s; }
+.trailer-slide.slide-2 { animation-delay: 4s; }
+.trailer-slide.slide-3 { animation-delay: 8s; }
+.trailer-slide.slide-4 { animation-delay: 12s; }
+
+@keyframes trailerSlide {
+  0% { opacity: 0; transform: translateY(15px); }
+  5% { opacity: 1; transform: translateY(0); }
+  20% { opacity: 1; transform: translateY(0); }
+  25% { opacity: 0; transform: translateY(-15px); }
+  100% { opacity: 0; }
+}
+
+.trailer-slide h2 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #fff, #4fb8ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0 0 6px;
+}
+
+.trailer-slide p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+/* Feature badges */
+.trailer-features {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  animation: trailerFadeUp 1.2s ease-out 0.5s both;
+}
+
+.trailer-badge {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(8px);
+  transition: all 0.3s ease;
+}
+
+.trailer-badge:hover {
+  background: rgba(79,184,255,0.1);
+  border-color: rgba(79,184,255,0.2);
+  color: #fff;
+}
+
+.trailer-badge i {
+  color: var(--accent-primary, #4fb8ff);
+  font-size: 0.75rem;
+}
+
+@keyframes trailerFadeUp {
+  from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -1343,6 +2353,51 @@
 .comm-profile-header {
   position: relative;
   margin-bottom: 80px;
+}
+
+/* Nút quay lại thông minh */
+.comm-profile-back-btn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.comm-profile-back-btn:hover {
+  background: rgba(0, 0, 0, 0.75);
+  transform: translateX(-2px);
+}
+
+.comm-profile-back-btn i {
+  font-size: 0.8rem;
+  transition: transform 0.25s ease;
+}
+
+.comm-profile-back-btn:hover i {
+  transform: translateX(-3px);
+}
+
+[data-theme="light"] .comm-profile-back-btn {
+  background: rgba(255, 255, 255, 0.7);
+  color: #222;
+}
+
+[data-theme="light"] .comm-profile-back-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .comm-profile-cover {
@@ -1488,10 +2543,10 @@
 ========================================== */
 @media screen and (max-width: 1024px) {
   .community-wrapper {
-    grid-template-columns: 200px 1fr; /* Thu nhÃƒÂ¡Ã‚Â»Ã‚Â sidebar trÃƒÆ’Ã‚Â¡i */
+    grid-template-columns: 200px 1fr; /* Sidebar chats, Khu chat chinh, Info ban chat */
   }
   #commFeedView {
-    grid-template-columns: 1fr; /* ÃƒÂ¡Ã‚ÂºÃ‚Â¨n sidebar phÃƒÂ¡Ã‚ÂºÃ‚Â£i (GÃƒÂ¡Ã‚Â»Ã‚Â£i ÃƒÆ’Ã‚Â½) */
+    grid-template-columns: 1fr; /* Sidebar chats, Khu chat chinh, Info ban chat */
   }
   .comm-right-sidebar {
     display: none;
@@ -1573,6 +2628,10 @@
 }
 .comm-friend-online-dot.offline {
   background: #72767d;
+}
+.comm-friend-online-dot.online {
+  background: #3ba55c;
+  box-shadow: 0 0 6px rgba(59, 165, 92, 0.5);
 }
 
 /* --- Info block: Tên + Vai trò --- */
@@ -1820,6 +2879,21 @@
   .comm-composer-bottom {
     padding-left: 44px !important;
   }
+  .comm-composer-preview {
+    padding-left: 44px !important;
+  }
+  .comm-composer-movie-tag {
+    padding-left: 44px !important;
+  }
+  .comm-movie-tag-content {
+    max-width: 100% !important;
+  }
+  .comm-movie-search-dropdown {
+    margin-left: 0 !important;
+  }
+  .comm-post-movie-ref img {
+    width: 70px !important;
+  }
 
   /* --- POST CARD: padding nhỏ --- */
   .comm-post-card {
@@ -1950,7 +3024,7 @@
 /* ==========================================
    MODAL & GLOBAL CHAT FIXES (Ãƒâ€žÃ‚ÂÃƒÆ’Ã‚Â£ sÃƒÂ¡Ã‚Â»Ã‚Â­a: Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â°a ra ngoÃƒÆ’Ã‚Â i media query)
    ========================================== */
-/* Modal ChÃƒÂ¡Ã‚Â»Ã¢â‚¬Â°nh sÃƒÂ¡Ã‚Â»Ã‚Â­a hÃƒÂ¡Ã‚Â»Ã¢â‚¬Å“ sÃƒâ€ Ã‚Â¡ */
+/* --- */
 .comm-modal {
   position: fixed;
   inset: 0;
@@ -1980,7 +3054,7 @@
   flex-direction: column;
 }
 
-/* Modal rá»™ng hÆ¡n cho BÃ¬nh luáº­n */
+/* --- */
 .comm-modal-content.modal-lg {
   max-width: 800px;
 }
@@ -2025,7 +3099,7 @@
   padding: 25px;
 }
 
-/* Danh sÃƒÆ’Ã‚Â¡ch bÃƒÆ’Ã‚Â¬nh luÃƒÂ¡Ã‚ÂºÃ‚Â­n */
+/* --- */
 #profileCommentsList {
   max-height: 500px;
   overflow-y: auto;
@@ -2460,23 +3534,24 @@
    STATE-BASED STYLES (Chat Active)
    ========================================== */
 body.comm-chat-active {
-  overflow: hidden !important; /* KhÃƒÆ’Ã‚Â³a cuÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢n toÃƒÆ’Ã‚Â n trang */
+  overflow: hidden !important; /* Khóa cuộn toàn trang */
   height: 100vh;
 }
 
 body.comm-chat-active footer {
-  display: none !important; /* ÃƒÂ¡Ã‚ÂºÃ‚Â¨n chÃƒÆ’Ã‚Â¢n trang */
+  display: none !important; /* Ẩn chân trang */
 }
 
-/* TÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœi Ãƒâ€ Ã‚Â°u layout cÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢ng Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã¢â‚¬Å“ng khi chat active Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã†â€™ chiÃƒÂ¡Ã‚ÂºÃ‚Â¿m trÃƒÂ¡Ã‚Â»Ã‚Ân mÃƒÆ’Ã‚Â n hÃƒÆ’Ã‚Â¬nh */
+/* Tối ưu layout cộng đồng khi chat active để chiếm trọn màn hình */
 body.comm-chat-active .community-wrapper {
-  height: calc(100vh - 80px); /* Fill nÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœt phÃƒÂ¡Ã‚ÂºÃ‚Â§n footer bÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¹ mÃƒÂ¡Ã‚ÂºÃ‚Â¥t */
+  height: calc(100vh - 108px); /* Tối ưu chiều cao khi ở Chat (navbar + margin) */
   padding-bottom: 0;
+  margin-top: 25px;
 }
 
 @media screen and (max-width: 768px) {
   body.comm-chat-active .community-wrapper {
-    height: calc(100dvh - 70px); /* DÃƒÆ’Ã‚Â¹ng dvh cho mobile Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã†â€™ trÃƒÆ’Ã‚Â¡nh thanh Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¹a chÃƒÂ¡Ã‚Â»Ã¢â‚¬Â° */
+    height: calc(100dvh - 70px); /* Dùng dvh cho mobile để tránh thanh địa chỉ */
     padding-bottom: 0px;
     margin-bottom: 0px;
   }
@@ -2489,7 +3564,7 @@ body.comm-chat-active .community-wrapper {
 
   body.comm-chat-active .comm-chat-box {
     flex: 1;
-    height: 100% !important; /* ChiÃƒÂ¡Ã‚ÂºÃ‚Â¿m trÃƒÂ¡Ã‚Â»Ã‚Ân phÃƒÂ¡Ã‚ÂºÃ‚Â§n cÃƒÆ’Ã‚Â²n lÃƒÂ¡Ã‚ÂºÃ‚Â¡i cÃƒÂ¡Ã‚Â»Ã‚Â§a mÃƒÆ’Ã‚Â n hÃƒÆ’Ã‚Â¬nh mobie */
+    height: 100% !important; /* Chiếm trọn phần còn lại của màn hình mobile */
     border-radius: 0;
     border-left: none;
     border-right: none;
@@ -2535,7 +3610,7 @@ body.comm-chat-active .community-wrapper {
    CALL UI v2.0 â€” REDESIGN (INCOMING & ACTIVE)
    ========================================== */
 
-/* 1. Modal CuÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢c gÃƒÂ¡Ã‚Â»Ã‚Âi Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚ÂºÃ‚Â¿n */
+/* Call/Video styles */
 
 /* --- 1. INCOMING CALL MODAL --- */
 
@@ -3146,7 +4221,7 @@ body.comm-chat-active .community-wrapper {
   flex-direction: column;
   background-color: var(--bg-secondary);
   border-left: 1px solid var(--border-color);
-  padding: 0 !important; /* Ghi dÃƒÂ¨ padding m?c d?nh */
+  padding: 0 !important; /* Khoang dem */
   overflow-y: auto;
   transition: transform 0.3s ease;
 }
@@ -3226,7 +4301,7 @@ body.comm-chat-active .community-wrapper {
   margin: 0;
 }
 
-/* B?ng Actions 4 nÃƒÂºt */
+/* --- */
 .tg-action-buttons {
   display: flex;
   justify-content: space-between;
@@ -3389,14 +4464,14 @@ body.comm-chat-active .community-wrapper {
 
 .comm-msg-reply-name {
   font-weight: 700;
-  color: #4f4f4e; /* Äá»•i sang Ä‘á» nháº¡t hÆ¡n Ä‘á»ƒ khÃ´ng bá»‹ chÃ¬m trÃªn ná»n xanh */
+  color: #4f4f4e; /* Mau chu */
   display: block;
   font-size: 0.75rem;
   margin-bottom: 2px;
 }
 
 .comm-msg-reply-text {
-  color: #e0e0e0; /* XÃ¡m tráº¯ng sÃ¡ng Ä‘á»ƒ dá»… Ä‘á»c */
+  color: #e0e0e0; /* Mau chu */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3866,7 +4941,7 @@ body.comm-chat-active .community-wrapper {
 }
 
 .comm-pinned-item {
-    position: relative; /* Ã„ÂÃ¡ÂºÂ£m bÃ¡ÂºÂ£o menu tuyÃ¡Â»â€¡t Ã„â€˜Ã¡Â»â€˜i theo item */
+    position: relative; /* Them de phuc vu absolute modal */
 }
 
 .comm-chat-pinned-actions {
@@ -3880,7 +4955,7 @@ body.comm-chat-active .community-wrapper {
    Äá»“ng bá»™ phong cÃ¡ch Blue Theme chuyÃªn nghiá»‡p
 ========================================== */
 
-/* Khu vá»±c há»“ sÆ¡ ngÆ°á»i dÃ¹ng */
+/* Khu vuc Message */
 .comm-chat-info-profile {
     display: flex;
     flex-direction: column;
@@ -3890,7 +4965,7 @@ body.comm-chat-active .community-wrapper {
     background: linear-gradient(180deg, rgba(77, 184, 255, 0.06) 0%, transparent 100%);
 }
 
-/* Avatar ngÆ°á»i dÃ¹ng */
+/* --- */
 .comm-info-avatar {
     width: 88px;
     height: 88px;
@@ -3910,7 +4985,7 @@ body.comm-chat-active .community-wrapper {
     box-shadow: 0 0 20px rgba(77, 184, 255, 0.3);
 }
 
-/* TÃªn ngÆ°á»i dÃ¹ng */
+/* --- */
 .comm-info-name {
     font-size: 1.15rem;
     font-weight: 700;
@@ -3930,7 +5005,7 @@ body.comm-chat-active .community-wrapper {
     margin: 0;
 }
 
-/* Khu vá»±c 3 nÃºt hÃ nh Ä‘á»™ng (Nháº¯n tin, ThÃ´ng bÃ¡o, Táº·ng quÃ ) */
+/* Khu vuc Message */
 .comm-info-actions {
     display: flex;
     gap: 20px;
@@ -3947,7 +5022,7 @@ body.comm-chat-active .community-wrapper {
     cursor: pointer;
 }
 
-/* NÃºt trÃ²n hÃ nh Ä‘á»™ng - gradient + glow */
+/* --- */
 .comm-info-btn {
     width: 44px;
     height: 44px;
@@ -3996,7 +5071,7 @@ body.comm-chat-active .community-wrapper {
     line-height: 1;
 }
 
-/* Label dÆ°á»›i nÃºt */
+/* --- */
 .comm-info-action-label {
     font-size: 0.72rem;
     color: var(--text-muted);
@@ -4010,7 +5085,7 @@ body.comm-chat-active .community-wrapper {
     color: var(--accent-primary);
 }
 
-/* Light mode cho nÃºt hÃ nh Ä‘á»™ng */
+/* Light Mode */
 [data-theme="light"] .comm-info-btn {
     box-shadow: 0 4px 12px rgba(0, 122, 255, 0.2);
 }
@@ -4224,7 +5299,7 @@ body.comm-chat-active .community-wrapper {
     background: rgba(0, 122, 255, 0.05);
 }
 
-/* NÃºt Äá»•i hÃ¬nh ná»n chat */
+/* --- */
 .comm-info-wallpaper-section {
     padding: 16px 20px;
 }
@@ -4659,7 +5734,7 @@ body.comm-chat-active .community-wrapper {
   display: flex;
   gap: 5px;
   margin-bottom: 10px;
-  overflow-x: auto; /* Cho phÃ©p cuá»™n ngang cÃ¡c danh má»¥c */
+  overflow-x: auto; /* Tránh scroll toàn trang, cuộn từng section */
   padding-bottom: 5px;
 }
 
@@ -4712,11 +5787,11 @@ body.comm-chat-active .community-wrapper {
 }
 
 .emoji-picker-body {
-  height: 300px; /* Cá»‘ Ä‘á»‹nh chiá»u cao vÃ¹ng cuá»™n Ä‘á»ƒ Ã©p overflow */
+  height: 300px; /* Tránh scroll toàn trang, cuộn từng section */
   overflow-y: auto !important;
   padding: 10px;
   scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch; /* Há»— trá»£ cuá»™n mÆ°á»£t trÃªn mobile */
+  -webkit-overflow-scrolling: touch; /* Tránh scroll toàn trang, cuộn từng section */
 }
 
 /* Tá»‘i Æ°u scrollbar cho Emoji Picker */
@@ -4975,7 +6050,7 @@ body.comm-chat-active .community-wrapper {
     box-shadow: 0 0 20px rgba(255, 51, 51, 0.5);
 }
 
-/* áº¨n khi á»Ÿ Mobile Ä‘á»ƒ khÃ´ng bá»‹ Ä‘Ã¨ */
+/* --- */
 @media (max-width: 992px) {
     .lightbox-close-absolute {
         right: 15px;
@@ -5005,7 +6080,7 @@ body.comm-chat-active .community-wrapper {
     height: 100%;
     min-height: 0;
     max-height: 100%;
-    overflow: hidden; /* KhÃ´ng cuá»™n á»Ÿ Ä‘Ã¢y Ä‘á»ƒ giá»¯ toolbar cá»‘ Ä‘á»‹nh */
+    overflow: hidden; /* Tránh scroll toàn trang, cuộn từng section */
 }
 
 .lightbox-toolbar {
@@ -5014,7 +6089,7 @@ body.comm-chat-active .community-wrapper {
     align-items: center;
     width: 100%;
     max-width: 800px;
-    background: rgba(20, 20, 25, 0.95); /* Ná»n Ä‘áº·c hÆ¡n Ä‘á»ƒ khÃ´ng bá»‹ lá»™ áº£nh phÃ­a sau */
+    background: rgba(20, 20, 25, 0.95); /* Mau nen */
     padding: 10px 20px;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.15);
@@ -5086,16 +6161,16 @@ body.comm-chat-active .community-wrapper {
     width: 100%;
     height: 0;
     min-height: 0; 
-    overflow: auto; /* Chuyá»ƒn vÃ¹ng cuá»™n vÃ o Ä‘Ã¢y */
-    padding: 40px; /* ThÃªm padding Ä‘á»ƒ cÃ³ khoáº£ng cÃ¡ch khi zoom */
+    overflow: auto; /* Tránh scroll toàn trang, cuộn từng section */
+    padding: 40px; /* Khoang dem */
     box-sizing: border-box;
-    cursor: grab; /* Máº·c Ä‘á»‹nh lÃ  bÃ n tay má»Ÿ */
+    cursor: grab; /* Con tro chuot */
     --zoom: 1;
     --rotate: 0deg;
 }
 
 .lightbox-img-wrapper.grabbing {
-    cursor: grabbing; /* BÃ n tay náº¯m khi Ä‘ang kÃ©o */
+    cursor: grabbing; /* Con tro chuot */
     user-select: none;
 }
 
@@ -5419,8 +6494,8 @@ body.comm-chat-active .community-wrapper {
     margin-bottom: 20px;
     font-size: 0.9rem;
     color: var(--text-muted);
-    max-height: 200px; /* TÄƒng chiá»u cao Ä‘á»ƒ tháº¥y áº£nh rÃµ hÆ¡n */
-    overflow-y: auto; /* Cho phÃ©p cuá»™n náº¿u ná»™i dung quÃ¡ dÃ i */
+    max-height: 200px; /* Chieu cao */
+    overflow-y: auto; /* Tránh scroll toàn trang, cuộn từng section */
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -5473,7 +6548,7 @@ body.comm-chat-active .community-wrapper {
 
 .comm-chat-messages {
     position: relative;
-    background: transparent !important; /* Äá»ƒ lá»™ hÃ¬nh ná»n phÃ­a sau */
+    background: transparent !important; /* Mau nen */
     z-index: 1;
 }
 
@@ -5496,7 +6571,7 @@ body.comm-chat-active .community-wrapper {
     opacity: 1;
 }
 
-/* Äáº£m báº£o tin nháº¯n ná»•i lÃªn trÃªn overlay */
+/* Container #commChatContent: flex:1 chiem phan con lai */
 .message-row {
     position: relative;
     z-index: 1;
@@ -5535,7 +6610,7 @@ body.comm-chat-active .community-wrapper {
     font-size: 0.85rem;
 }
 
-/* CSS Ä‘Ã£ Ä‘Æ°á»£c há»£p nháº¥t xuá»‘ng dÆ°á»›i cÃ¹ng (v6.8) Ä‘á»ƒ trÃ¡nh xung Ä‘á»™t */
+/* --- */
 
 /* Position Picker Styles */
 .wp-position-picker {
@@ -5599,7 +6674,7 @@ body.comm-chat-active .community-wrapper {
 
 .wallpaper-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); /* Giáº£m tá»« 130px xuá»‘ng 100px Ä‘á»ƒ lÃªn 3 cá»™t */
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); /* Sidebar chats, Khu chat chinh, Info ban chat */
     gap: 8px; /* Giáº£m gap cho gá»n */
     max-height: none;
     padding: 5px;
@@ -5609,14 +6684,14 @@ body.comm-chat-active .community-wrapper {
     display: flex !important;
     flex-direction: column !important;
     flex: 1;
-    overflow: hidden !important; /* Cháº·n cuá»™n toÃ n vÃ¹ng Ä‘á»ƒ cá»‘ Ä‘á»‹nh controls */
+    overflow: hidden !important; /* Khóa cuộn toàn trang */
     padding: 20px !important;
     height: 100%;
 }
 
 .wp-tab-content {
     flex: 1;
-    overflow-y: auto; /* Chá»‰ cho phÃ©p cuá»™n á»Ÿ Ä‘Ã¢y */
+    overflow-y: auto; /* Tránh scroll toàn trang, cuộn từng section */
     padding-right: 5px;
     margin-bottom: 10px;
     scrollbar-width: thin;
@@ -5626,7 +6701,7 @@ body.comm-chat-active .community-wrapper {
 .wallpaper-item {
     position: relative;
     aspect-ratio: 9/16;
-    border-radius: 8px; /* Giáº£m tá»« 12px xuá»‘ng 8px cho há»£p kÃ­ch thÆ°á»›c nhá» */
+    border-radius: 8px; /* Bo goc */
     overflow: hidden;
     cursor: pointer;
     border: 2px solid transparent;
@@ -5849,7 +6924,7 @@ body.comm-chat-active .community-wrapper {
     border: 3px solid #fff;
 }
 
-/* Reset triá»‡t Ä‘á»ƒ má»i bÃ³ng ma UI máº·c Ä‘á»‹nh */
+/* --- */
 .wp-clean-slider::-webkit-slider-container,
 .wp-clean-slider::-webkit-media-slider-container,
 .wp-clean-slider::-webkit-slider-runnable-track::before,
@@ -5858,7 +6933,7 @@ body.comm-chat-active .community-wrapper {
     background: none !important;
 }
 
-/* Äá»’NG Bá»˜ MÃ€U Äá»Ž THÆ¯Æ NG HIá»†U */
+/* --- */
 .wallpaper-tabs {
     display: flex;
     gap: 8px;
@@ -5945,7 +7020,7 @@ body.comm-chat-active .community-wrapper {
     to { transform: translateX(0); }
 }
 
-/* áº¨n bá»›t cÃ¡c pháº§n khÃ´ng cáº§n thiáº¿t khi preview Ä‘á»ƒ Ä‘á»¡ rá»‘i */
+/* --- */
 #commWallpaperModal .wp-upload-area {
     padding: 15px;
 }
@@ -6025,7 +7100,7 @@ body.comm-chat-active .community-wrapper {
    THÃ”NG BÃO CINECHAT - Badge, Toast, Mute
 ========================================== */
 
-/* Badge tin chÆ°a Ä‘á»c trÃªn má»—i chat item */
+/* Chat item styles */
 .comm-unread-badge {
     min-width: 20px;
     height: 20px;
@@ -6210,7 +7285,7 @@ body.comm-chat-active .community-wrapper {
     margin-bottom: 2px;
 }
 
-/* NÃºt Mute Ä‘Ã£ táº¯t thÃ´ng bÃ¡o */
+/* --- */
 .comm-info-btn.muted {
     background: rgba(255, 255, 255, 0.08) !important;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
@@ -6224,7 +7299,7 @@ body.comm-chat-active .community-wrapper {
     display: none;
 }
 
-/* === POPUP CÃ€I Äáº¶T THÃ”NG BÃO === */
+/* --- */
 .notif-settings-popup {
     position: absolute;
     top: calc(100% + 8px);
@@ -6438,7 +7513,7 @@ body.comm-chat-active .community-wrapper {
     color: #f0ad4e !important;
 }
 
-/* Bá»™ Ä‘áº¿m ngÆ°á»£c háº¹n giá» táº¯t thÃ´ng bÃ¡o */
+/* --- */
 .mute-countdown {
     position: absolute;
     bottom: -22px;
@@ -6472,7 +7547,7 @@ body.comm-chat-active .community-wrapper {
     100% { transform: rotate(360deg); }
 }
 
-/* Chat item cÃ³ tin chÆ°a Ä‘á»c â†’ in Ä‘áº­m tÃªn + preview */
+/* Chat item styles */
 .comm-chat-item.has-unread .comm-chat-item-name {
     color: #fff !important;
 }
@@ -6595,4 +7670,662 @@ body.comm-chat-active .community-wrapper {
     min-width: 0 !important;
   }
 }
+
+/* ==========================================
+   MODAL QR CODE USER
+   Hiển thị mã QR cho user dựa trên ID duy nhất
+========================================== */
+
+/* Tùy chỉnh kích thước modal QR */
+.comm-qr-modal-content {
+    max-width: 360px !important;
+    width: 90vw;
+}
+
+/* Body modal QR */
+.comm-qr-body {
+    padding: 30px 20px 25px !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+
+/* Nút toggle hiện/ẩn mã QR của tôi */
+.comm-qr-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(77, 184, 255, 0.25);
+    background: rgba(77, 184, 255, 0.06);
+    color: var(--accent-primary);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 14px;
+}
+
+.comm-qr-toggle-btn:hover {
+    background: rgba(77, 184, 255, 0.12);
+    border-color: var(--accent-primary);
+}
+
+.comm-qr-toggle-arrow {
+    font-size: 0.7rem;
+    transition: transform 0.3s ease;
+    margin-left: auto;
+}
+
+.comm-qr-toggle-btn.active .comm-qr-toggle-arrow {
+    transform: rotate(180deg);
+}
+
+/* Section QR ẩn/hiện */
+.comm-qr-my-section {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+[data-theme="light"] .comm-qr-toggle-btn {
+    border-color: rgba(0, 122, 255, 0.2);
+    background: rgba(0, 122, 255, 0.05);
+    color: var(--accent-secondary);
+}
+
+[data-theme="light"] .comm-qr-toggle-btn:hover {
+    background: rgba(0, 122, 255, 0.1);
+    border-color: var(--accent-secondary);
+}
+
+/* Phần profile user trên modal QR */
+.comm-qr-profile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.comm-qr-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    background-image: linear-gradient(var(--bg-secondary), var(--bg-secondary)), var(--accent-gradient);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    object-fit: cover;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 15px rgba(0, 122, 255, 0.2);
+}
+
+.comm-qr-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 3px;
+    letter-spacing: 0.3px;
+}
+
+.comm-qr-username {
+    font-size: 0.85rem;
+    color: var(--accent-primary);
+    margin: 0;
+    font-weight: 500;
+}
+
+/* Container bọc QR Code */
+.comm-qr-canvas-wrapper {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    display: inline-block;
+}
+
+.comm-qr-canvas {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 200px;
+    height: 200px;
+}
+
+.comm-qr-canvas img {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+}
+
+/* Gợi ý dưới QR */
+.comm-qr-hint {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin: 0 0 14px;
+    max-width: 260px;
+    line-height: 1.4;
+}
+
+/* Nút tải QR */
+.comm-qr-download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 24px;
+    border-radius: 12px;
+    border: 1px solid rgba(77, 184, 255, 0.25);
+    background: rgba(77, 184, 255, 0.08);
+    color: var(--accent-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 18px;
+}
+
+.comm-qr-download-btn:hover {
+    background: rgba(77, 184, 255, 0.15);
+    border-color: var(--accent-primary);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(77, 184, 255, 0.2);
+}
+
+.comm-qr-download-btn:active {
+    transform: translateY(0);
+}
+
+/* Divider "hoặc" */
+.comm-qr-divider {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.comm-qr-divider::before,
+.comm-qr-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-color);
+}
+
+.comm-qr-divider span {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 500;
+}
+
+/* Phần tìm kiếm user bằng ID */
+.comm-qr-search {
+    width: 100%;
+}
+
+.comm-qr-search-label {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin: 0 0 8px;
+    text-align: left;
+}
+
+.comm-qr-search-input-group {
+    display: flex;
+    gap: 8px;
+}
+
+.comm-qr-search-input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    transition: border-color 0.2s ease;
+    outline: none;
+}
+
+.comm-qr-search-input:focus {
+    border-color: var(--accent-primary);
+}
+
+.comm-qr-search-input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
+.comm-qr-search-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: var(--accent-gradient);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 3px 10px rgba(0, 122, 255, 0.25);
+    flex-shrink: 0;
+}
+
+.comm-qr-search-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 122, 255, 0.35);
+}
+
+.comm-qr-search-btn:active {
+    transform: translateY(0);
+}
+
+/* === LIGHT MODE === */
+[data-theme="light"] .comm-qr-name {
+    color: #000;
+}
+
+[data-theme="light"] .comm-qr-username {
+    color: var(--accent-secondary);
+}
+
+[data-theme="light"] .comm-qr-canvas-wrapper {
+    background: #fff;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .comm-qr-download-btn {
+    border-color: rgba(0, 122, 255, 0.2);
+    background: rgba(0, 122, 255, 0.06);
+    color: var(--accent-secondary);
+}
+
+[data-theme="light"] .comm-qr-download-btn:hover {
+    background: rgba(0, 122, 255, 0.1);
+    border-color: var(--accent-secondary);
+    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.15);
+}
+
+[data-theme="light"] .comm-qr-search-input {
+    background: #f5f7fa;
+    border-color: rgba(0, 0, 0, 0.1);
+    color: #000;
+}
+
+[data-theme="light"] .comm-qr-search-input:focus {
+    border-color: var(--accent-secondary);
+}
+
+[data-theme="light"] .comm-qr-search-btn {
+    box-shadow: 0 3px 10px rgba(0, 122, 255, 0.2);
+}
+
+/* === NÚT QR TRONG Ô TÌM KIẾM SIDEBAR === */
+.comm-search-box {
+    position: relative;
+}
+
+.comm-search-qr-btn {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: rgba(77, 184, 255, 0.1);
+    border: 1px solid rgba(77, 184, 255, 0.2);
+    color: var(--accent-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    transition: all 0.25s ease;
+    z-index: 2;
+}
+
+.comm-search-qr-btn:hover {
+    background: rgba(77, 184, 255, 0.2);
+    border-color: var(--accent-primary);
+    transform: translateY(-50%) scale(1.08);
+}
+
+.comm-search-qr-btn:active {
+    transform: translateY(-50%) scale(1);
+}
+
+/* Đẩy padding phải cho input để không bị chồng nút QR */
+.comm-search-box .comm-search-input {
+    padding-right: 42px !important;
+}
+
+[data-theme="light"] .comm-search-qr-btn {
+    background: rgba(0, 122, 255, 0.06);
+    border-color: rgba(0, 122, 255, 0.15);
+    color: var(--accent-secondary);
+}
+
+[data-theme="light"] .comm-search-qr-btn:hover {
+    background: rgba(0, 122, 255, 0.12);
+    border-color: var(--accent-secondary);
+}
+
+/* ==========================================
+   QR SCANNER - QUÉT MÃ QR (Upload + Camera)
+========================================== */
+
+/* Header modal QR */
+.comm-qr-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.comm-qr-header-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background: var(--accent-gradient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: #fff;
+    margin-bottom: 12px;
+    box-shadow: 0 6px 20px rgba(0, 122, 255, 0.3);
+}
+
+.comm-qr-header-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 4px;
+}
+
+.comm-qr-header-desc {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* 2 Card quét QR dạng tile */
+.comm-qr-scan-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.comm-qr-scan-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 20px 12px 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(77, 184, 255, 0.15);
+    background: rgba(77, 184, 255, 0.04);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.comm-qr-scan-card:hover {
+    background: rgba(77, 184, 255, 0.1);
+    border-color: rgba(77, 184, 255, 0.4);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 122, 255, 0.15);
+}
+
+.comm-qr-scan-card:active {
+    transform: translateY(-1px);
+}
+
+.comm-qr-scan-card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #007aff, #4db8ff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.25);
+    transition: box-shadow 0.3s ease;
+}
+
+.comm-qr-scan-card-icon.camera {
+    background: linear-gradient(135deg, #00b894, #55efc4);
+    box-shadow: 0 4px 12px rgba(0, 184, 148, 0.25);
+}
+
+.comm-qr-scan-card:hover .comm-qr-scan-card-icon {
+    box-shadow: 0 6px 18px rgba(0, 122, 255, 0.35);
+}
+
+.comm-qr-scan-card:hover .comm-qr-scan-card-icon.camera {
+    box-shadow: 0 6px 18px rgba(0, 184, 148, 0.35);
+}
+
+.comm-qr-scan-card-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.comm-qr-scan-card-desc {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.2;
+}
+
+/* Light mode cho scan card */
+[data-theme="light"] .comm-qr-header-title {
+    color: #111;
+}
+
+[data-theme="light"] .comm-qr-scan-card {
+    border-color: rgba(0, 122, 255, 0.12);
+    background: rgba(0, 122, 255, 0.03);
+}
+
+[data-theme="light"] .comm-qr-scan-card:hover {
+    background: rgba(0, 122, 255, 0.07);
+    border-color: rgba(0, 122, 255, 0.3);
+    box-shadow: 0 8px 24px rgba(0, 122, 255, 0.1);
+}
+
+[data-theme="light"] .comm-qr-scan-card-title {
+    color: #111;
+}
+
+/* Khu vực preview camera */
+.comm-qr-camera-preview {
+    width: 100%;
+    border-radius: 14px;
+    overflow: hidden;
+    position: relative;
+    background: #000;
+    margin-bottom: 14px;
+    aspect-ratio: 4/3;
+    max-height: 200px;
+}
+
+.comm-qr-camera-preview video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Overlay khung quét */
+.comm-qr-camera-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+/* Khung quét QR animation */
+.comm-qr-scan-frame {
+    width: 160px;
+    height: 160px;
+    border: 2px solid rgba(77, 184, 255, 0.6);
+    border-radius: 16px;
+    position: relative;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+}
+
+/* Góc bo sáng hơn */
+.comm-qr-scan-frame::before,
+.comm-qr-scan-frame::after {
+    content: '';
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border-color: #4db8ff;
+    border-style: solid;
+}
+
+.comm-qr-scan-frame::before {
+    top: -1px;
+    left: -1px;
+    border-width: 3px 0 0 3px;
+    border-radius: 8px 0 0 0;
+}
+
+.comm-qr-scan-frame::after {
+    top: -1px;
+    right: -1px;
+    border-width: 3px 3px 0 0;
+    border-radius: 0 8px 0 0;
+}
+
+/* Đường quét laser animation */
+@keyframes qrScanLine {
+    0%, 100% { top: 0; }
+    50% { top: calc(100% - 2px); }
+}
+
+.comm-qr-scan-frame > .scan-line,
+.comm-qr-camera-preview .comm-qr-scan-frame::before {
+    animation: none;
+}
+
+.comm-qr-camera-hint {
+    position: absolute;
+    bottom: 40px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.78rem;
+    font-weight: 500;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    margin: 0;
+}
+
+/* Nút đóng camera */
+.comm-qr-camera-close {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 6px 16px;
+    border-radius: 20px;
+    background: rgba(229, 9, 20, 0.85);
+    border: none;
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.2s;
+    backdrop-filter: blur(4px);
+}
+
+.comm-qr-camera-close:hover {
+    background: rgba(229, 9, 20, 1);
+}
+
+/* Kết quả quét QR */
+.comm-qr-scan-result {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: rgba(77, 184, 255, 0.08);
+    border: 1px solid rgba(77, 184, 255, 0.2);
+    margin-bottom: 12px;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    text-align: center;
+    animation: fadeIn 0.3s ease;
+}
+
+.comm-qr-scan-result.error {
+    background: rgba(255, 77, 77, 0.08);
+    border-color: rgba(255, 77, 77, 0.2);
+    color: #ff6b6b;
+}
+
+.comm-qr-scan-result.success {
+    background: rgba(77, 255, 130, 0.08);
+    border-color: rgba(77, 255, 130, 0.2);
+    color: #4dff82;
+}
+
+/* === LIGHT MODE === */
+[data-theme="light"] .comm-qr-scan-btn {
+    border-color: rgba(0, 122, 255, 0.2);
+    background: rgba(0, 122, 255, 0.04);
+    color: var(--accent-secondary);
+}
+
+[data-theme="light"] .comm-qr-scan-btn:hover {
+    background: rgba(0, 122, 255, 0.1);
+    border-color: var(--accent-secondary);
+    box-shadow: 0 3px 12px rgba(0, 122, 255, 0.1);
+}
+
+[data-theme="light"] .comm-qr-scan-result {
+    color: #333;
+}
+
+[data-theme="light"] .comm-qr-scan-result.success {
+    color: #2e8b57;
+}
+
+[data-theme="light"] .comm-qr-scan-result.error {
+    color: #cc3333;
+}
+
+
+
 

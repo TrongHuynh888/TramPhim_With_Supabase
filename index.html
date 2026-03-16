@@ -5,7 +5,7 @@
     <link rel="stylesheet" href="css/watch-party.css?v=1" />
     <link rel="stylesheet" href="css/variables.css?v=3" />
     <link rel="stylesheet" href="css/base.css?v=3" />
-    <link rel="stylesheet" href="css/components.css?v=18" />
+    <link rel="stylesheet" href="css/components.css?v=19" />
     <link rel="stylesheet" href="css/layout.css?v=6" />
     <link rel="stylesheet" href="css/admin.css?v=3" />
     <link rel="stylesheet" href="css/responsive.css?v=160" />
@@ -74,6 +74,10 @@
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest" crossorigin></script>
     <!-- SortableJS for Drag & Drop -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
+    <!-- QR Code Generator cho tính năng mã QR user -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js" defer></script>
+    <!-- QR Code Reader/Decoder cho tính năng quét QR -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" defer></script>
     <script src="js/emoji-picker.js" defer></script>
 
     <!-- Custom CSS -->
@@ -187,6 +191,15 @@
               <div class="notification-dropdown-header">
                   <strong><i class="fas fa-bell text-info"></i> Thông báo</strong>
                   <button onclick="markAllAsRead()" class="btn-mark-read">Đánh dấu đã đọc</button>
+              </div>
+              <!-- Tab chuyển đổi Phim / Cộng đồng -->
+              <div class="notification-tabs">
+                <button class="notif-tab active" data-tab="movie" onclick="switchNotifTab('movie')">
+                  <i class="fas fa-film"></i> Phim <span class="notif-tab-badge" id="notifTabBadgeMovie"></span>
+                </button>
+                <button class="notif-tab" data-tab="community" onclick="switchNotifTab('community')">
+                  <i class="fas fa-globe"></i> Cộng đồng <span class="notif-tab-badge" id="notifTabBadgeCommunity"></span>
+                </button>
               </div>
               <ul class="dropdown-list" id="notificationList" style="padding: 0; margin: 0; list-style: none; overflow-y: auto; flex-grow: 1;">
                   <li style="padding: 15px; text-align: center; color: var(--text-muted);">Đang tải thông báo...</li>
@@ -439,9 +452,54 @@
         <section class="section">
           <div class="section-header">
             <h2 class="section-title">Diễn Viên</h2>
+            <div class="search-filter">
+              <!-- Ô tìm kiếm tên diễn viên -->
+              <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input
+                  type="text"
+                  class="form-input"
+                  id="searchActors"
+                  placeholder="Tìm diễn viên..."
+                  onkeydown="if(event.key==='Enter') filterActors()"
+                />
+              </div>
+              <div class="custom-filter-group">
+                <!-- Quốc gia -->
+                <div class="custom-filter-box" id="boxFilterActorCountry">
+                  <i class="fas fa-globe-asia"></i>
+                  <input type="text" id="inputFilterActorCountry" placeholder="Quốc gia..." autocomplete="off">
+                  <div class="suggestions-dropdown" id="listFilterActorCountry"></div>
+                </div>
+
+                <!-- Giới tính -->
+                <div class="custom-filter-box" id="boxFilterActorGender">
+                  <i class="fas fa-venus-mars"></i>
+                  <input type="text" id="inputFilterActorGender" placeholder="Giới tính..." autocomplete="off">
+                  <div class="suggestions-dropdown" id="listFilterActorGender"></div>
+                </div>
+
+                <!-- Sắp xếp -->
+                <div class="custom-filter-box" id="boxFilterActorSort">
+                  <i class="fas fa-sort-amount-down"></i>
+                  <input type="text" id="inputFilterActorSort" placeholder="Sắp xếp..." autocomplete="off">
+                  <div class="suggestions-dropdown" id="listFilterActorSort"></div>
+                </div>
+
+                <!-- Nút Lọc -->
+                <button class="btn-filter-apply" onclick="filterActors()">
+                  <i class="fas fa-filter"></i> Lọc
+                </button>
+              </div>
+            </div>
           </div>
+          <div id="actorFilterResultSummary" class="filter-result-summary"></div>
           <div class="actors-grid" id="actorsGrid">
             <!-- Actors sẽ được render bằng JS -->
+          </div>
+          <!-- Phân trang diễn viên -->
+          <div class="pagination-container" id="actorsPagination" style="display: none;">
+            <!-- JS sẽ render pagination -->
           </div>
         </section>
       </div>
@@ -1028,16 +1086,18 @@
     <script src="js/data.js?v=2"></script>
 
     <script src="js/auth.js?v=3.1"></script>
-    <script src="js/notifications.js?v=2"></script>
+    <script src="js/notifications.js?v=3"></script>
     <script src="js/user.js?v=8"></script>
     <script src="js/home.js?v=2"></script>
     <script src="js/detail.js?v=2"></script>
-    <script src="js/admin.js?v=2"></script>
+    <!-- Chart.js cho Dashboard Admin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="js/admin.js?v=3"></script>
 
     <script src="js/upgrade.js?v=2"></script>
     <script src="js/intro.js?v=2"></script>
     <script src="js/watch-party.js?v=5"></script>
-    <script src="js/community.js?v=7.1"></script>
+    <script src="js/community.js?v=7.2"></script>
     <script src="js/series-movies.js?v=2"></script>
     <script src="js/single-movies.js?v=2"></script>
     <script src="js/banner-slider.js?v=2"></script>
@@ -1099,6 +1159,10 @@
         }
         if (panelName === "watchRooms" && typeof loadAdminWatchRooms === "function") {
             loadAdminWatchRooms();
+        }
+        // Re-render biểu đồ khi quay lại Dashboard (fix kích thước canvas)
+        if (panelName === "dashboard" && typeof loadAdminStats === "function") {
+            setTimeout(function() { loadAdminStats(); }, 100);
         }
 
         // 4. [NEW] Tự động đóng menu trên Mobile sau khi chọn

@@ -15,7 +15,92 @@ function openProfileModal() {
   document.getElementById("profileNewAvatar").value =
     currentUser.photoURL || ""; // Điền link ảnh cũ
 
+  // Generate QR code mini kế avatar
+  const qrMini = document.getElementById("profileQRMini");
+  if (qrMini && typeof qrcode !== 'undefined') {
+    try {
+      const qr = qrcode(0, 'M');
+      qr.addData(`moviechain://user/${currentUser.id}`);
+      qr.make();
+      qrMini.innerHTML = qr.createImgTag(2, 0);
+      // Đảm bảo ảnh QR fill đúng container
+      const img = qrMini.querySelector('img');
+      if (img) {
+        img.style.cssText = 'width: 100%; height: 100%; border-radius: 6px;';
+      }
+    } catch (e) {
+      console.error('Lỗi tạo QR mini:', e);
+      qrMini.innerHTML = '<i class="fas fa-qrcode" style="font-size: 32px; color: #888; display: flex; align-items: center; justify-content: center; height: 100%;"></i>';
+    }
+  }
+
   openModal("profileModal");
+}
+
+/**
+ * Mở modal QR chỉ hiển thị mã QR của tôi (không quét)
+ */
+function openMyQRFromProfile() {
+  closeModal("profileModal");
+
+  const modal = document.getElementById('commUserQRModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  // Ẩn toàn bộ phần quét — chỉ hiện QR của tôi
+  const scanActions = modal.querySelector('.comm-qr-scan-actions');
+  const cameraPreview = document.getElementById('qrCameraPreview');
+  const searchGroup = modal.querySelector('.comm-qr-search');
+  const scanResult = document.getElementById('qrScanResult');
+  const divider = modal.querySelector('.comm-qr-divider');
+  const fileInput = document.getElementById('qrFileInput');
+
+  const hideEls = [scanActions, cameraPreview, searchGroup, scanResult, divider, fileInput];
+  hideEls.forEach(el => { if (el) el.style.display = 'none'; });
+
+  // Đổi tiêu đề modal
+  const titleEl = modal.querySelector('.comm-qr-header-title');
+  const descEl = modal.querySelector('.comm-qr-header-desc');
+  const origTitle = titleEl ? titleEl.textContent : '';
+  const origDesc = descEl ? descEl.textContent : '';
+  if (titleEl) titleEl.textContent = 'Mã QR của tôi';
+  if (descEl) descEl.textContent = 'Chia sẻ mã này để bạn bè tìm thấy bạn';
+
+  // Hiện phần QR trực tiếp + ẩn nút toggle
+  const section = document.getElementById('qrMyCodeSection');
+  if (section) section.style.display = 'block';
+  const toggleBtn = modal.querySelector('.comm-qr-toggle-btn');
+  if (toggleBtn) toggleBtn.style.display = 'none';
+
+  // Cập nhật avatar + tên + @id thật
+  if (currentUser) {
+    const avatarEl = document.getElementById('qrUserAvatar');
+    const nameEl2 = document.getElementById('qrUserName');
+    const usernameEl = document.getElementById('qrUserUsername');
+    if (avatarEl) avatarEl.src = currentUser.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=random`;
+    if (nameEl2) nameEl2.textContent = currentUser.displayName || 'User';
+    if (usernameEl) usernameEl.textContent = `@${currentUser.id.slice(0, 8)}`;
+  }
+
+  // Generate QR
+  if (typeof generateUserQR === 'function' && currentUser) {
+    generateUserQR(currentUser.id);
+  }
+
+  // Khi đóng modal → khôi phục giao diện đầy đủ
+  const closeBtn = modal.querySelector('.comm-modal-close');
+  const origCloseHandler = closeBtn ? closeBtn.onclick : null;
+  if (closeBtn) {
+    closeBtn.onclick = function() {
+      hideEls.forEach(el => { if (el) el.style.display = ''; });
+      if (titleEl) titleEl.textContent = origTitle;
+      if (descEl) descEl.textContent = origDesc;
+      if (section) section.style.display = 'none';
+      if (toggleBtn) toggleBtn.style.display = '';
+      modal.style.display = 'none';
+      if (origCloseHandler) closeBtn.onclick = origCloseHandler;
+    };
+  }
 }
 
 // 2. Lưu thay đổi (Cập nhật cả Tên và Avatar)

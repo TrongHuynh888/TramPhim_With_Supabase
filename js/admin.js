@@ -55,7 +55,7 @@ let currentAdminVipPage = 1;
 let currentAdminErrorPage = 1;
 let currentAdminRoomPage = 1;
 
-const adminPerPage = 20; // Số mục mỗi trang mặc định cho các tab
+const adminPerPage = 15; // Số mục mỗi trang mặc định cho các tab
 
 /**
  * TỐI ƯU HÓA: DEBOUNCE CHO CÁC HÀM TÌM KIẾM ADMIN
@@ -471,69 +471,690 @@ window.deleteVipRequest = async function(requestId) {
 }
 
 /**
- * Load thống kê Admin
+ * Load thống kê Admin (Phiên bản Dashboard mới - PRO)
+ * Bao gồm: 6 stat cards, 4 biểu đồ Chart.js, bảng hoạt động gần đây
  */
 async function loadAdminStats() {
   if (!supabase) return;
   try {
-    // Tổng số phim (Đã có từ allMovies trong data.js)
-    document.getElementById("statTotalMovies").textContent = allMovies.length;
+    // === 1. Tổng số phim ===
+    const totalMovies = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) 
+      ? allAdminMovies.length 
+      : allMovies.length;
+    animateCountUp("statTotalMovies", totalMovies);
 
-    // Tổng lượt xem
-    const totalViews = allMovies.reduce((sum, m) => sum + (m.views || 0), 0);
-    document.getElementById("statTotalViews").textContent = formatNumber(totalViews);
+    // === 2. Tổng lượt xem ===
+    const moviesSrc = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) 
+      ? allAdminMovies : allMovies;
+    const totalViews = moviesSrc.reduce((sum, m) => sum + (m.views || 0), 0);
+    animateCountUp("statTotalViews", totalViews);
 
-    // Doanh thu ước tính (Từ transactions)
-    const { data: txData, error: txError } = await supabase
+    // === 3. Doanh thu ước tính (Từ transactions) ===
+    const { data: txData } = await supabase
         .from('transactions')
         .select('amount')
         .eq('status', 'completed');
-    
-    let totalRevenue = (txData || []).reduce((sum, tx) => sum + (tx.amount || 0), 0);
-    document.getElementById("statTotalRevenue").textContent = `${formatNumber(totalRevenue)} CRO`;
+    const totalRevenue = (txData || []).reduce((sum, tx) => sum + (tx.amount || 0), 0);
+    const revenueEl = document.getElementById("statTotalRevenue");
+    if (revenueEl) {
+      animateCountUp("statTotalRevenue", totalRevenue, 1200, ` CRO`);
+    }
 
-    // Tổng users (Từ profiles)
-    const { count, error: userError } = await supabase
+    // === 4. Tổng users ===
+    const { count: userCount } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true });
-    
-    document.getElementById("statTotalUsers").textContent = formatNumber(count || 0);
+    animateCountUp("statTotalUsers", userCount || 0);
 
-    // Recent movies
+    // === 5. VIP Users ===
+    const { count: vipCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_vip', true);
+    animateCountUp("statVipUsers", vipCount || 0);
+
+    // === 6. Báo lỗi chờ xử lý ===
+    const { count: errorCount } = await supabase
+        .from('error_reports')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+    animateCountUp("statPendingErrors", errorCount || 0);
+
+    // === Render các phần phụ ===
     renderRecentMovies();
+    renderDashboardCharts(moviesSrc);
+    renderRecentActivities();
+
   } catch (error) {
-    console.error("Lỗi load stats Supabase:", error);
+    console.error("Lỗi load stats Dashboard:", error);
   }
 }
 
 /**
- * Render phim gần đây trong dashboard
+ * Hiệu ứng đếm số từ 0 đến endValue
+ * @param {string} elementId - ID của element hiển thị số
+ * @param {number} endValue - Giá trị cuối cùng
+ * @param {number} duration - Thời gian animation (ms)
+ * @param {string} suffix - Hậu tố (ví dụ: ' CRO')
+ */
+function animateCountUp(elementId, endValue, duration = 1000, suffix = '') {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+
+  // Nếu giá trị = 0, hiển thị luôn
+  if (endValue === 0) {
+    el.textContent = '0' + suffix;
+    return;
+  }
+
+  const startTime = performance.now();
+  const startValue = 0;
+
+  function update(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Easing: ease-out
+    const easedProgress = 1 - Math.pow(1 - progress, 3);
+    const currentValue = Math.round(startValue + (endValue - startValue) * easedProgress);
+    
+    el.textContent = formatNumber(currentValue) + suffix;
+
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    } else {
+      el.textContent = formatNumber(endValue) + suffix;
+      el.classList.add('counting');
+      setTimeout(() => el.classList.remove('counting'), 300);
+    }
+  }
+
+  requestAnimationFrame(update);
+}
+
+/**
+ * Render phim gần đây trong dashboard (Phiên bản mới - thêm Loại + Lượt xem)
  */
 function renderRecentMovies() {
   const tbody = document.getElementById("recentMoviesTable");
   if (!tbody) return;
 
-  const recent = [...allMovies]
-    .sort((a, b) => {
-      const dateA = new Date(a.created_at || 0);
-      const dateB = new Date(b.created_at || 0);
-      return dateB - dateA;
-    })
+  const moviesSrc = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) 
+    ? allAdminMovies : allMovies;
+
+  const recent = [...moviesSrc]
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
     .slice(0, 5);
 
-  tbody.innerHTML = recent
-    .map((movie) => {
+  if (recent.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:20px;color:#888;">Chưa có phim nào</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = recent.map(movie => {
+    // Badge loại phim
+    const typeBadge = movie.type === 'series' 
+      ? '<span style="background:rgba(218,119,242,0.15);color:#da77f2;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">Phim bộ</span>'
+      : '<span style="background:rgba(77,171,247,0.15);color:#4dabf7;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">Phim lẻ</span>';
+
+    return `
+      <tr>
+        <td><img src="${movie.poster_url || movie.posterUrl || ''}" alt="${movie.title}" 
+             onerror="this.src='https://placehold.co/50x75'" style="width:45px;height:65px;object-fit:cover;border-radius:6px;"></td>
+        <td><strong style="font-size:0.9rem;">${movie.title}</strong></td>
+        <td>${typeBadge}</td>
+        <td><i class="fas fa-eye" style="color:var(--accent-primary);margin-right:4px;font-size:0.8rem;"></i>${formatNumber(movie.views || 0)}</td>
+        <td><span class="status-badge ${movie.status}">${getStatusText(movie.status)}</span></td>
+        <td style="font-size:0.85rem;color:var(--text-muted);">${formatDate(movie.created_at)}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+// === Lưu trữ Chart instances để hủy khi re-render ===
+window._dashCharts = window._dashCharts || {};
+
+// Lưu trạng thái period cho từng chart dashboard
+window._dashChartPeriods = window._dashChartPeriods || {
+  categories: 'all',
+  views: 'all',
+  topMovies: 'all'
+};
+
+/**
+ * Render 4 biểu đồ Dashboard bằng Chart.js
+ * @param {Array} movies - Mảng phim để phân tích
+ */
+function renderDashboardCharts(movies) {
+  if (typeof Chart === 'undefined') {
+    console.warn("⚠️ Chart.js chưa được load, bỏ qua render biểu đồ.");
+    return;
+  }
+
+  // Cấu hình chung cho Chart.js (Dark theme)
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const textColor = isDark ? '#b0b0b0' : '#555555';
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
+
+  // --- 1. Bar Chart: Phim theo thể loại ---
+  renderChartMoviesByCategory(movies, textColor, gridColor, window._dashChartPeriods.categories);
+
+  // --- 2. Line Chart: Phân bổ lượt xem theo top phim ---
+  renderChartViewsDistribution(movies, textColor, gridColor, window._dashChartPeriods.views);
+
+  // --- 3. Doughnut: Tỉ lệ phim lẻ/bộ ---
+  renderChartMovieTypes(movies, textColor);
+
+  // --- 4. Horizontal Bar: Top 10 phim xem nhiều ---
+  renderChartTopMovies(movies, textColor, gridColor, window._dashChartPeriods.topMovies);
+}
+
+/**
+ * Xử lý khi click tab lọc thời gian cho biểu đồ Dashboard
+ * @param {string} chartName - 'categories' | 'views' | 'topMovies'
+ * @param {string} period - 'all' | 'day' | 'week' | 'month'
+ */
+window.changeDashChartPeriod = function(chartName, period) {
+  window._dashChartPeriods[chartName] = period;
+
+  // Cập nhật active tab
+  document.querySelectorAll(`.chart-tab[data-chart="${chartName}"]`).forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.period === period);
+  });
+
+  // Lấy dữ liệu phim hiện tại
+  const movies = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0)
+    ? allAdminMovies : (allMovies || []);
+
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const textColor = isDark ? '#b0b0b0' : '#555555';
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
+
+  // Render lại chart tương ứng
+  if (chartName === 'categories') {
+    renderChartMoviesByCategory(movies, textColor, gridColor, period);
+  } else if (chartName === 'views') {
+    renderChartViewsDistribution(movies, textColor, gridColor, period);
+  } else if (chartName === 'topMovies') {
+    renderChartTopMovies(movies, textColor, gridColor, period);
+  }
+};
+
+/**
+ * Helper: Tính mốc thời gian ISO cho period
+ */
+function getDashPeriodFromDate(period) {
+  const now = new Date();
+  if (period === 'day') {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  } else if (period === 'week') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 7);
+    return d.toISOString();
+  } else if (period === 'month') {
+    const d = new Date(now);
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString();
+  }
+  return null;
+}
+
+/**
+ * Helper: Query view_logs và đếm lượt xem theo movie_id
+ */
+async function queryViewLogsCounts(period) {
+  if (!supabase) return {};
+  try {
+    let query = supabase.from('view_logs').select('movie_id');
+    const fromDate = getDashPeriodFromDate(period);
+    if (fromDate) query = query.gte('viewed_at', fromDate);
+
+    const { data, error } = await query.limit(10000);
+    if (error) throw error;
+
+    const counts = {};
+    (data || []).forEach(log => {
+      counts[log.movie_id] = (counts[log.movie_id] || 0) + 1;
+    });
+    return counts;
+  } catch (err) {
+    console.warn('Lỗi query view_logs:', err.message);
+    return {};
+  }
+}
+
+/**
+ * Biểu đồ cột: Số phim/lượt xem theo thể loại
+ */
+async function renderChartMoviesByCategory(movies, textColor, gridColor, period) {
+  const ctx = document.getElementById('chartMoviesByCategory');
+  if (!ctx) return;
+
+  if (window._dashCharts.categories) window._dashCharts.categories.destroy();
+
+  const categories = typeof allCategories !== 'undefined' ? allCategories : [];
+
+  if (period && period !== 'all') {
+    // Query view_logs theo thời gian, đếm theo category
+    const viewCounts = await queryViewLogsCounts(period);
+    const catViewCount = {};
+
+    Object.entries(viewCounts).forEach(([movieId, count]) => {
+      const movie = movies.find(m => m.id === movieId);
+      if (!movie) return;
+      const cats = movie.categories || [];
+      cats.forEach(catId => {
+        const catObj = categories.find(c => c.id === catId || c.name === catId);
+        const catName = catObj ? catObj.name : catId;
+        if (catName) catViewCount[catName] = (catViewCount[catName] || 0) + count;
+      });
+      if (cats.length === 0 && movie.category) {
+        catViewCount[movie.category] = (catViewCount[movie.category] || 0) + count;
+      }
+    });
+
+    const sorted = Object.entries(catViewCount).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    renderCategoryChart(ctx, sorted.map(s => s[0]), sorted.map(s => s[1]), 'Lượt xem', textColor, gridColor);
+  } else {
+    // Đếm số phim theo thể loại (logic cũ)
+    const catCount = {};
+    movies.forEach(m => {
+      const cats = m.categories || [];
+      cats.forEach(catId => {
+        const catObj = categories.find(c => c.id === catId || c.name === catId);
+        const catName = catObj ? catObj.name : catId;
+        if (catName) catCount[catName] = (catCount[catName] || 0) + 1;
+      });
+      if (cats.length === 0 && m.category) {
+        catCount[m.category] = (catCount[m.category] || 0) + 1;
+      }
+    });
+    const sorted = Object.entries(catCount).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    renderCategoryChart(ctx, sorted.map(s => s[0]), sorted.map(s => s[1]), 'Số phim', textColor, gridColor);
+  }
+}
+
+/**
+ * Vẽ chart phim theo thể loại
+ */
+function renderCategoryChart(ctx, labels, data, labelText, textColor, gridColor) {
+  const colors = [
+    '#4db8ff', '#ff6b6b', '#ffd700', '#00ff88',
+    '#da77f2', '#ff9ff3', '#54a0ff', '#48dbfb'
+  ];
+
+  window._dashCharts.categories = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: labelText,
+        data,
+        backgroundColor: colors.slice(0, data.length).map(c => c + '99'),
+        borderColor: colors.slice(0, data.length),
+        borderWidth: 1,
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          titleColor: '#fff',
+          bodyColor: '#ddd',
+          cornerRadius: 8,
+          padding: 10,
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: textColor, font: { size: 11 } },
+          grid: { display: false }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: textColor, stepSize: 1, font: { size: 11 } },
+          grid: { color: gridColor }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Biểu đồ Line: Phân bổ lượt xem (top 10 phim)
+ */
+async function renderChartViewsDistribution(movies, textColor, gridColor, period) {
+  const ctx = document.getElementById('chartViewsRecent');
+  if (!ctx) return;
+
+  if (window._dashCharts.views) window._dashCharts.views.destroy();
+
+  let labels, data;
+
+  if (period && period !== 'all') {
+    const viewCounts = await queryViewLogsCounts(period);
+    const sorted = Object.entries(viewCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    labels = sorted.map(([movieId]) => {
+      const m = movies.find(mv => mv.id === movieId);
+      const title = m ? m.title : movieId;
+      return title.length > 15 ? title.substring(0, 15) + '...' : title;
+    });
+    data = sorted.map(([, count]) => count);
+  } else {
+    const topMovies = [...movies]
+      .filter(m => (m.views || 0) > 0)
+      .sort((a, b) => (b.views || 0) - (a.views || 0))
+      .slice(0, 10);
+    labels = topMovies.map(m => m.title.length > 15 ? m.title.substring(0, 15) + '...' : m.title);
+    data = topMovies.map(m => m.views || 0);
+  }
+
+  window._dashCharts.views = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Lượt xem',
+        data,
+        borderColor: '#4db8ff',
+        backgroundColor: 'rgba(77, 184, 255, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#4db8ff',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          titleColor: '#fff',
+          bodyColor: '#ddd',
+          cornerRadius: 8,
+          padding: 10,
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: textColor, font: { size: 10 }, maxRotation: 45 },
+          grid: { display: false }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: textColor, font: { size: 11 } },
+          grid: { color: gridColor }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Biểu đồ Doughnut: Tỉ lệ phim lẻ / phim bộ
+ */
+function renderChartMovieTypes(movies, textColor) {
+  const ctx = document.getElementById('chartMovieTypes');
+  if (!ctx) return;
+
+  if (window._dashCharts.types) window._dashCharts.types.destroy();
+
+  const singleCount = movies.filter(m => m.type === 'single' || !m.type).length;
+  const seriesCount = movies.filter(m => m.type === 'series').length;
+
+  window._dashCharts.types = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Phim lẻ', 'Phim bộ'],
+      datasets: [{
+        data: [singleCount, seriesCount],
+        backgroundColor: ['rgba(77, 171, 247, 0.8)', 'rgba(218, 119, 242, 0.8)'],
+        borderColor: ['#4dabf7', '#da77f2'],
+        borderWidth: 2,
+        hoverOffset: 8,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: textColor,
+            font: { size: 13, weight: '600' },
+            padding: 20,
+            usePointStyle: true,
+            pointStyleWidth: 12,
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          titleColor: '#fff',
+          bodyColor: '#ddd',
+          cornerRadius: 8,
+          padding: 10,
+          callbacks: {
+            label: function(context) {
+              const total = context.dataset.data.reduce((a, b) => a + b, 0);
+              const pct = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
+              return ` ${context.label}: ${context.parsed} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Biểu đồ Horizontal Bar: Top 10 phim xem nhiều nhất
+ */
+async function renderChartTopMovies(movies, textColor, gridColor, period) {
+  const ctx = document.getElementById('chartTopMovies');
+  if (!ctx) return;
+
+  if (window._dashCharts.topMovies) window._dashCharts.topMovies.destroy();
+
+  let labels, data;
+
+  if (period && period !== 'all') {
+    const viewCounts = await queryViewLogsCounts(period);
+    const sorted = Object.entries(viewCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    labels = sorted.map(([movieId]) => {
+      const m = movies.find(mv => mv.id === movieId);
+      const title = m ? m.title : movieId;
+      return title.length > 20 ? title.substring(0, 20) + '...' : title;
+    });
+    data = sorted.map(([, count]) => count);
+  } else {
+    const top10 = [...movies]
+      .sort((a, b) => (b.views || 0) - (a.views || 0))
+      .slice(0, 10);
+    labels = top10.map(m => m.title.length > 20 ? m.title.substring(0, 20) + '...' : m.title);
+    data = top10.map(m => m.views || 0);
+  }
+
+  const barColors = [
+    '#ffd700', '#c0c0c0', '#cd7f32', '#4db8ff', '#da77f2',
+    '#ff922b', '#20c997', '#748ffc', '#f06595', '#adb5bd'
+  ];
+
+  window._dashCharts.topMovies = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Lượt xem',
+        data,
+        backgroundColor: barColors.slice(0, data.length).map(c => c + 'cc'),
+        borderColor: barColors.slice(0, data.length),
+        borderWidth: 1,
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          titleColor: '#fff',
+          bodyColor: '#ddd',
+          cornerRadius: 8,
+          padding: 10,
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: { color: textColor, font: { size: 11 } },
+          grid: { color: gridColor }
+        },
+        y: {
+          ticks: { color: textColor, font: { size: 11 } },
+          grid: { display: false }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Render danh sách hoạt động gần đây (tổng hợp từ nhiều nguồn)
+ */
+async function renderRecentActivities() {
+  const container = document.getElementById("recentActivitiesList");
+  if (!container || !supabase) return;
+
+  try {
+    const activities = [];
+
+    // 1. Phim mới thêm gần đây
+    const moviesSrc = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) 
+      ? allAdminMovies : allMovies;
+    const recentMovies = [...moviesSrc]
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      .slice(0, 3);
+    
+    recentMovies.forEach(m => {
+      activities.push({
+        type: 'movie',
+        icon: 'fas fa-film',
+        title: `Phim mới: <strong>${m.title}</strong>`,
+        time: m.created_at,
+      });
+    });
+
+    // 2. VIP Requests gần đây
+    if (typeof allVipRequests !== 'undefined' && allVipRequests.length > 0) {
+      allVipRequests.slice(0, 3).forEach(req => {
+        const statusText = req.status === 'pending' ? 'chờ duyệt' : (req.status === 'approved' ? 'đã duyệt' : 'đã từ chối');
+        activities.push({
+          type: 'vip',
+          icon: 'fas fa-crown',
+          title: `Yêu cầu VIP: <strong>${req.user_email || 'User'}</strong> — ${statusText}`,
+          time: req.created_at,
+        });
+      });
+    }
+
+    // 3. Báo lỗi gần đây (wrap riêng try-catch vì bảng có thể chưa tồn tại)
+    try {
+      const { data: recentErrors } = await supabase
+        .from('error_reports')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      (recentErrors || []).forEach(err => {
+        activities.push({
+          type: 'error',
+          icon: 'fas fa-bug',
+          title: `Báo lỗi: <strong>${err.movie_title || 'Không rõ'}</strong> bởi ${err.user_name || 'Ẩn danh'}`,
+          time: err.created_at,
+        });
+      });
+    } catch (e) { /* Bỏ qua nếu bảng chưa có */ }
+
+    // 4. User mới đăng ký gần đây
+    try {
+      const { data: recentUsers } = await supabase
+        .from('profiles')
+        .select('email, display_name, created_at')
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      (recentUsers || []).forEach(u => {
+        activities.push({
+          type: 'user',
+          icon: 'fas fa-user-plus',
+          title: `User mới: <strong>${u.display_name || u.email || 'Unnamed'}</strong>`,
+          time: u.created_at,
+        });
+      });
+    } catch (e) { /* Bỏ qua nếu lỗi */ }
+
+    // Sort tất cả theo thời gian mới nhất và lấy top 10
+    activities.sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
+    const top10 = activities.slice(0, 10);
+
+    if (top10.length === 0) {
+      container.innerHTML = '<div class="dash-activity-empty"><i class="fas fa-inbox"></i> Chưa có hoạt động nào</div>';
+      return;
+    }
+
+    container.innerHTML = top10.map(act => {
+      const timeAgo = getTimeAgo(act.time);
       return `
-            <tr>
-                <td><img src="${movie.poster_url || movie.posterUrl}" alt="${movie.title}" onerror="this.src='https://placehold.co/50x75'"></td>
-                <td>${movie.title}</td>
-                <td>${movie.price} CRO</td>
-                <td><span class="status-badge ${movie.status}">${getStatusText(movie.status)}</span></td>
-                <td>${formatDate(movie.created_at)}</td>
-            </tr>
-        `;
-    })
-    .join("");
+        <div class="dash-activity-item">
+          <div class="dash-activity-icon ${act.type}">
+            <i class="${act.icon}"></i>
+          </div>
+          <div class="dash-activity-content">
+            <div class="dash-activity-title">${act.title}</div>
+            <div class="dash-activity-time">${timeAgo}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  } catch (error) {
+    console.error("Lỗi load hoạt động gần đây:", error);
+    container.innerHTML = '<div class="dash-activity-empty"><i class="fas fa-exclamation-circle"></i> Lỗi tải dữ liệu</div>';
+  }
+}
+
+/**
+ * Tính thời gian tương đối (vd: "2 giờ trước", "3 ngày trước")
+ */
+function getTimeAgo(dateStr) {
+  if (!dateStr) return '';
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diff = Math.floor((now - date) / 1000);
+
+  if (diff < 60) return 'Vừa xong';
+  if (diff < 3600) return `${Math.floor(diff / 60)} phút trước`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} giờ trước`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)} ngày trước`;
+  if (diff < 2592000) return `${Math.floor(diff / 604800)} tuần trước`;
+  return formatDate(dateStr);
 }
 
 /**
@@ -964,7 +1585,7 @@ function populateAdminMovieFilters() {
                               : null;
                 const displayName = found ? found.name : countryId;
                 const info = (typeof getCountryInfo === 'function') ? getCountryInfo(displayName) : { icon: "🌐" };
-                return `<option value="${countryId}">${info.icon} ${displayName} (${countryStats[countryId]})</option>`;
+                return `<option value="${countryId}">${displayName} (${countryStats[countryId]})</option>`;
             }).join("");
     }
 }
@@ -3866,19 +4487,33 @@ function renderAdminCountries() {
   // Nếu không có dữ liệu thì báo trống
   let countriesToRender = allCountries;
 
+  // Đếm số phim cho từng quốc gia
+  const movieCountByCountry = {};
+  if (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) {
+    allAdminMovies.forEach(m => {
+      const cId = m.countryId || m.country_id || m.country || '';
+      if (cId) {
+        movieCountByCountry[cId] = (movieCountByCountry[cId] || 0) + 1;
+      }
+    });
+  }
+
   if (searchInput) {
     const searchText = searchInput.value.toLowerCase().trim();
     if (searchText) {
-      countriesToRender = allCountries.filter(c => 
-        (c.name && c.name.toLowerCase().includes(searchText)) || 
-        (c.id && c.id.toLowerCase().includes(searchText))
-      );
+      countriesToRender = allCountries.filter(c => {
+        const info = (typeof getCountryInfo === 'function') ? getCountryInfo(c.name) : {};
+        const codeStr = info.code ? info.code.toLowerCase() : '';
+        return (c.name && c.name.toLowerCase().includes(searchText)) || 
+               (c.id && c.id.toLowerCase().includes(searchText)) ||
+               (codeStr && codeStr.includes(searchText));
+      });
     }
   }
 
   if (countriesToRender.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="5" class="text-center">Không tìm thấy quốc gia nào</td></tr>';
+      '<tr><td colspan="6" class="text-center">Không tìm thấy quốc gia nào</td></tr>';
     return;
   }
 
@@ -3889,18 +4524,23 @@ function renderAdminCountries() {
       
       return `
             <tr>
-                <td>${index + 1}</td>
-                <td>${country.id}</td>
+                <td style="text-align: center;">${index + 1}</td>
+                <td style="text-align: center;">${country.id}</td>
                 <td>
-                    <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; overflow: hidden;">
                         <span class="country-badge-v2" style="background: ${countryInfo.bg}; color: ${countryInfo.color}; border-color: ${countryInfo.color}33;">
                             ${countryInfo.code ? `<img src="https://flagcdn.com/w40/${countryInfo.code}.png" class="flag-icon-img" alt="${country.name}">` : `<span class="flag-icon">${countryInfo.icon}</span>`}
                         </span>
-                        <strong>${country.name}</strong>
+                        <strong style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${country.name}</strong>
                     </div>
                 </td>
-                <td><span class="badge badge-primary">${country.code || "N/A"}</span></td>
-                <td>
+                <td style="text-align: center;"><span class="badge badge-primary">${countryInfo.code ? countryInfo.code.toUpperCase() : "N/A"}</span></td>
+                <td style="text-align: center;">
+                    <span class="badge" style="background: ${(movieCountByCountry[country.id] || 0) > 0 ? 'rgba(77, 184, 255, 0.15)' : 'rgba(255,255,255,0.05)'}; color: ${(movieCountByCountry[country.id] || 0) > 0 ? '#4db8ff' : '#888'}; font-weight: 600; padding: 4px 10px; border-radius: 6px;">
+                        ${movieCountByCountry[country.id] || 0} phim
+                    </span>
+                </td>
+                <td style="text-align: center;">
                     <button class="btn btn-sm btn-primary" onclick="editCountry('${country.id}')" title="Sửa">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -3912,6 +4552,241 @@ function renderAdminCountries() {
         `;
     })
     .join("");
+
+  // Tự động render biểu đồ thống kê khi load bảng quốc gia
+  if (typeof populateCountryStatsDropdown === 'function') populateCountryStatsDropdown();
+  if (typeof renderCountryStatsChart === 'function') {
+    const sel = document.getElementById('countryStatsSelect');
+    renderCountryStatsChart(sel ? sel.value : '', _countryStatsPeriod || 'all');
+  }
+}
+
+
+/* ============================================
+   BIỂU ĐỒ THỐNG KÊ QUỐC GIA - TOP 10 PHIM
+   ============================================ */
+
+// Biến lưu trạng thái chart hiện tại
+let _countryStatsChart = null;
+let _countryStatsPeriod = 'all';
+
+/**
+ * Populate dropdown chọn quốc gia trong biểu đồ
+ */
+function populateCountryStatsDropdown() {
+  const select = document.getElementById('countryStatsSelect');
+  if (!select || !allCountries) return;
+
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">🌐 Tất cả quốc gia</option>' +
+    allCountries.map(c => {
+      const info = (typeof getCountryInfo === 'function') ? getCountryInfo(c.name) : {};
+      return `<option value="${c.id}">${c.name}</option>`;
+    }).join('');
+  
+  if (currentVal) select.value = currentVal;
+}
+
+/**
+ * Xử lý khi chọn quốc gia trong dropdown
+ */
+window.onCountryStatsSelectChange = function() {
+  const select = document.getElementById('countryStatsSelect');
+  const countryId = select ? select.value : '';
+  renderCountryStatsChart(countryId, _countryStatsPeriod);
+};
+
+/**
+ * Xử lý khi click tab lọc thời gian (Tất cả / Ngày / Tuần / Tháng)
+ */
+window.changeCountryStatsPeriod = function(period) {
+  _countryStatsPeriod = period;
+
+  // Cập nhật active tab
+  document.querySelectorAll('.chart-period-tabs .chart-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.period === period);
+  });
+
+  const select = document.getElementById('countryStatsSelect');
+  const countryId = select ? select.value : '';
+  renderCountryStatsChart(countryId, period);
+};
+
+/**
+ * Render biểu đồ Top 10 phim xem nhiều nhất theo quốc gia + thời gian
+ * @param {string} countryId - ID quốc gia (rỗng = tất cả)
+ * @param {string} period - 'all' | 'day' | 'week' | 'month'
+ */
+async function renderCountryStatsChart(countryId, period) {
+  const ctx = document.getElementById('countryStatsChart');
+  const emptyEl = document.getElementById('countryChartEmpty');
+  if (!ctx || !supabase) return;
+
+  try {
+    // Tính mốc thời gian lọc
+    let fromDate = null;
+    const now = new Date();
+    if (period === 'day') {
+      fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    } else if (period === 'week') {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      fromDate = d.toISOString();
+    } else if (period === 'month') {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 1);
+      fromDate = d.toISOString();
+    }
+
+    // Query view_logs từ Supabase
+    let query = supabase.from('view_logs').select('movie_id');
+
+    if (countryId) {
+      query = query.eq('country_id', countryId);
+    }
+    if (fromDate) {
+      query = query.gte('viewed_at', fromDate);
+    }
+
+    const { data: logs, error } = await query.limit(5000);
+    if (error) throw error;
+
+    // Đếm lượt xem theo movie_id
+    const viewCounts = {};
+    (logs || []).forEach(log => {
+      viewCounts[log.movie_id] = (viewCounts[log.movie_id] || 0) + 1;
+    });
+
+    // Sắp xếp và lấy Top 10
+    const sorted = Object.entries(viewCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+
+    // Nếu không có dữ liệu view_logs, fallback sang allAdminMovies
+    if (sorted.length === 0 && period === 'all') {
+      // Dùng dữ liệu views từ allAdminMovies làm fallback
+      let moviesPool = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) 
+        ? allAdminMovies : (allMovies || []);
+      
+      if (countryId) {
+        moviesPool = moviesPool.filter(m => 
+          (m.countryId || m.country_id || m.country) === countryId
+        );
+      }
+
+      const fallback = moviesPool
+        .filter(m => (m.views || 0) > 0)
+        .sort((a, b) => (b.views || 0) - (a.views || 0))
+        .slice(0, 10);
+
+      if (fallback.length === 0) {
+        if (emptyEl) emptyEl.style.display = 'block';
+        ctx.style.display = 'none';
+        if (_countryStatsChart) { _countryStatsChart.destroy(); _countryStatsChart = null; }
+        return;
+      }
+
+      const labels = fallback.map(m => truncateText(m.title || 'N/A', 25));
+      const data = fallback.map(m => m.views || 0);
+      drawCountryChart(ctx, emptyEl, labels, data);
+      return;
+    }
+
+    if (sorted.length === 0) {
+      if (emptyEl) emptyEl.style.display = 'block';
+      ctx.style.display = 'none';
+      if (_countryStatsChart) { _countryStatsChart.destroy(); _countryStatsChart = null; }
+      return;
+    }
+
+    // Map movie_id sang tên phim
+    const allMoviesRef = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) 
+      ? allAdminMovies : (allMovies || []);
+
+    const labels = sorted.map(([movieId]) => {
+      const movie = allMoviesRef.find(m => m.id === movieId);
+      return truncateText(movie ? movie.title : movieId, 25);
+    });
+    const data = sorted.map(([, count]) => count);
+
+    drawCountryChart(ctx, emptyEl, labels, data);
+
+  } catch (err) {
+    console.error('Lỗi render biểu đồ quốc gia:', err);
+  }
+}
+
+/**
+ * Vẽ Chart.js Horizontal Bar
+ */
+function drawCountryChart(ctx, emptyEl, labels, data) {
+  if (emptyEl) emptyEl.style.display = 'none';
+  ctx.style.display = 'block';
+
+  if (_countryStatsChart) _countryStatsChart.destroy();
+
+  // Gradient màu cho mỗi bar
+  const colors = [
+    '#4db8ff', '#ff6b6b', '#ffd700', '#51cf66', '#da77f2',
+    '#ff922b', '#20c997', '#748ffc', '#f06595', '#adb5bd'
+  ];
+
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const textColor = isDark ? '#ccc' : '#555';
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
+
+  _countryStatsChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Lượt xem',
+        data: data,
+        backgroundColor: colors.slice(0, data.length),
+        borderRadius: 6,
+        borderSkipped: false,
+        barThickness: 22,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)',
+          titleColor: isDark ? '#fff' : '#333',
+          bodyColor: isDark ? '#ddd' : '#555',
+          borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+          borderWidth: 1,
+          cornerRadius: 8,
+          padding: 10,
+          callbacks: {
+            label: (ctx) => `${ctx.parsed.x.toLocaleString()} lượt xem`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: gridColor },
+          ticks: { color: textColor, font: { size: 11 } }
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: textColor, font: { size: 11, weight: 500 } }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Helper: Cắt ngắn text
+ */
+function truncateText(text, maxLen) {
+  if (!text) return '';
+  return text.length > maxLen ? text.substring(0, maxLen) + '...' : text;
 }
 
 
@@ -5392,12 +6267,31 @@ window.uploadMovieImage = async function(input, targetUrlId, previewId) {
 }
 
 /**
+ * Chuyển chuỗi tiếng Việt có dấu thành không dấu, thay khoảng trắng + ký tự đặc biệt bằng _
+ * Ví dụ: "Venom: Kèo Chung Sống" → "venom_keo_chung_song"
+ * @param {string} str - Chuỗi cần chuyển
+ * @returns {string} Chuỗi không dấu, lowercase, nối bằng _
+ */
+function removeVietnameseDiacritics(str) {
+    if (!str) return '';
+    return str
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Bỏ dấu
+        .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '') // Xóa ký tự đặc biệt (giữ chữ, số, khoảng trắng)
+        .replace(/\s+/g, '_') // Khoảng trắng → _
+        .replace(/_+/g, '_') // Gộp nhiều _ liên tiếp
+        .replace(/^_|_$/g, ''); // Xóa _ đầu/cuối
+}
+
+/**
  * Chọn ảnh để tải lên Cloudflare R2 - CHỈ PREVIEW CỤC BỘ, không upload ngay.
  * Ảnh thực sự được upload khi Admin bấm nút "Lưu" (uploadPendingR2Images).
  * @param {HTMLInputElement} input - Input file vừa chọn
  * @param {string} targetUrlId - ID của ô input nhận URL ảnh
  * @param {string} previewId - ID của vùng chứa ảnh xem trước (nếu có)
- * @param {string} folderMode - Thư mục lưu trên R2: 'poster' hoặc 'background'
+ * @param {string} folderMode - Loại ảnh trên R2: 'poster' hoặc 'background'
  */
 window.uploadImageToR2 = function(input, targetUrlId, previewId, folderMode = 'poster') {
   const file = input.files[0];
@@ -5460,10 +6354,33 @@ window.uploadPendingR2Images = async function() {
   showLoading(true, "Đang tải ảnh lên Cloudflare R2...");
 
   try {
+    // Lấy thông tin phim từ form để xây dựng folder + filename
+    const movieId = document.getElementById('movieId')?.value || '';
+    const movieTitle = document.getElementById('movieTitle')?.value || '';
+    const titleSlug = removeVietnameseDiacritics(movieTitle);
+
     for (const [targetUrlId, { file, folderMode, previewId }] of Object.entries(window.pendingR2Uploads)) {
+      // Xây dựng folder và filename theo cấu trúc: movies/{id}_{ten_khong_dau}/{ten_khong_dau}_{poster|background}.ext
+      let folder = folderMode; // Fallback nếu không có thông tin phim
+      let customFilename = null;
+
+      if (movieId && titleSlug) {
+        // Trích xuất chỉ phần số từ movieId (VD: "chuyennhacha-567" → "567")
+        const numericId = movieId.replace(/[^0-9]/g, '') || movieId;
+        folder = `movies/${numericId}_${titleSlug}`;
+        // Lấy extension từ file gốc
+        const ext = file.name.split('.').pop() || 'jpg';
+        customFilename = `${titleSlug}_${folderMode}.${ext}`;
+      }
+
       const formData = new FormData();
-      formData.append("file", file);
-      formData.append("folder", folderMode);
+      // Nếu có tên file tùy chỉnh, dùng nó làm tên file upload
+      formData.append("file", file, customFilename || file.name);
+      formData.append("folder", folder);
+      // Gửi tên file tùy chỉnh để Worker dùng thay vì sinh random
+      if (customFilename) {
+        formData.append("customFilename", customFilename);
+      }
 
       const response = await fetch(WORKER_URL, {
         method: "POST",
@@ -5489,7 +6406,7 @@ window.uploadPendingR2Images = async function() {
       // Cập nhật preview và badge thành Cloudflare chính thức
       window.updateSourceIndicator(downloadURL, previewId);
 
-      console.log(`✅ R2 Upload OK [${folderMode}]: ${downloadURL}`);
+      console.log(`✅ R2 Upload OK [${folder}/${customFilename || file.name}]: ${downloadURL}`);
     }
 
     // Xóa hàng đợi sau khi upload xong

@@ -281,6 +281,73 @@
   border-radius: 0 0 16px 16px;
 }
 
+/* Thanh tab chuyển đổi Phim / Cộng đồng */
+.notification-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #1f1f35;
+  padding: 0;
+}
+
+.notif-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s, background 0.2s;
+}
+
+.notif-tab:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Underline khi active */
+.notif-tab.active {
+  color: var(--accent-primary, #e50914);
+}
+
+.notif-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  width: 60%;
+  height: 2.5px;
+  background: var(--accent-primary, #e50914);
+  border-radius: 2px 2px 0 0;
+}
+
+.notif-tab i {
+  font-size: 0.82rem;
+}
+
+/* Badge số chưa đọc trên mỗi tab */
+.notif-tab-badge {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: #e50914;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 4px;
+}
+
 /* OVERRIDE LIGHT THEME CHO THÔNG BÁO */
 [data-theme="light"] .notification-dropdown {
   background: var(--bg-secondary);
@@ -298,6 +365,24 @@
 [data-theme="light"] .notification-dropdown::before {
   background: var(--bg-tertiary);
   border-color: var(--border-color);
+}
+
+[data-theme="light"] .notification-tabs {
+  background: var(--bg-tertiary);
+  border-bottom-color: var(--border-color);
+}
+
+[data-theme="light"] .notif-tab {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .notif-tab:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .notif-tab.active {
+  color: var(--accent-primary, #e50914);
 }
 
 [data-theme="light"] .notif-item {

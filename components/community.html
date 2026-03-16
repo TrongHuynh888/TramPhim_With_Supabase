@@ -2,27 +2,33 @@
   <div class="community-wrapper">
       
       <!-- CỘT 1: NAV SIDEBAR (Luôn hiển thị) -->
-      <aside class="comm-left-sidebar">
-          <a class="comm-nav-item active" onclick="switchCommView('feed')">
+      <aside class="comm-left-sidebar" id="commLeftSidebar">
+          <div class="comm-left-brand">
+              <button class="comm-left-toggle-btn" onclick="toggleLeftSidebar()" title="Thu gọn/Mở rộng">
+                  <i class="fas fa-bars"></i>
+              </button>
+              <span class="comm-left-brand-text">Cộng Đồng</span>
+          </div>
+          <a class="comm-nav-item active" data-label="Trang chủ" onclick="switchCommView('feed')">
               <i class="fas fa-home"></i>
               <span>Trang chủ</span>
           </a>
-          <a class="comm-nav-item" onclick="switchCommView('chat')">
+          <a class="comm-nav-item" data-label="CineChat" onclick="switchCommView('chat')">
               <i class="fas fa-comment-dots"></i>
               <span>CineChat</span>
               <span class="comm-nav-badge" id="commNavUnreadBadge" style="display: none;">0</span>
           </a>
-          <a class="comm-nav-item" onclick="switchCommView('friends')">
+          <a class="comm-nav-item" data-label="Bạn bè" onclick="switchCommView('friends')">
               <i class="fas fa-user-friends"></i>
               <span>Bạn bè</span>
           </a>
-          <a class="comm-nav-item" onclick="switchCommView('profile')">
+          <a class="comm-nav-item" data-label="Trang cá nhân" onclick="switchCommView('profile')">
               <i class="fas fa-user-circle"></i>
               <span>Trang cá nhân</span>
           </a>
 
-          <h4 class="comm-section-title">Xu hướng</h4>
-          <div class="comm-tags-list">
+          <h4 class="comm-section-title comm-left-sidebar-extra">Xu hướng</h4>
+          <div class="comm-tags-list comm-left-sidebar-extra">
               <span class="comm-tag">#Reviews</span>
               <span class="comm-tag">#WatchParty</span>
               <span class="comm-tag">#Marvel</span>
@@ -50,10 +56,44 @@
                           <img src="https://ui-avatars.com/api/?name=Guest" id="commUserAvatar" class="comm-composer-avatar" alt="User" onclick="renderMyProfile()" style="cursor: pointer;">
                           <textarea id="commPostContent" class="comm-composer-input" placeholder="Bạn đang xem bộ phim nào? Hãy chia sẻ cảm nghĩ..."></textarea>
                       </div>
+
+                      <!-- Vùng preview ảnh đã chọn (hỗ trợ nhiều ảnh) -->
+                      <div class="comm-composer-preview" id="commPostImagePreview" style="display: none;">
+                          <div class="comm-preview-header">
+                              <span class="comm-preview-count" id="commPreviewCount">0/10 ảnh</span>
+                              <button class="comm-preview-clear" onclick="removePostImage()" title="Xóa tất cả ảnh">Xóa hết</button>
+                          </div>
+                          <div class="comm-preview-grid" id="commPreviewGrid">
+                              <!-- JS sẽ render preview ảnh ở đây -->
+                          </div>
+                      </div>
+
+                      <!-- Thẻ phim đã chọn -->
+                      <div class="comm-composer-movie-tag" id="commPostMovieTag" style="display: none;">
+                          <div class="comm-movie-tag-content" id="commMovieTagContent">
+                              <!-- Render bằng JS -->
+                          </div>
+                          <button class="comm-preview-remove" onclick="removePostMovie()" title="Bỏ chọn phim">&times;</button>
+                      </div>
+
+                      <!-- Dropdown tìm kiếm phim (ẩn mặc định) -->
+                      <div class="comm-movie-search-dropdown" id="commMovieSearchDropdown" style="display: none;">
+                          <div class="comm-movie-search-header">
+                              <input type="text" id="commMovieSearchInput" placeholder="Tìm tên phim..." oninput="searchMovieForPost(this.value)">
+                              <button class="comm-preview-remove" onclick="toggleMovieSearchDropdown(false)">&times;</button>
+                          </div>
+                          <div class="comm-movie-search-results" id="commMovieSearchResults">
+                              <p class="text-muted" style="padding: 10px; font-size: 0.85rem; text-align: center;">Gõ tên phim để tìm kiếm...</p>
+                          </div>
+                      </div>
+
+                      <!-- Input file ẩn cho upload ảnh (hỗ trợ chọn nhiều) -->
+                      <input type="file" id="commPostImageInput" accept="image/*" multiple style="display: none;" onchange="handlePostImageSelect(event)">
+
                       <div class="comm-composer-bottom">
                           <div class="comm-composer-actions">
-                              <button class="comm-action-btn" title="Thêm ảnh"><i class="fas fa-image"></i></button>
-                              <button class="comm-action-btn" title="Gắn thẻ thẻ phim"><i class="fas fa-film"></i></button>
+                              <button class="comm-action-btn" title="Thêm ảnh" onclick="document.getElementById('commPostImageInput').click()"><i class="fas fa-image"></i></button>
+                              <button class="comm-action-btn" title="Gắn thẻ phim" onclick="toggleMovieSearchDropdown()"><i class="fas fa-film"></i></button>
                               <button class="comm-action-btn" title="Hashtag"><i class="fas fa-hashtag"></i></button>
                           </div>
                           <button class="comm-btn-post" onclick="submitPost()">Đăng bài</button>
@@ -73,8 +113,12 @@
               <!-- CỘT 3: RIGHT SIDEBAR -->
               <aside class="comm-right-sidebar">
                   <div class="comm-widget">
-                      <div class="comm-chat-header" style="padding: 0; margin-bottom: 15px; border-bottom: none;">
-                          <input type="text" class="comm-chat-search" id="commSearchUserInput" placeholder="Tìm người dùng qua tên..." onkeyup="searchCommunityUsers(event)">
+                      <div class="comm-search-box">
+                          <i class="fas fa-search comm-search-icon"></i>
+                          <input type="text" class="comm-search-input" id="commSearchUserInput" placeholder="Tìm tên, @id hoặc dán mã QR..." onkeyup="searchCommunityUsers(event)">
+                          <button class="comm-search-qr-btn" onclick="openSearchQRModal()" title="Quét mã QR">
+                              <i class="fas fa-expand"></i>
+                          </button>
                       </div>
                       <div class="comm-user-list" id="commSearchResults" style="display: none; margin-bottom: 15px;">
                           <!-- Kết quả tìm kiếm sẽ hiển thị ở đây -->
@@ -82,21 +126,21 @@
                   </div>
 
                   <div class="comm-widget">
-                      <h3>Lời mời kết bạn</h3>
+                      <h3>💌 Lời mời kết bạn</h3>
                       <div class="comm-user-list" id="commFriendRequests">
                           <p class="text-muted" style="font-size: 0.85rem" style="text-align: center;">Chưa có lời mời nào</p>
                       </div>
                   </div>
 
                   <div class="comm-widget">
-                      <h3>Gợi ý kết bạn</h3>
+                      <h3>👥 Gợi ý kết bạn</h3>
                       <div class="comm-user-list" id="commSuggestedFriends">
                           <p class="text-muted" style="font-size: 0.85rem">Đang tải...</p>
                       </div>
                   </div>
 
                   <div class="comm-widget">
-                      <h3>Phim đang hot</h3>
+                      <h3>🔥 Top 10 Phim Hot</h3>
                       <div class="comm-user-list" id="commTrendingMovies">
                       </div>
                   </div>
@@ -106,10 +150,15 @@
           <!-- LAYOUT: CINE CHAT -->
           <div class="comm-layout-view comm-chat-layout" id="commChatView" style="display: none;">
               <!-- Sidebar list chat -->
-              <aside class="comm-chat-sidebar">
+              <aside class="comm-chat-sidebar" id="commChatSidebar">
                   <div class="comm-chat-header">
-                      <h2>CineChat</h2>
-                      <input type="text" class="comm-chat-search" placeholder="Tìm kiếm bạn bè...">
+                      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                          <h2 class="comm-chat-sidebar-title">CineChat</h2>
+                          <button class="comm-sidebar-toggle-btn" onclick="toggleChatSidebar()" title="Thu gọn/Mở rộng">
+                              <i class="fas fa-bars"></i>
+                          </button>
+                      </div>
+                      <input type="text" class="comm-chat-search comm-chat-sidebar-extra" placeholder="Tìm kiếm bạn bè...">
                   </div>
                   <div class="comm-chat-list" id="commChatList">
                       <!-- Render tin nhắn -->
@@ -120,14 +169,53 @@
               <main class="comm-chat-box">
                   <!-- Màn hình chào mừng khi chưa chọn chat -->
                   <div id="commChatWelcome" class="comm-chat-welcome">
-                      <div class="comm-welcome-content">
-                          <img src="images/cinechat_welcome.png" alt="CineChat Welcome" class="comm-welcome-img">
-                          <h3>Chào mừng tới CineChat!</h3>
-                          <p>Hãy chọn một người bạn từ danh sách bên trái hoặc sử dụng ô tìm kiếm để bắt đầu cuộc trò chuyện.</p>
-                          <div class="comm-welcome-stats">
-                              <span><i class="fas fa-film"></i> Chia sẻ phim hay</span>
-                              <span><i class="fas fa-comments"></i> Thảo luận sôi nổi</span>
-                              <span><i class="fas fa-users"></i> Kết nối đam mê</span>
+                      <div class="cinechat-trailer">
+                          <!-- Background gradient xoay -->
+                          <div class="trailer-bg"></div>
+                          
+                          <!-- Floating icons -->
+                          <div class="trailer-particles">
+                              <i class="fas fa-film trailer-icon icon-1"></i>
+                              <i class="fas fa-comment-dots trailer-icon icon-2"></i>
+                              <i class="fas fa-star trailer-icon icon-3"></i>
+                              <i class="fas fa-play trailer-icon icon-4"></i>
+                              <i class="fas fa-heart trailer-icon icon-5"></i>
+                              <i class="fas fa-video trailer-icon icon-6"></i>
+                              <i class="fas fa-tv trailer-icon icon-7"></i>
+                              <i class="fas fa-clapperboard trailer-icon icon-8"></i>
+                          </div>
+
+                          <!-- Logo trung tâm -->
+                          <div class="trailer-center">
+                              <div class="trailer-logo-ring">
+                                  <i class="fas fa-comments"></i>
+                              </div>
+                              
+                              <!-- Text slides lặp -->
+                              <div class="trailer-text-slider">
+                                  <div class="trailer-slide slide-1">
+                                      <h2>CineChat</h2>
+                                      <p>Mạng xã hội dành cho tín đồ điện ảnh</p>
+                                  </div>
+                                  <div class="trailer-slide slide-2">
+                                      <h2>🎬 Khám Phá</h2>
+                                      <p>Chia sẻ bộ phim yêu thích với bạn bè</p>
+                                  </div>
+                                  <div class="trailer-slide slide-3">
+                                      <h2>💬 Kết Nối</h2>
+                                      <p>Trò chuyện riêng tư, sôi nổi và chân thật</p>
+                                  </div>
+                                  <div class="trailer-slide slide-4">
+                                      <h2>🍿 Watch Party</h2>
+                                      <p>Xem phim cùng nhau — bất kể khoảng cách</p>
+                                  </div>
+                              </div>
+
+                              <div class="trailer-features">
+                                  <span class="trailer-badge"><i class="fas fa-film"></i> Phim hay</span>
+                                  <span class="trailer-badge"><i class="fas fa-comments"></i> Chat real-time</span>
+                                  <span class="trailer-badge"><i class="fas fa-users"></i> Cộng đồng</span>
+                              </div>
                           </div>
                       </div>
                   </div>
@@ -227,7 +315,7 @@
                       <!-- Các nút hành động chính -->
                       <div class="comm-info-actions">
                           <div class="comm-info-action-item">
-                              <button class="comm-info-btn" title="Nhắn tin">
+                              <button class="comm-info-btn" title="Nhắn tin" onclick="const m=document.getElementById('commChatMessages'); if(m) m.scrollTop=m.scrollHeight; const el=document.getElementById('commChatInputMessage'); if(el) el.focus()">
                                   <i class="fas fa-comment"></i>
                               </button>
                               <span class="comm-info-action-label">Nhắn tin</span>
@@ -252,9 +340,9 @@
                       <div class="comm-info-details-row">
                           <div class="comm-sidebar-user-details">
                               <div class="comm-profile-id" id="commInfoUsername">@haha</div>
-                              <div class="comm-profile-label">Username</div>
+                              <div class="comm-profile-label" id="commInfoUsernameLabel">ID người dùng</div>
                           </div>
-                          <button class="comm-info-icon-btn" title="QR Code">
+                          <button class="comm-info-icon-btn" title="QR Code" onclick="showUserQRCode()">
                               <i class="fas fa-qrcode"></i>
                           </button>
                       </div>
@@ -325,8 +413,8 @@
                            <div id="wpTabCustom" class="wp-tab-content" style="display: none;">
                                <div class="wp-upload-area" onclick="document.getElementById('wpImageUpload').click()">
                                    <i class="fas fa-cloud-upload-alt"></i>
-                                   <p>Tải ảnh lên (ImgBB)</p>
-                                   <input type="file" id="wpImageUpload" accept="image/*" style="display: none;" onchange="uploadWallpaperImgBB(event)">
+                                   <p>Tải ảnh lên (Cloudflare)</p>
+                                   <input type="file" id="wpImageUpload" accept="image/*" style="display: none;" onchange="uploadWallpaperToR2(event)">
                                </div>
                                <div class="wp-link-input-group">
                                    <input type="text" id="wpLinkInput" placeholder="Hoặc dán link ảnh trực tiếp...">
@@ -382,6 +470,11 @@
   <!-- LAYOUT: CÁ NHÂN (USER PROFILE - MOVIEBUFF CLONE) -->
   <div class="comm-profile-layout" id="commProfileView">
       <div class="comm-profile-header">
+          <!-- Nút quay lại thông minh -->
+          <button class="comm-profile-back-btn" onclick="goBackFromProfile()" title="Quay lại">
+              <i class="fas fa-arrow-left"></i>
+              <span>Quay lại</span>
+          </button>
           <div class="comm-profile-cover" id="commProfileCover" style="background-image: url('https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80');">
               <div class="comm-cover-actions">
                   <button onclick="interactProfile('cover', 'like')"><i class="far fa-heart"></i> <span id="commCoverLikes">0</span></button>
@@ -478,14 +571,44 @@
               <button class="comm-modal-close" onclick="closeEditPostModal()">&times;</button>
           </div>
           <div class="comm-modal-body">
+              <!-- Nội dung -->
               <div class="comm-form-group">
                   <label>Nội dung bài viết</label>
-                  <textarea id="editPostContent" style="min-height: 150px;"></textarea>
+                  <textarea id="editPostContent" style="min-height: 120px;"></textarea>
+              </div>
+
+              <!-- Ảnh hiện tại + thêm ảnh mới -->
+              <div class="comm-form-group">
+                  <label>Ảnh bài viết <span id="editImageCount" style="color: var(--text-muted); font-weight: 400;"></span></label>
+                  <div class="comm-preview-grid" id="editPostImageGrid">
+                      <!-- JS render ảnh hiện tại ở đây -->
+                  </div>
+                  <div style="margin-top: 8px;">
+                      <button type="button" class="comm-action-btn" onclick="document.getElementById('editPostImageInput').click()" style="font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">
+                          <i class="fas fa-plus"></i> Thêm ảnh
+                      </button>
+                      <input type="file" id="editPostImageInput" accept="image/*" multiple style="display: none;" onchange="handleEditPostImageAdd(event)">
+                  </div>
+              </div>
+
+              <!-- Phim gắn thẻ -->
+              <div class="comm-form-group">
+                  <label>Phim gắn thẻ</label>
+                  <div id="editPostMovieTag" style="display: none; margin-bottom: 8px;">
+                      <div class="comm-movie-tag-content" id="editPostMovieContent" style="max-width: 100%;"></div>
+                      <button class="comm-preview-remove" onclick="removeEditPostMovie()" title="Bỏ phim" style="position: static; margin-left: 8px;">&times;</button>
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                      <input type="text" id="editPostMovieSearch" placeholder="Tìm phim để gắn thẻ..." 
+                          style="flex: 1; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); padding: 8px 12px; border-radius: 6px; font-size: 0.85rem;"
+                          oninput="searchMovieForEditPost(this.value)">
+                  </div>
+                  <div id="editPostMovieResults" style="max-height: 200px; overflow-y: auto; margin-top: 4px;"></div>
               </div>
           </div>
           <div class="comm-modal-footer">
               <button class="comm-btn-cancel" onclick="closeEditPostModal()">Hủy</button>
-              <button class="comm-btn-save" onclick="updatePost()">Cập nhật</button>
+              <button class="comm-btn-save" id="editPostSaveBtn" onclick="updatePost()">Cập nhật</button>
           </div>
       </div>
   </div>
@@ -663,6 +786,85 @@
           <div class="comm-modal-footer premium-footer">
               <button class="comm-btn-cancel premium-btn-secondary" onclick="closeForwardModal()">Hủy</button>
               <button class="comm-btn-confirm premium-btn-primary" id="btnSendMultiForward" onclick="sendMultiForward()" disabled>Gửi (0)</button>
+          </div>
+      </div>
+  </div>
+
+  <!-- MODAL: MÃ QR CODE USER -->
+  <div id="commUserQRModal" class="comm-modal" style="display: none;">
+      <div class="comm-modal-content comm-qr-modal-content premium-modal">
+          <button class="comm-modal-close premium-close" onclick="closeUserQRModal()">&times;</button>
+          <div class="comm-modal-body comm-qr-body">
+
+              <!-- HEADER -->
+              <div class="comm-qr-header">
+                  <div class="comm-qr-header-icon">
+                      <i class="fas fa-qrcode"></i>
+                  </div>
+                  <h3 class="comm-qr-header-title">Quét mã QR</h3>
+                  <p class="comm-qr-header-desc">Tìm bạn bè hoặc chia sẻ mã của bạn</p>
+              </div>
+
+              <!-- 2 NÚT QUÉT LỚN dạng card -->
+              <div class="comm-qr-scan-actions">
+                  <button class="comm-qr-scan-card" onclick="document.getElementById('qrFileInput').click()">
+                      <div class="comm-qr-scan-card-icon">
+                          <i class="fas fa-image"></i>
+                      </div>
+                      <span class="comm-qr-scan-card-title">Tải ảnh</span>
+                      <span class="comm-qr-scan-card-desc">Chọn ảnh từ thiết bị</span>
+                  </button>
+                  <button class="comm-qr-scan-card" onclick="startQRCameraScanner()">
+                      <div class="comm-qr-scan-card-icon camera">
+                          <i class="fas fa-camera"></i>
+                      </div>
+                      <span class="comm-qr-scan-card-title">Quét camera</span>
+                      <span class="comm-qr-scan-card-desc">Mở camera quét trực tiếp</span>
+                  </button>
+              </div>
+              <input type="file" id="qrFileInput" accept="image/*" style="display: none !important; position: absolute; visibility: hidden;" onchange="handleQRImageUpload(event)">
+
+              <!-- Camera preview (ẩn mặc định) -->
+              <div id="qrCameraPreview" class="comm-qr-camera-preview" style="display: none;">
+                  <video id="qrCameraVideo" autoplay playsinline></video>
+                  <canvas id="qrCameraCanvas" style="display: none;"></canvas>
+                  <div class="comm-qr-camera-overlay">
+                      <div class="comm-qr-scan-frame"></div>
+                  </div>
+                  <p class="comm-qr-camera-hint">Đưa mã QR vào khung hình...</p>
+                  <button class="comm-qr-camera-close" onclick="stopQRCameraScanner()">
+                      <i class="fas fa-times"></i> Đóng
+                  </button>
+              </div>
+
+              <!-- Kết quả quét -->
+              <div id="qrScanResult" class="comm-qr-scan-result" style="display: none;"></div>
+
+              <!-- Ô nhập ID thủ công -->
+              <div class="comm-qr-search">
+                  <div class="comm-qr-search-input-group">
+                      <input type="text" id="qrSearchInput" class="comm-qr-search-input" placeholder="Dán ID hoặc link QR vào đây...">
+                      <button class="comm-qr-search-btn" onclick="searchUserByQR()">
+                          <i class="fas fa-search"></i>
+                      </button>
+                  </div>
+              </div>
+
+              <!-- Section QR của tôi (ẩn, chỉ dùng khi mở từ Hồ sơ cá nhân) -->
+              <div id="qrMyCodeSection" class="comm-qr-my-section" style="display: none;">
+                  <div class="comm-qr-profile">
+                      <img id="qrUserAvatar" class="comm-qr-avatar" src="https://ui-avatars.com/api/?name=User" alt="Avatar">
+                      <h3 id="qrUserName" class="comm-qr-name">User</h3>
+                      <p id="qrUserUsername" class="comm-qr-username">@username</p>
+                  </div>
+                  <div class="comm-qr-canvas-wrapper">
+                      <div id="qrCodeContainer" class="comm-qr-canvas"></div>
+                  </div>
+                  <button class="comm-qr-download-btn" onclick="downloadUserQR()">
+                      <i class="fas fa-download"></i> Tải mã QR
+                  </button>
+              </div>
+
           </div>
       </div>
   </div>

@@ -128,67 +128,201 @@
           <button class="admin-mobile-toggle" onclick="toggleSidebar()">
             <i class="fas fa-chevron-right"></i>
           </button>
-          <h2 class="admin-panel-title">Dashboard</h2>
-          <span class="text-muted">Tổng quan hệ thống</span>
+          <h2 class="admin-panel-title"><i class="fas fa-chart-line"></i> Dashboard</h2>
+          <span class="text-muted">Tổng quan hệ thống · Realtime</span>
         </div>
 
-        <!-- Stats Grid -->
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-icon movies">
+        <!-- ═══════════════ STAT CARDS ═══════════════ -->
+        <div class="dashboard-stats-grid">
+          <!-- Card 1: Tổng phim -->
+          <div class="dash-stat-card" data-color="red">
+            <div class="dash-stat-icon">
               <i class="fas fa-film"></i>
             </div>
-            <div class="stat-info">
-              <h3 id="statTotalMovies">0</h3>
-              <p>Tổng số phim</p>
+            <div class="dash-stat-body">
+              <span class="dash-stat-value" id="statTotalMovies" data-count="0">0</span>
+              <span class="dash-stat-label">Tổng số phim</span>
+            </div>
+            <div class="dash-stat-trend up" id="trendMovies">
+              <i class="fas fa-arrow-up"></i> <span>--</span>
             </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-icon views">
+
+          <!-- Card 2: Tổng lượt xem -->
+          <div class="dash-stat-card" data-color="blue">
+            <div class="dash-stat-icon">
               <i class="fas fa-eye"></i>
             </div>
-            <div class="stat-info">
-              <h3 id="statTotalViews">0</h3>
-              <p>Tổng lượt xem</p>
+            <div class="dash-stat-body">
+              <span class="dash-stat-value" id="statTotalViews" data-count="0">0</span>
+              <span class="dash-stat-label">Tổng lượt xem</span>
+            </div>
+            <div class="dash-stat-trend up" id="trendViews">
+              <i class="fas fa-signal"></i> <span>--</span>
             </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-icon revenue">
+
+          <!-- Card 3: Doanh thu -->
+          <div class="dash-stat-card" data-color="green">
+            <div class="dash-stat-icon">
               <i class="fas fa-coins"></i>
             </div>
-            <div class="stat-info">
-              <h3 id="statTotalRevenue">0 CRO</h3>
-              <p>Doanh thu ước tính</p>
+            <div class="dash-stat-body">
+              <span class="dash-stat-value" id="statTotalRevenue" data-count="0">0 CRO</span>
+              <span class="dash-stat-label">Doanh thu ước tính</span>
+            </div>
+            <div class="dash-stat-trend" id="trendRevenue">
+              <i class="fas fa-chart-line"></i> <span>CRO</span>
             </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-icon users">
+
+          <!-- Card 4: Tổng users -->
+          <div class="dash-stat-card" data-color="orange">
+            <div class="dash-stat-icon">
               <i class="fas fa-users"></i>
             </div>
-            <div class="stat-info">
-              <h3 id="statTotalUsers">0</h3>
-              <p>Tổng người dùng</p>
+            <div class="dash-stat-body">
+              <span class="dash-stat-value" id="statTotalUsers" data-count="0">0</span>
+              <span class="dash-stat-label">Tổng người dùng</span>
+            </div>
+            <div class="dash-stat-trend up" id="trendUsers">
+              <i class="fas fa-user-plus"></i> <span>--</span>
+            </div>
+          </div>
+
+          <!-- Card 5: VIP Users -->
+          <div class="dash-stat-card" data-color="gold">
+            <div class="dash-stat-icon">
+              <i class="fas fa-crown"></i>
+            </div>
+            <div class="dash-stat-body">
+              <span class="dash-stat-value" id="statVipUsers" data-count="0">0</span>
+              <span class="dash-stat-label">Thành viên VIP</span>
+            </div>
+            <div class="dash-stat-trend" id="trendVip">
+              <i class="fas fa-gem"></i> <span>Premium</span>
+            </div>
+          </div>
+
+          <!-- Card 6: Báo lỗi chờ -->
+          <div class="dash-stat-card" data-color="pink">
+            <div class="dash-stat-icon">
+              <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div class="dash-stat-body">
+              <span class="dash-stat-value" id="statPendingErrors" data-count="0">0</span>
+              <span class="dash-stat-label">Báo lỗi chờ xử lý</span>
+            </div>
+            <div class="dash-stat-trend" id="trendErrors">
+              <i class="fas fa-clock"></i> <span>Pending</span>
             </div>
           </div>
         </div>
 
-        <!-- Recent Movies -->
-        <div class="mt-3">
-          <h3>Phim mới thêm gần đây</h3>
-          <table class="admin-table mt-2">
-            <thead>
-              <tr>
-                <th>Poster</th>
-                <th>Tên phim</th>
-                <th>Giá</th>
-                <th>Trạng thái</th>
-                <th>Ngày tạo</th>
-              </tr>
-            </thead>
-            <tbody id="recentMoviesTable">
-              <!-- Data sẽ được load động -->
-            </tbody>
-          </table>
+        <!-- ═══════════════ CHARTS ROW 1 ═══════════════ -->
+        <div class="dashboard-charts-row">
+          <!-- Biểu đồ: Phim theo thể loại -->
+          <div class="dash-chart-card">
+            <div class="dash-chart-header">
+              <h3><i class="fas fa-tags"></i> Phim theo thể loại</h3>
+            </div>
+            <div class="chart-period-tabs" style="padding: 8px 20px;">
+              <button class="chart-tab active" onclick="changeDashChartPeriod('categories', 'all')" data-chart="categories" data-period="all">Tất cả</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('categories', 'day')" data-chart="categories" data-period="day">Hôm nay</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('categories', 'week')" data-chart="categories" data-period="week">Tuần</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('categories', 'month')" data-chart="categories" data-period="month">Tháng</button>
+            </div>
+            <div class="dash-chart-body">
+              <canvas id="chartMoviesByCategory"></canvas>
+            </div>
+          </div>
+
+          <!-- Biểu đồ: Phân bổ lượt xem -->
+          <div class="dash-chart-card">
+            <div class="dash-chart-header">
+              <h3><i class="fas fa-chart-area"></i> Phân bổ lượt xem</h3>
+            </div>
+            <div class="chart-period-tabs" style="padding: 8px 20px;">
+              <button class="chart-tab active" onclick="changeDashChartPeriod('views', 'all')" data-chart="views" data-period="all">Tất cả</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('views', 'day')" data-chart="views" data-period="day">Hôm nay</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('views', 'week')" data-chart="views" data-period="week">Tuần</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('views', 'month')" data-chart="views" data-period="month">Tháng</button>
+            </div>
+            <div class="dash-chart-body">
+              <canvas id="chartViewsRecent"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════ CHARTS ROW 2 ═══════════════ -->
+        <div class="dashboard-charts-row">
+          <!-- Biểu đồ: Tỉ lệ phim lẻ/bộ -->
+          <div class="dash-chart-card">
+            <div class="dash-chart-header">
+              <h3><i class="fas fa-chart-pie"></i> Tỉ lệ Phim lẻ / Phim bộ</h3>
+            </div>
+            <div class="dash-chart-body dash-chart-body-doughnut">
+              <canvas id="chartMovieTypes"></canvas>
+            </div>
+          </div>
+
+          <!-- Biểu đồ: Top 10 phim xem nhiều -->
+          <div class="dash-chart-card">
+            <div class="dash-chart-header">
+              <h3><i class="fas fa-trophy"></i> Top 10 phim xem nhiều nhất</h3>
+            </div>
+            <div class="chart-period-tabs" style="padding: 8px 20px;">
+              <button class="chart-tab active" onclick="changeDashChartPeriod('topMovies', 'all')" data-chart="topMovies" data-period="all">Tất cả</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('topMovies', 'day')" data-chart="topMovies" data-period="day">Hôm nay</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('topMovies', 'week')" data-chart="topMovies" data-period="week">Tuần</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('topMovies', 'month')" data-chart="topMovies" data-period="month">Tháng</button>
+            </div>
+            <div class="dash-chart-body">
+              <canvas id="chartTopMovies"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════ TABLES ROW ═══════════════ -->
+        <div class="dashboard-tables-row">
+          <!-- Bảng: Phim gần đây -->
+          <div class="dash-table-card">
+            <div class="dash-table-header">
+              <h3><i class="fas fa-clock"></i> Phim mới thêm gần đây</h3>
+            </div>
+            <div class="dash-table-body">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Poster</th>
+                    <th>Tên phim</th>
+                    <th>Loại</th>
+                    <th>Lượt xem</th>
+                    <th>Trạng thái</th>
+                    <th>Ngày tạo</th>
+                  </tr>
+                </thead>
+                <tbody id="recentMoviesTable">
+                  <!-- Data sẽ được load động -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Bảng: Hoạt động gần đây -->
+          <div class="dash-table-card">
+            <div class="dash-table-header">
+              <h3><i class="fas fa-stream"></i> Hoạt động gần đây</h3>
+            </div>
+            <div class="dash-table-body">
+              <div class="dash-activity-list" id="recentActivitiesList">
+                <!-- Data sẽ được load động -->
+                <div class="dash-activity-empty">
+                  <i class="fas fa-spinner fa-spin"></i> Đang tải...
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -578,32 +712,76 @@
           </button>
         </div>
 
-        <div class="search-filter mb-3">
-          <div class="search-box">
-            <i class="fas fa-search"></i>
-            <input
-              type="text"
-              class="form-input"
-              id="adminSearchCountry"
-              placeholder="Tìm tên quốc gia, mã code..."
-              oninput="renderAdminCountriesDebounced()"
-            />
-          </div>
-        </div>
+        <!-- Layout 2 cột: Bảng trái + Biểu đồ phải -->
+        <div class="country-panel-grid">
+          <!-- CỘT TRÁI: Bảng quốc gia -->
+          <div class="country-table-section">
+            <div class="search-filter mb-3">
+              <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input
+                  type="text"
+                  class="form-input"
+                  id="adminSearchCountry"
+                  placeholder="Tìm tên quốc gia, mã code..."
+                  oninput="renderAdminCountriesDebounced()"
+                />
+              </div>
+            </div>
 
-        <div class="table-responsive">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th style="width: 50px">STT</th>
-                <th>ID</th>
-                <th>Tên Quốc Gia</th>
-                <th>Mã (Code)</th>
-                <th style="width: 120px">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody id="adminCountriesTable"></tbody>
-          </table>
+            <div class="table-responsive">
+              <table class="admin-table" style="table-layout: fixed; width: 100%;">
+                <thead>
+                  <tr>
+                    <th style="width: 8%; text-align: center;">STT</th>
+                    <th style="width: 12%; text-align: center;">ID</th>
+                    <th style="width: 35%;">Tên Quốc Gia</th>
+                    <th style="width: 12%; text-align: center;">Code</th>
+                    <th style="width: 14%; text-align: center;">Số phim</th>
+                    <th style="width: 19%; text-align: center;">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="adminCountriesTable"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- CỘT PHẢI: Biểu đồ thống kê -->
+          <div class="country-chart-section">
+            <div class="chart-card">
+              <div class="chart-card-header">
+                <h3 style="margin: 0; font-size: 1.05rem;">
+                  <i class="fas fa-chart-bar" style="color: #4db8ff; margin-right: 6px;"></i>
+                  Top 10 phim xem nhiều nhất
+                </h3>
+              </div>
+
+              <!-- Tab lọc thời gian -->
+              <div class="chart-period-tabs">
+                <button class="chart-tab active" onclick="changeCountryStatsPeriod('all')" data-period="all">Tất cả</button>
+                <button class="chart-tab" onclick="changeCountryStatsPeriod('day')" data-period="day">Hôm nay</button>
+                <button class="chart-tab" onclick="changeCountryStatsPeriod('week')" data-period="week">Tuần</button>
+                <button class="chart-tab" onclick="changeCountryStatsPeriod('month')" data-period="month">Tháng</button>
+              </div>
+
+              <!-- Dropdown chọn quốc gia -->
+              <div style="padding: 0 16px 12px;">
+                <select class="form-select" id="countryStatsSelect" onchange="onCountryStatsSelectChange()" style="width: 100%; padding: 8px 12px; font-size: 0.9rem;">
+                  <option value="">🌐 Tất cả quốc gia</option>
+                  <!-- JS sẽ load động -->
+                </select>
+              </div>
+
+              <!-- Canvas biểu đồ -->
+              <div style="padding: 0 16px 16px; position: relative; min-height: 320px;">
+                <canvas id="countryStatsChart"></canvas>
+                <div id="countryChartEmpty" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #888;">
+                  <i class="fas fa-chart-bar" style="font-size: 2.5rem; margin-bottom: 10px; opacity: 0.3;"></i>
+                  <p style="margin: 0; font-size: 0.9rem;">Chưa có dữ liệu lượt xem</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -5,7 +5,8 @@
 
 // Global state
 let isCommunityLoaded = false;
-let currentCommView = 'feed'; // feed | chat | profile
+let currentCommView = 'feed'; // feed | chat | profile | friends
+let previousCommView = 'feed'; // Lưu view trước đó để nút quay lại
 let communityPresenceChannel = null;
 let userPresenceMap = new Map(); // userId (string) -> { online: boolean, last_seen: string }
 let currentChatTarget = null; // Thông tin người đang chat cùng
@@ -26,6 +27,94 @@ let forwardingMsgId = null; // ID tin nhắn đang được chuẩn bị chuyể
 let forwardFriendsData = []; // Cache danh sách bạn bè để filter nhanh
 let selectedForwardUserIds = []; // Danh sách các ID người dùng được chọn để chuyển tiếp
 let myAppBlocks = []; // [MỚI] Lưu trữ toàn bộ danh sách chặn của tôi để dùng chung cho Sidebar/Chat
+let postSelectedImages = []; // Mảng file ảnh đã chọn để đăng bài (tối đa 10, chờ upload R2)
+const MAX_POST_IMAGES = 10; // Giới hạn số ảnh tối đa mỗi bài
+let postSelectedMovieId = null; // ID phim đã chọn để gắn thẻ vào bài viết
+const R2_WORKER_URL = 'https://r2-uploader.thinhnd-2003.workers.dev'; // URL Cloudflare R2 Worker
+
+/**
+ * Tạo HTML thẻ phim chi tiết cho bài viết (dùng chung feed + profile)
+ * Hiển thị: poster, tên phim, thể loại, quốc gia (lá cờ), thời lượng, mô tả ngắn, loại phim, số tập, nút xem phim
+ * @param {Object} movieData - Dữ liệu phim từ allMovies
+ * @returns {string} HTML thẻ phim hoặc '' nếu không có phim
+ */
+function buildMovieRefHtml(movieData) {
+    if (!movieData || !movieData.title) return '';
+
+    const poster = movieData.posterUrl || movieData.poster_url || '';
+    const title = escapeHtml(movieData.title);
+    const country = movieData.country || '';
+    const duration = movieData.duration || '';
+    const description = movieData.description || '';
+    const type = movieData.type || '';
+    const totalEps = movieData.totalEpisodes || movieData.total_episodes || 0;
+    const currentEps = movieData._episodeCount || movieData.current_episode || 0;
+
+    // Lấy tên thể loại từ allCategories (vì movie.categories lưu mảng ID)
+    let categoryNames = [];
+    const catIds = movieData.categories || [];
+    if (catIds.length > 0 && typeof allCategories !== 'undefined' && allCategories) {
+        catIds.forEach(catId => {
+            const catObj = allCategories.find(c => c.id === catId);
+            if (catObj && catObj.name) categoryNames.push(catObj.name);
+        });
+    }
+    // Fallback: dùng movie.category nếu có
+    if (categoryNames.length === 0 && movieData.category) {
+        categoryNames.push(movieData.category);
+    }
+
+    // Tạo meta badges
+    let metaBadges = '';
+    if (categoryNames.length > 0) metaBadges += `<span class="comm-movie-tag-badge"><i class="fas fa-tags"></i> ${escapeHtml(categoryNames.join(', '))}</span>`;
+    
+    // Quốc gia với lá cờ (tra cứu allCountries bằng ID)
+    if (country) {
+        let countryName = country;
+        let flagHtml = '<i class="fas fa-globe-asia"></i>';
+        if (typeof allCountries !== 'undefined' && allCountries && allCountries.length > 0) {
+            const cObj = allCountries.find(c => c.id === country || (c.name && c.name.toLowerCase() === country.toLowerCase()));
+            if (cObj) {
+                countryName = cObj.name || country;
+                const flagCode = (cObj.code || cObj.id || '').toLowerCase();
+                if (flagCode) {
+                    flagHtml = `<img src="https://flagcdn.com/w20/${flagCode}.png" alt="${escapeHtml(countryName)}" style="width:14px; height:10px; border-radius:1px; vertical-align:middle;">`;
+                }
+            }
+        }
+        metaBadges += `<span class="comm-movie-tag-badge">${flagHtml} ${escapeHtml(countryName)}</span>`;
+    }
+    
+    if (duration) metaBadges += `<span class="comm-movie-tag-badge"><i class="fas fa-clock"></i> ${escapeHtml(duration)}</span>`;
+
+    // Badge loại phim + số tập
+    let episodeBadge = '';
+    if (type === 'series') {
+        const epsText = totalEps > 0 ? `${currentEps}/${totalEps} tập` : `${currentEps} tập hiện có`;
+        episodeBadge = `<span class="comm-movie-episodes-badge"><i class="fas fa-list-ol"></i> Phim Bộ • ${epsText}</span>`;
+    } else if (type === 'single') {
+        episodeBadge = `<span class="comm-movie-episodes-badge"><i class="fas fa-film"></i> Phim Lẻ</span>`;
+    }
+
+    // Mô tả ngắn
+    const descHtml = description ? `<div class="comm-post-movie-desc">${escapeHtml(description)}</div>` : '';
+
+    return `
+        <div class="comm-post-movie-ref">
+            ${poster ? `<img src="${poster}" alt="${title}" onerror="this.style.display='none'" onclick="if(typeof viewMovieDetail==='function') viewMovieDetail('${movieData.id}')">` : ''}
+            <div class="comm-post-movie-info">
+                <div class="comm-post-movie-title">🎬 ${title}</div>
+                ${(metaBadges || episodeBadge) ? `<div class="comm-post-movie-meta">${metaBadges}${episodeBadge}</div>` : ''}
+                ${descHtml}
+                <div class="comm-post-movie-actions">
+                    <button class="comm-movie-watch-btn" onclick="event.stopPropagation(); if(typeof viewMovieDetail==='function') viewMovieDetail('${movieData.id}')">
+                        <i class="fas fa-play-circle"></i> Xem phim
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
 
 // Trạng thái typing indicator
 let typingTimeout = null;
@@ -241,6 +330,8 @@ async function initCommunity() {
     await fetchPosts();
     // Tải danh sách gợi ý
     fetchSuggestedFriends();
+    // Tải phim đang hot
+    loadTrendingMovies();
     // Start Realtime subscriptions for interactions
     subscribeToInteractions();
     
@@ -271,8 +362,12 @@ setTimeout(() => {
 }, 3000); // Delay 3 giây để đợi Firebase auth check xong
 
 // 3. SWITCH VIEWS
-function switchCommView(viewName) {
+function switchCommView(viewName, skipRender = false) {
     try {
+        // Lưu view trước đó (trừ khi đang ở profile chuyển sang profile)
+        if (currentCommView !== 'profile' && viewName === 'profile') {
+            previousCommView = currentCommView;
+        }
         currentCommView = viewName;
         
         // Ẩn tất cả bằng inline !important (override mọi CSS !important rule)
@@ -287,6 +382,12 @@ function switchCommView(viewName) {
         const feedView = document.getElementById('commFeedView');
         if (feedView) feedView.classList.remove('comm-friends-active');
         
+        // Hiện lại footer khi rời tab Chat (sẽ ẩn lại nếu vào chat bên dưới)
+        const footerEl = document.getElementById('footer');
+        if (footerEl && viewName !== 'chat') {
+            footerEl.style.display = 'block';
+        }
+        
         // Update active nav state
         const navItems = document.querySelectorAll(".comm-left-sidebar .comm-nav-item");
         navItems.forEach(i => i.classList.remove('active'));
@@ -300,9 +401,9 @@ function switchCommView(viewName) {
             const tabs = document.querySelector(".comm-feed-tabs");
             if(tabs) {
                 tabs.innerHTML = `
-                    <button class="comm-tab active">Tất cả bài viết</button>
-                    <button class="comm-tab">Đang theo dõi</button>
-                    <button class="comm-tab">Thịnh hành</button>
+                    <button class="comm-tab active" onclick="switchFeedTab('all', this)">Tất cả bài viết</button>
+                    <button class="comm-tab" onclick="switchFeedTab('following', this)">Đang theo dõi</button>
+                    <button class="comm-tab" onclick="switchFeedTab('trending', this)">Thịnh hành</button>
                 `;
             }
             const composer = document.querySelector(".comm-composer");
@@ -317,6 +418,10 @@ function switchCommView(viewName) {
             
             // Kích hoạt trạng thái khóa cuộn và ẩn footer
             document.body.classList.add('comm-chat-active');
+            
+            // Ẩn footer khi ở tab nhắn tin để không che ô nhập tin nhắn
+            const chatFooter = document.getElementById('footer');
+            if (chatFooter) chatFooter.style.display = 'none';
             
             // Nếu chưa chọn người chat hoặc session đang ẩn, ẩn sidebar thông tin
             const layout = document.getElementById("commChatView");
@@ -358,16 +463,25 @@ function switchCommView(viewName) {
             const el = document.getElementById("commProfileView");
             if (el) el.style.setProperty('display', 'flex', 'important');
             if (navItems[3]) navItems[3].classList.add("active");
-            renderMyProfile();
+            if (!skipRender) renderMyProfile();
         }
     } catch (e) {
         console.error("Lỗi chuyển View:", e);
     }
 }
 
+/**
+ * Quay lại view trước đó từ trang cá nhân
+ * Thông minh: nhớ view trước (feed/friends/chat), mặc định về feed
+ */
+function goBackFromProfile() {
+    const target = previousCommView || 'feed';
+    switchCommView(target);
+}
+
 function viewUserProfile(userId) {
     if (!userId) return;
-    switchCommView('profile');
+    switchCommView('profile', true);
     renderUserProfile(userId);
 }
 
@@ -378,6 +492,231 @@ function closeChatConversation() {
     if (layoutEl) {
         layoutEl.classList.remove('chat-conversation-open');
     }
+}
+
+/**
+ * Thu gọn / Mở rộng sidebar danh sách chat
+ * Thu gọn: chỉ hiện avatar tròn — Mở rộng: hiện đầy đủ
+ * Chỉ hoạt động trên PC (>1024px)
+ */
+function toggleChatSidebar() {
+    // Chặn toggle trên mobile/tablet
+    if (window.innerWidth <= 1024) return;
+
+    const sidebar = document.getElementById('commChatSidebar');
+    const layout = document.getElementById('commChatView');
+    if (!sidebar) return;
+
+    sidebar.classList.toggle('collapsed');
+    if (layout) layout.classList.toggle('sidebar-collapsed');
+}
+
+// Tự remove collapsed khi resize về mobile
+window.addEventListener('resize', function() {
+    if (window.innerWidth <= 1024) {
+        const sidebar = document.getElementById('commChatSidebar');
+        const layout = document.getElementById('commChatView');
+        if (sidebar) sidebar.classList.remove('collapsed');
+        if (layout) layout.classList.remove('sidebar-collapsed');
+    }
+});
+
+/**
+ * Thu gọn / Mở rộng left sidebar (nav trái)
+ * Thu gọn: chỉ hiện icon — Mở rộng: hiện đầy đủ text
+ * Chỉ hoạt động trên PC (>768px)
+ */
+function toggleLeftSidebar() {
+    if (window.innerWidth <= 768) return;
+
+    const sidebar = document.getElementById('commLeftSidebar');
+    const wrapper = document.querySelector('.community-wrapper');
+    if (!sidebar) return;
+
+    sidebar.classList.toggle('collapsed');
+    if (wrapper) wrapper.classList.toggle('left-collapsed');
+}
+
+// Reset left sidebar khi resize về mobile
+window.addEventListener('resize', function() {
+    if (window.innerWidth <= 768) {
+        const leftSidebar = document.getElementById('commLeftSidebar');
+        const wrapper = document.querySelector('.community-wrapper');
+        if (leftSidebar) leftSidebar.classList.remove('collapsed');
+        if (wrapper) wrapper.classList.remove('left-collapsed');
+    }
+});
+
+/**
+ * Render gallery ảnh cho bài post (hỗ trợ 1 hoặc nhiều ảnh)
+ * Tương thích ngược: bài cũ chỉ có media_url vẫn hiển thị bình thường
+ * @param {Object} post - Dữ liệu bài post từ Supabase
+ * @returns {string} HTML gallery hoặc chuỗi rỗng
+ */
+function renderPostGallery(post) {
+    // Ưu tiên media_urls (mảng), fallback về media_url (string đơn)
+    const urls = post.media_urls && post.media_urls.length > 0
+        ? post.media_urls
+        : (post.media_url ? [post.media_url] : []);
+
+    if (urls.length === 0) return '';
+
+    // 1 ảnh: hiển thị full-width như cũ
+    if (urls.length === 1) {
+        return `<img src="${urls[0]}" class="comm-post-image" alt="Ảnh bài đăng" loading="lazy" onclick="openPostImageViewer('${post.id}', 0)">`;
+    }
+
+    // Nhiều ảnh: grid adaptive
+    const maxShow = 4; // Hiển thị tối đa 4 ảnh trong grid
+    const remaining = urls.length - maxShow;
+
+    let gridItems = urls.slice(0, maxShow).map((url, idx) => {
+        const isLast = idx === maxShow - 1 && remaining > 0;
+        return `
+            <div class="comm-gallery-item ${urls.length === 2 ? 'half' : ''} ${urls.length === 3 && idx === 0 ? 'full-row' : ''}" onclick="openPostImageViewer('${post.id}', ${idx})">
+                <img src="${url}" alt="Ảnh ${idx + 1}" loading="lazy">
+                ${isLast ? `<div class="comm-gallery-more">+${remaining}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+
+    // Lưu data URLs vào attribute để viewer lấy
+    const dataUrls = encodeURIComponent(JSON.stringify(urls));
+    return `<div class="comm-post-gallery count-${Math.min(urls.length, maxShow)}" data-urls="${dataUrls}">${gridItems}</div>`;
+}
+
+/**
+ * Mở viewer xem ảnh bài post (fullscreen)
+ * @param {string} postId - ID bài viết
+ * @param {number} startIndex - Vị trí ảnh bắt đầu xem
+ */
+function openPostImageViewer(postId, startIndex = 0) {
+    // Tìm gallery element gần nhất chứa data-urls
+    const galleries = document.querySelectorAll('.comm-post-gallery');
+    let urls = [];
+    for (const g of galleries) {
+        try {
+            const parsed = JSON.parse(decodeURIComponent(g.dataset.urls));
+            // Tìm gallery thuộc post đúng
+            if (g.closest(`#post-${postId}`) || g.closest('.comm-post-card')) {
+                urls = parsed;
+                break;
+            }
+        } catch(e) {}
+    }
+
+    // Fallback: lấy từ ảnh đơn
+    if (urls.length === 0) {
+        const singleImg = document.querySelector(`#post-${postId} .comm-post-image`);
+        if (singleImg) urls = [singleImg.src];
+    }
+
+    if (urls.length === 0) return;
+
+    // Tạo viewer overlay
+    let viewer = document.getElementById('postImageViewer');
+    if (!viewer) {
+        viewer = document.createElement('div');
+        viewer.id = 'postImageViewer';
+        viewer.className = 'post-image-viewer-overlay';
+        document.body.appendChild(viewer);
+    }
+
+    let currentIdx = startIndex;
+
+    function renderViewer() {
+        viewer.innerHTML = `
+            <div class="post-image-viewer-content">
+                <button class="post-viewer-close" onclick="document.getElementById('postImageViewer').remove()">&times;</button>
+                <span class="post-viewer-counter">${currentIdx + 1} / ${urls.length}</span>
+                ${urls.length > 1 ? `<button class="post-viewer-prev" onclick="navigatePostViewer(-1)"><i class="fas fa-chevron-left"></i></button>` : ''}
+                <img src="${urls[currentIdx]}" alt="Ảnh ${currentIdx + 1}">
+                ${urls.length > 1 ? `<button class="post-viewer-next" onclick="navigatePostViewer(1)"><i class="fas fa-chevron-right"></i></button>` : ''}
+            </div>
+        `;
+        viewer.style.display = 'flex';
+        viewer.onclick = (e) => { if (e.target === viewer) viewer.remove(); };
+    }
+
+    window.navigatePostViewer = function(dir) {
+        currentIdx = (currentIdx + dir + urls.length) % urls.length;
+        renderViewer();
+    };
+
+    renderViewer();
+}
+
+/**
+ * Render top 10 phim hot nhất vào widget sidebar
+ * Sắp xếp theo views từ allMovies cache
+ */
+function loadTrendingMovies() {
+    const container = document.getElementById('commTrendingMovies');
+    if (!container) return;
+
+    if (typeof allMovies === 'undefined' || !allMovies || allMovies.length === 0) {
+        container.innerHTML = '<p class="text-muted" style="font-size: 0.85rem; padding: 5px;">Đang tải...</p>';
+        // Thử lại sau 2s khi allMovies chưa load
+        setTimeout(loadTrendingMovies, 2000);
+        return;
+    }
+
+    // Sort theo views giảm dần, lấy top 10
+    const topMovies = [...allMovies]
+        .sort((a, b) => (b.views || 0) - (a.views || 0))
+        .slice(0, 10);
+
+    if (topMovies.length === 0) {
+        container.innerHTML = '<p class="text-muted" style="font-size: 0.85rem;">Chưa có dữ liệu phim</p>';
+        return;
+    }
+
+    // Format số lượt xem
+    const formatViews = (v) => {
+        if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
+        if (v >= 1000) return (v / 1000).toFixed(1) + 'K';
+        return v || 0;
+    };
+
+    container.innerHTML = topMovies.map((m, idx) => {
+        const poster = m.posterUrl || m.poster_url || m.poster || '';
+        const title = m.title || 'Không rõ';
+        const views = formatViews(m.views);
+        const rating = m.rating || '—';
+        const rank = idx + 1;
+        const rankClass = rank <= 3 ? 'hot-rank-top' : '';
+
+        return `
+            <div class="comm-trending-movie" onclick="if(typeof viewMovieDetail==='function') viewMovieDetail('${m.id}')">
+                <span class="comm-trending-rank ${rankClass}">${rank}</span>
+                <img class="comm-trending-poster" src="${poster}" alt="${title}" onerror="this.src='https://via.placeholder.com/40x56/1a1a2e/666?text=🎬'" loading="lazy">
+                <div class="comm-trending-info">
+                    <span class="comm-trending-title">${escapeHtml(title)}</span>
+                    <span class="comm-trending-meta">
+                        <i class="fas fa-eye"></i> ${views}
+                        <i class="fas fa-star" style="color: #f5c518; margin-left: 6px;"></i> ${rating}
+                    </span>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+// Biến lưu tab feed hiện tại
+let currentFeedTab = 'all';
+
+/**
+ * Chuyển tab feed (Tất cả / Đang theo dõi / Thịnh hành)
+ */
+function switchFeedTab(tabName, btnEl) {
+    currentFeedTab = tabName;
+
+    // Cập nhật active tab
+    const tabs = document.querySelectorAll('.comm-feed-tabs .comm-tab');
+    tabs.forEach(t => t.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
+
+    // Fetch bài viết theo tab
+    fetchPosts();
 }
 
 // 4. SUPABASE RENDER POSTS
@@ -393,14 +732,57 @@ async function fetchPosts() {
     `;
 
     try {
-        const { data, error } = await supabase
+        let query = supabase
             .from('community_posts')
             .select(`
-                id, content, media_url, movie_id, likes_count, comments_count, shares_count, created_at,
+                id, content, media_url, media_urls, movie_id, likes_count, comments_count, shares_count, created_at,
                 profiles:user_id ( id, display_name, avatar, role )
-            `)
-            .order('created_at', { ascending: false })
-            .limit(20);
+            `);
+
+        // === TAB: ĐANG THEO DÕI ===
+        if (currentFeedTab === 'following' && currentUser) {
+            // Lấy danh sách user_id mà mình đang follow
+            const { data: follows } = await supabase
+                .from('community_follows')
+                .select('following_id')
+                .eq('follower_id', currentUser.id);
+
+            const followingIds = (follows || []).map(f => f.following_id);
+
+            if (followingIds.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; color: var(--text-muted); padding: 40px;">
+                        <i class="fas fa-user-friends" style="font-size: 2rem; margin-bottom: 10px; display: block;"></i>
+                        <p>Bạn chưa theo dõi ai. Hãy theo dõi người khác để xem bài viết ở đây!</p>
+                    </div>`;
+                return;
+            }
+
+            query = query.in('user_id', followingIds);
+        } else if (currentFeedTab === 'following' && !currentUser) {
+            container.innerHTML = `
+                <div style="text-align: center; color: var(--text-muted); padding: 40px;">
+                    <i class="fas fa-sign-in-alt" style="font-size: 2rem; margin-bottom: 10px; display: block;"></i>
+                    <p>Vui lòng đăng nhập để xem bài viết từ người theo dõi!</p>
+                </div>`;
+            return;
+        }
+
+        // === TAB: THỊNH HÀNH === (bài trong 7 ngày gần nhất, sort theo likes + comments)
+        if (currentFeedTab === 'trending') {
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            query = query.gte('created_at', sevenDaysAgo.toISOString());
+        }
+
+        // Sắp xếp theo tab
+        if (currentFeedTab === 'trending') {
+            query = query.order('likes_count', { ascending: false }).limit(20);
+        } else {
+            query = query.order('created_at', { ascending: false }).limit(20);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
@@ -415,17 +797,30 @@ async function fetchPosts() {
         }
 
         if (!data || data.length === 0) {
-            container.innerHTML = `<p class="text-center text-muted" style="padding: 20px;">Chưa có bài viết nào. Hãy là người đầu tiên khơi mào!</p>`;
+            const emptyMessages = {
+                'all': 'Chưa có bài viết nào. Hãy là người đầu tiên khơi mào!',
+                'following': 'Chưa có bài viết nào từ người bạn theo dõi.',
+                'trending': 'Chưa có bài viết thịnh hành trong 7 ngày qua.'
+            };
+            container.innerHTML = `<p class="text-center text-muted" style="padding: 20px;">${emptyMessages[currentFeedTab] || emptyMessages.all}</p>`;
             return;
         }
 
         container.innerHTML = data.map(post => {
             const user = post.profiles || {};
+            // Tra cứu phim từ allMovies global thay vì join Supabase
+            let movieData = null;
+            if (post.movie_id && typeof allMovies !== 'undefined' && allMovies) {
+                movieData = allMovies.find(m => m.id === post.movie_id) || null;
+            }
             const name = user.display_name || "Nhà báo vô danh";
             const avatar = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
             const timeAgo = formatTimeAgo(new Date(post.created_at));
             const isLiked = userLikes.includes(post.id);
             const isOwner = currentUser && (currentUser.id === user.id || currentUser.role === 'admin');
+
+            // Render thẻ phim nếu có movie_id (dùng hàm helper)
+            const movieRefHtml = buildMovieRefHtml(movieData);
             
             return `
                 <div class="comm-post-card" id="post-${post.id}">
@@ -454,8 +849,9 @@ async function fetchPosts() {
                         </div>
                         ` : '<button class="comm-post-options"><i class="fas fa-ellipsis-h"></i></button>'}
                     </div>
-                    <div class="comm-post-content" id="post-content-${post.id}">${escapeHtml(post.content)}</div>
-                    ${post.media_url ? `<img src="${post.media_url}" class="comm-post-image">` : ''}
+                    ${post.content ? `<div class="comm-post-content" id="post-content-${post.id}">${escapeHtml(post.content)}</div>` : ''}
+                    ${renderPostGallery(post)}
+                    ${movieRefHtml}
                     <div class="comm-post-footer">
                         <button class="comm-btn-interact" onclick="likePost('${post.id}')"><i class="${isLiked ? 'fas' : 'far'} fa-heart" style="${isLiked ? 'color:#ff4d4d' : ''}"></i> <span id="like-count-${post.id}">${post.likes_count || 0} Thích</span></button>
                         <button class="comm-btn-interact" onclick="showPostComments('${post.id}', '${user.id}')"><i class="far fa-comment"></i> ${post.comments_count || 0} Bình luận</button>
@@ -475,7 +871,11 @@ async function fetchPosts() {
 async function submitPost() {
     const input = document.getElementById("commPostContent");
     const content = input.value.trim();
-    if (!content) return;
+    // Cho phép đăng bài nếu có text HOẶC ảnh HOẶC phim
+    if (!content && postSelectedImages.length === 0 && !postSelectedMovieId) {
+        showNotification("Vui lòng nhập nội dung hoặc chọn ảnh/phim", "warning");
+        return;
+    }
     
     if (!currentUser) {
         showNotification("Vui lòng đăng nhập để đăng bài", "warning");
@@ -485,21 +885,55 @@ async function submitPost() {
     
     try {
         const btn = document.querySelector(".comm-btn-post");
-        const originalText = btn.innerHTML;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         btn.disabled = true;
 
+        let uploadedUrls = [];
+
+        // 1. Upload ảnh lên Cloudflare R2 TRƯỚC (nếu có)
+        if (postSelectedImages.length > 0) {
+            const userName = currentUser.display_name || currentUser.displayName || 'user';
+            const shortId = Date.now();
+
+            for (let i = 0; i < postSelectedImages.length; i++) {
+                btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Tải ảnh ${i + 1}/${postSelectedImages.length}...`;
+                const url = await uploadPostImageToR2(postSelectedImages[i], shortId, userName, i + 1);
+                if (url) uploadedUrls.push(url);
+            }
+
+            if (uploadedUrls.length === 0 && postSelectedImages.length > 0) {
+                showNotification("Lỗi upload ảnh, thử lại sau!", "error");
+                return;
+            }
+        }
+
+        // 2. Tạo dữ liệu bài viết (đã có URLs ảnh)
+        const postData = {
+            user_id: currentUser.id,
+            content: content || null
+        };
+        if (postSelectedMovieId) postData.movie_id = postSelectedMovieId;
+        if (uploadedUrls.length > 0) {
+            postData.media_url = uploadedUrls[0]; // Tương thích ngược
+            postData.media_urls = uploadedUrls;    // Mảng đầy đủ
+        }
+
+        // 3. INSERT 1 lần duy nhất (tránh bị RLS chặn UPDATE)
         const { error } = await supabase
             .from('community_posts')
-            .insert({
-                user_id: currentUser.id,
-                content: content
-            });
+            .insert(postData);
 
         if (error) throw error;
 
         showNotification("Đã đăng bài thành công!", "success");
         input.value = "";
+        
+        // Reset preview ảnh và thẻ phim
+        removePostImage(); // Xóa hết ảnh preview
+        removePostMovie();
+        
+        // Gửi notification cho followers và bạn bè
+        notifyFollowersAndFriends(content || '📷 Đã chia sẻ ảnh mới');
         
         // Refresh feed
         await fetchPosts();
@@ -513,6 +947,324 @@ async function submitPost() {
             btn.innerHTML = 'Đăng bài';
             btn.disabled = false;
         }
+    }
+}
+
+/**
+ * Chuyển chuỗi tiếng Việt có dấu thành không dấu, thay khoảng trắng + ký tự đặc biệt bằng _
+ * @param {string} str - Chuỗi cần chuyển
+ * @returns {string} Chuỗi không dấu, lowercase, nối bằng _
+ */
+function removeVietnameseDiacritics(str) {
+    if (!str) return '';
+    return str
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '');
+}
+
+/**
+ * Upload ảnh bài đăng lên Cloudflare R2
+ * Folder: community-posts/{shortId}_{userName_no_dau}
+ * Filename: {imageIndex}_{tên gốc file}
+ * @param {File} file - File ảnh cần upload
+ * @param {number} shortId - ID ngắn (Date.now) để đặt tên folder
+ * @param {string} userName - Tên user hiển thị
+ * @param {number} imageIndex - Thứ tự ảnh trong bài (1, 2, 3...)
+ * @returns {string|null} - URL ảnh đã upload hoặc null nếu lỗi
+ */
+async function uploadPostImageToR2(file, shortId, userName, imageIndex = 1) {
+    try {
+        // Nén ảnh trước khi upload
+        const compressedBlob = await compressImage(file, 1200, 0.85);
+        
+        // Xây dựng folder và filename theo cấu trúc mới
+        const userSlug = removeVietnameseDiacritics(userName);
+        const folder = `community-posts/${shortId}_${userSlug}`;
+        const originalName = file.name || 'post_image.jpg';
+        const customFilename = `${imageIndex}_${originalName}`;
+
+        const formData = new FormData();
+        formData.append('file', compressedBlob, customFilename);
+        formData.append('folder', folder);
+        formData.append('customFilename', customFilename);
+
+        const response = await fetch(`${R2_WORKER_URL}/upload`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log(`✅ Upload ảnh bài đăng R2 OK: ${data.url}`);
+        return data.url;
+    } catch (e) {
+        console.error('Lỗi upload ảnh bài đăng R2:', e);
+        return null;
+    }
+}
+
+/**
+ * Xử lý khi chọn ảnh từ input file để đăng bài
+ */
+function handlePostImageSelect(event) {
+    const files = Array.from(event.target.files);
+    if (!files.length) return;
+
+    for (const file of files) {
+        if (!file.type.startsWith('image/')) {
+            showNotification(`"${file.name}" không phải ảnh, đã bỏ qua.`, 'warning');
+            continue;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            showNotification(`"${file.name}" quá lớn (>10MB), đã bỏ qua.`, 'warning');
+            continue;
+        }
+        if (postSelectedImages.length >= MAX_POST_IMAGES) {
+            showNotification(`Tối đa ${MAX_POST_IMAGES} ảnh mỗi bài!`, 'warning');
+            break;
+        }
+        postSelectedImages.push(file);
+    }
+
+    renderPostImagePreview();
+    event.target.value = '';
+}
+
+/**
+ * Render grid preview ảnh đã chọn trong composer
+ */
+function renderPostImagePreview() {
+    const container = document.getElementById('commPostImagePreview');
+    const grid = document.getElementById('commPreviewGrid');
+    const counter = document.getElementById('commPreviewCount');
+    if (!container || !grid) return;
+
+    if (postSelectedImages.length === 0) {
+        container.style.display = 'none';
+        grid.innerHTML = '';
+        return;
+    }
+
+    container.style.display = 'block';
+    if (counter) counter.textContent = `${postSelectedImages.length}/${MAX_POST_IMAGES} ảnh`;
+
+    grid.innerHTML = postSelectedImages.map((file, idx) => {
+        const url = URL.createObjectURL(file);
+        return `
+            <div class="comm-preview-item">
+                <img src="${url}" alt="Preview ${idx + 1}">
+                <button class="comm-preview-remove-item" onclick="removePostImage(${idx})" title="Xóa ảnh này">&times;</button>
+                <span class="comm-preview-index">${idx + 1}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Xóa ảnh preview trong composer
+ * @param {number|undefined} index - Nếu truyền index, xóa ảnh tại vị trí đó. Nếu không, xóa hết.
+ */
+function removePostImage(index) {
+    if (typeof index === 'number') {
+        postSelectedImages.splice(index, 1);
+    } else {
+        postSelectedImages = [];
+    }
+    renderPostImagePreview();
+}
+
+/**
+ * Mở/đóng dropdown tìm kiếm phim
+ */
+function toggleMovieSearchDropdown(forceState) {
+    const dropdown = document.getElementById('commMovieSearchDropdown');
+    if (!dropdown) return;
+
+    const isVisible = dropdown.style.display !== 'none';
+    const shouldShow = forceState !== undefined ? forceState : !isVisible;
+
+    dropdown.style.display = shouldShow ? 'flex' : 'none';
+
+    if (shouldShow) {
+        const searchInput = document.getElementById('commMovieSearchInput');
+        if (searchInput) {
+            searchInput.value = '';
+            searchInput.focus();
+        }
+        // Hiện top 10 phim mặc định
+        searchMovieForPost('');
+    }
+}
+
+/**
+ * Tìm kiếm phim trong allMovies để gắn thẻ vào bài viết
+ */
+function searchMovieForPost(query) {
+    const container = document.getElementById('commMovieSearchResults');
+    if (!container) return;
+
+    if (typeof allMovies === 'undefined' || !allMovies || allMovies.length === 0) {
+        container.innerHTML = '<p class="text-muted" style="padding: 15px; font-size: 0.85rem; text-align: center;">Chưa có dữ liệu phim.</p>';
+        return;
+    }
+
+    const q = query.toLowerCase().trim();
+    let results;
+    if (!q) {
+        // Hiện 10 phim mới nhất
+        results = allMovies.slice(0, 10);
+    } else {
+        results = allMovies.filter(m => 
+            (m.title || '').toLowerCase().includes(q) ||
+            (m.originTitle || m.origin_title || '').toLowerCase().includes(q)
+        ).slice(0, 15);
+    }
+
+    if (results.length === 0) {
+        container.innerHTML = '<p class="text-muted" style="padding: 15px; font-size: 0.85rem; text-align: center;">Không tìm thấy phim nào.</p>';
+        return;
+    }
+
+    container.innerHTML = results.map(m => {
+        const poster = m.posterUrl || m.poster_url || '';
+        const year = m.year || '';
+        const category = m.category || '';
+        const meta = [year, category].filter(Boolean).join(' • ');
+        return `
+            <div class="comm-movie-search-item" onclick="selectMovieForPost('${m.id}')">
+                <img src="${poster || 'https://via.placeholder.com/32x44/1a1a2e/666?text=🎬'}" alt="" onerror="this.src='https://via.placeholder.com/32x44/1a1a2e/666?text=🎬'">
+                <div class="comm-movie-search-item-info">
+                    <span class="movie-title">${escapeHtml(m.title)}</span>
+                    ${meta ? `<span class="movie-meta">${escapeHtml(meta)}</span>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Chọn phim để gắn thẻ vào bài viết
+ */
+function selectMovieForPost(movieId) {
+    if (typeof allMovies === 'undefined') return;
+    const movie = allMovies.find(m => m.id === movieId);
+    if (!movie) return;
+
+    postSelectedMovieId = movieId;
+
+    // Render thẻ phim trong composer
+    const tagContainer = document.getElementById('commPostMovieTag');
+    const tagContent = document.getElementById('commMovieTagContent');
+    if (tagContainer && tagContent) {
+        const poster = movie.posterUrl || movie.poster_url || '';
+        const year = movie.year || '';
+        const category = movie.category || '';
+        const meta = [year, category].filter(Boolean).join(' • ');
+        
+        tagContent.innerHTML = `
+            <img src="${poster || 'https://via.placeholder.com/36x50/1a1a2e/666?text=🎬'}" alt="" onerror="this.src='https://via.placeholder.com/36x50/1a1a2e/666?text=🎬'">
+            <div class="comm-movie-tag-info">
+                <span class="tag-title">${escapeHtml(movie.title)}</span>
+                ${meta ? `<span class="tag-meta">🎬 ${escapeHtml(meta)}</span>` : ''}
+            </div>
+        `;
+        tagContainer.style.display = 'flex';
+    }
+
+    // Đóng dropdown
+    toggleMovieSearchDropdown(false);
+}
+
+/**
+ * Xóa thẻ phim đã chọn trong composer
+ */
+function removePostMovie() {
+    postSelectedMovieId = null;
+    const tagContainer = document.getElementById('commPostMovieTag');
+    if (tagContainer) tagContainer.style.display = 'none';
+}
+
+/**
+ * Gửi notification cho tất cả followers và bạn bè khi đăng bài mới
+ * @param {string} postContent - Nội dung bài đăng (preview)
+ */
+async function notifyFollowersAndFriends(postContent) {
+    if (!currentUser || !supabase || typeof sendNotification !== 'function') return;
+    
+    try {
+        const posterName = currentUser.displayName || currentUser.display_name || 'Người dùng';
+        const preview = postContent.length > 60 ? postContent.substring(0, 57) + '...' : postContent;
+        const isAdminPoster = currentUser.role === 'admin';
+        
+        const recipientIds = new Set();
+        
+        if (isAdminPoster) {
+            // Admin: gửi cho TẤT CẢ users
+            const { data: allProfiles } = await supabase
+                .from('profiles')
+                .select('id');
+            if (allProfiles) {
+                allProfiles.forEach(p => recipientIds.add(p.id));
+            }
+        } else {
+            // User thường: chỉ gửi cho followers + bạn bè
+            const { data: followers } = await supabase
+                .from('community_follows')
+                .select('follower_id')
+                .eq('following_id', currentUser.id);
+            
+            const { data: friends } = await supabase
+                .from('community_friends')
+                .select('user_id, friend_id')
+                .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
+                .eq('status', 'accepted');
+            
+            if (followers) {
+                followers.forEach(f => recipientIds.add(f.follower_id));
+            }
+            if (friends) {
+                friends.forEach(f => {
+                    const friendId = f.user_id === currentUser.id ? f.friend_id : f.user_id;
+                    recipientIds.add(friendId);
+                });
+            }
+        }
+        
+        // Gửi notification (loại bỏ chính mình)
+        const notifs = [];
+        for (const uid of recipientIds) {
+            if (uid === currentUser.id && !isAdminPoster) continue; // Admin vẫn nhận notif chính mình
+            
+            notifs.push({
+                user_id: uid,
+                is_for_admin: false,
+                title: `📝 ${posterName} đã đăng bài mới`,
+                message: preview,
+                type: 'community_post',
+                is_read: false
+            });
+        }
+        
+        if (notifs.length > 0) {
+            await supabase.from('notifications').insert(notifs);
+            console.log(`🔔 Đã gửi notification bài đăng cho ${notifs.length} người ${isAdminPoster ? '(Admin)' : ''}`);
+            // Cập nhật UI ngay cho chính người đăng
+            if (typeof loadInitialNotifications === 'function') {
+                loadInitialNotifications(currentUser.id, typeof isAdmin !== 'undefined' && isAdmin);
+            }
+        }
+    } catch (e) {
+        console.warn('Lỗi gửi notification bài đăng:', e);
     }
 }
 
@@ -709,7 +1461,28 @@ function refreshPresenceUI() {
         }
     });
 
-    // 2. Cập nhật trong hội thoại đang mở
+    // 2. Cập nhật chấm online trong danh sách bạn bè (Friends view)
+    const friendCards = document.querySelectorAll('.comm-friend-card[data-friend-id]');
+    friendCards.forEach(card => {
+        const friendId = card.getAttribute('data-friend-id')?.trim();
+        if (!friendId) return;
+        const dot = card.querySelector('.comm-friend-online-dot');
+        const roleEl = card.querySelector('.comm-friend-role');
+        const presence = userPresenceMap.get(friendId);
+        const isOnline = presence?.online === true;
+
+        if (dot) {
+            dot.classList.toggle('online', isOnline);
+            dot.classList.toggle('offline', !isOnline);
+        }
+        if (roleEl) {
+            roleEl.innerHTML = isOnline
+                ? '<i class="fas fa-user-check" style="font-size:0.6em;"></i> <span style="color:#4caf50;">Đang hoạt động</span>'
+                : '<i class="fas fa-user-check" style="font-size:0.6em;"></i> Bạn bè';
+        }
+    });
+
+    // 3. Cập nhật trong hội thoại đang mở
     if (currentChatTarget) {
         const headerStatus = document.getElementById('commChatTargetStatus');
         const infoStatus = document.getElementById('commInfoStatus');
@@ -1187,7 +1960,7 @@ async function sharePost(postId) {
 }
 function viewUserProfile(userId) {
     if (!userId) return;
-    switchCommView('profile');
+    switchCommView('profile', true);
     renderUserProfile(userId);
 }
 
@@ -1990,7 +2763,9 @@ async function fetchMyPosts(userId) {
     try {
         const { data, error } = await supabase
             .from('community_posts')
-            .select('id, content, created_at, likes_count, comments_count, shares_count')
+            .select(`
+                id, content, media_url, media_urls, movie_id, created_at, likes_count, comments_count, shares_count
+            `)
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
             
@@ -2017,6 +2792,14 @@ async function fetchMyPosts(userId) {
             const timeAgo = formatTimeAgo(new Date(post.created_at));
             const isLiked = userLikes.includes(post.id);
             const isMe = currentUser && currentUser.id === userId;
+            // Tra cứu phim từ allMovies global
+            let movieData = null;
+            if (post.movie_id && typeof allMovies !== 'undefined' && allMovies) {
+                movieData = allMovies.find(m => m.id === post.movie_id) || null;
+            }
+
+            // Render thẻ phim nếu có (dùng hàm helper)
+            const movieRefHtml = buildMovieRefHtml(movieData);
 
             return `
                 <div class="comm-post-card" id="post-${post.id}">
@@ -2045,7 +2828,9 @@ async function fetchMyPosts(userId) {
                         </div>
                         ` : ''}
                     </div>
-                    <div class="comm-post-content" id="post-content-${post.id}">${escapeHtml(post.content)}</div>
+                    ${post.content ? `<div class="comm-post-content" id="post-content-${post.id}">${escapeHtml(post.content)}</div>` : ''}
+                    ${renderPostGallery(post)}
+                    ${movieRefHtml}
                     <div class="comm-post-footer">
                         <button class="comm-btn-interact" onclick="likePost('${post.id}')"><i class="${isLiked ? 'fas' : 'far'} fa-heart" style="${isLiked ? 'color:#ff4d4d' : ''}"></i> <span id="like-count-${post.id}">${post.likes_count || 0} Thích</span></button>
                         <button class="comm-btn-interact" onclick="showPostComments('${post.id}', '${userId}')"><i class="far fa-comment"></i> ${post.comments_count || 0} Bình luận</button>
@@ -2101,12 +2886,25 @@ async function deletePost(postId) {
 
     if (result.isConfirmed) {
         try {
+            // Lấy media_url và media_urls trước khi xóa để dọn ảnh trên R2
+            const { data: postData } = await supabase
+                .from('community_posts')
+                .select('media_url, media_urls')
+                .eq('id', postId)
+                .single();
+
             const { error } = await supabase
                 .from('community_posts')
                 .delete()
                 .eq('id', postId);
 
             if (error) throw error;
+
+            // Xóa tất cả ảnh trên Cloudflare R2 nếu có
+            if (postData && typeof window.deleteImageFromR2 === 'function') {
+                const urls = postData.media_urls || (postData.media_url ? [postData.media_url] : []);
+                urls.forEach(url => window.deleteImageFromR2(url));
+            }
 
             showNotification("Đã xóa bài viết thành công!", "success");
             
@@ -2127,51 +2925,316 @@ async function deletePost(postId) {
     }
 }
 
-function prepareEditPost(postId) {
-    const contentEl = document.getElementById(`post-content-${postId}`);
-    if (!contentEl) return;
-    
+// Biến trạng thái cho edit post
+let editExistingUrls = [];   // URLs ảnh hiện tại từ DB
+let editNewFiles = [];       // File ảnh mới chọn thêm
+let editRemovedUrls = [];    // URLs ảnh đã xóa (cần xóa trên R2)
+let editSelectedMovieId = null; // ID phim đang chọn
+
+/**
+ * Mở modal chỉnh sửa bài viết — load đầy đủ nội dung, ảnh, phim
+ */
+async function prepareEditPost(postId) {
     editingPostId = postId;
-    document.getElementById("editPostContent").value = contentEl.textContent;
-    document.getElementById("editPostModal").style.display = "flex";
-    
+    editNewFiles = [];
+    editRemovedUrls = [];
+
     // Đóng dropdown
     const dropdown = document.getElementById(`dropdown-${postId}`);
     if (dropdown) dropdown.classList.remove('active');
+
+    try {
+        // Lấy dữ liệu post đầy đủ từ Supabase
+        const { data: post, error } = await supabase
+            .from('community_posts')
+            .select('content, media_url, media_urls, movie_id')
+            .eq('id', postId)
+            .single();
+
+        if (error) throw error;
+
+        // 1. Nội dung
+        document.getElementById("editPostContent").value = post.content || '';
+
+        // 2. Ảnh hiện tại
+        editExistingUrls = post.media_urls && post.media_urls.length > 0
+            ? [...post.media_urls]
+            : (post.media_url ? [post.media_url] : []);
+        renderEditPostImages();
+
+        // 3. Phim gắn thẻ
+        editSelectedMovieId = post.movie_id || null;
+        if (editSelectedMovieId) {
+            loadEditPostMovie(editSelectedMovieId);
+        } else {
+            document.getElementById('editPostMovieTag').style.display = 'none';
+        }
+
+        // Reset ô tìm phim
+        const searchInput = document.getElementById('editPostMovieSearch');
+        if (searchInput) searchInput.value = '';
+        const results = document.getElementById('editPostMovieResults');
+        if (results) results.innerHTML = '';
+
+        document.getElementById("editPostModal").style.display = "flex";
+    } catch(e) {
+        console.error('Lỗi load bài viết để sửa:', e);
+        showNotification('Không thể tải bài viết', 'error');
+    }
+}
+
+/**
+ * Render grid ảnh trong modal chỉnh sửa
+ */
+function renderEditPostImages() {
+    const grid = document.getElementById('editPostImageGrid');
+    const counter = document.getElementById('editImageCount');
+    if (!grid) return;
+
+    const allImages = [
+        ...editExistingUrls.map(url => ({ type: 'existing', src: url })),
+        ...editNewFiles.map((file, idx) => ({ type: 'new', src: URL.createObjectURL(file), idx }))
+    ];
+    const total = allImages.length;
+    if (counter) counter.textContent = total > 0 ? `(${total}/${MAX_POST_IMAGES})` : '';
+
+    if (total === 0) {
+        grid.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">Chưa có ảnh</p>';
+        return;
+    }
+
+    grid.innerHTML = allImages.map((img, i) => {
+        if (img.type === 'existing') {
+            return `
+                <div class="comm-preview-item">
+                    <img src="${img.src}" alt="Ảnh ${i + 1}">
+                    <button class="comm-preview-remove-item" onclick="removeEditExistingImage(${editExistingUrls.indexOf(img.src)})" title="Xóa ảnh">&times;</button>
+                    <span class="comm-preview-index">${i + 1}</span>
+                </div>`;
+        } else {
+            return `
+                <div class="comm-preview-item" style="border-color: #4db8ff;">
+                    <img src="${img.src}" alt="Ảnh mới ${img.idx + 1}">
+                    <button class="comm-preview-remove-item" onclick="removeEditNewImage(${img.idx})" title="Xóa ảnh mới">&times;</button>
+                    <span class="comm-preview-index" style="background: rgba(77,184,255,0.7);">Mới</span>
+                </div>`;
+        }
+    }).join('');
+}
+
+/**
+ * Xóa ảnh hiện tại (từ DB) — đánh dấu để xóa trên R2 khi lưu
+ */
+function removeEditExistingImage(idx) {
+    const removed = editExistingUrls.splice(idx, 1);
+    if (removed[0]) editRemovedUrls.push(removed[0]);
+    renderEditPostImages();
+}
+
+/**
+ * Xóa ảnh mới chọn thêm
+ */
+function removeEditNewImage(idx) {
+    editNewFiles.splice(idx, 1);
+    renderEditPostImages();
+}
+
+/**
+ * Thêm ảnh mới vào bài viết đang sửa
+ */
+function handleEditPostImageAdd(event) {
+    const files = Array.from(event.target.files);
+    const currentTotal = editExistingUrls.length + editNewFiles.length;
+
+    for (const file of files) {
+        if (!file.type.startsWith('image/')) continue;
+        if (file.size > 10 * 1024 * 1024) {
+            showNotification(`"${file.name}" quá lớn (>10MB)`, 'warning');
+            continue;
+        }
+        if (currentTotal + editNewFiles.length >= MAX_POST_IMAGES) {
+            showNotification(`Tối đa ${MAX_POST_IMAGES} ảnh mỗi bài!`, 'warning');
+            break;
+        }
+        editNewFiles.push(file);
+    }
+    renderEditPostImages();
+    event.target.value = '';
+}
+
+/**
+ * Load thông tin phim gắn thẻ vào modal chỉnh sửa (dùng allMovies cache)
+ */
+function loadEditPostMovie(movieId) {
+    if (typeof allMovies === 'undefined' || !allMovies) return;
+    const movie = allMovies.find(m => m.id === movieId);
+    if (!movie) {
+        console.warn('Không tìm thấy phim với ID:', movieId);
+        return;
+    }
+
+    const poster = movie.posterUrl || movie.poster_url || movie.poster || '';
+    const title = movie.title || '';
+    const year = movie.year || '';
+    const category = movie.category || '';
+    const meta = [year, category].filter(Boolean).join(' • ');
+
+    document.getElementById('editPostMovieContent').innerHTML = `
+        <img src="${poster || 'https://via.placeholder.com/36x50/1a1a2e/666?text=🎬'}" alt="${title}" onerror="this.src='https://via.placeholder.com/36x50/1a1a2e/666?text=🎬'">
+        <div class="comm-movie-tag-info">
+            <span class="tag-title">${escapeHtml(title)}</span>
+            ${meta ? `<span class="tag-meta">${escapeHtml(meta)}</span>` : ''}
+        </div>`;
+    document.getElementById('editPostMovieTag').style.display = 'flex';
+}
+
+/**
+ * Tìm phim trong modal chỉnh sửa (dùng allMovies cache)
+ */
+function searchMovieForEditPost(query) {
+    const container = document.getElementById('editPostMovieResults');
+    if (!container || !query || query.length < 2) {
+        if (container) container.innerHTML = '';
+        return;
+    }
+
+    if (typeof allMovies === 'undefined' || !allMovies) return;
+
+    const q = query.toLowerCase();
+    const results = allMovies.filter(m => 
+        m.title && m.title.toLowerCase().includes(q)
+    ).slice(0, 8);
+
+    if (results.length === 0) {
+        container.innerHTML = '<p style="padding: 10px; color: var(--text-muted); text-align: center;">Không tìm thấy</p>';
+        return;
+    }
+
+    container.innerHTML = results.map(m => {
+        const poster = m.posterUrl || m.poster_url || m.poster || '';
+        const year = m.year || '';
+        const category = m.category || '';
+        const meta = [year, category].filter(Boolean).join(' • ');
+        return `
+            <div class="comm-movie-search-item" onclick="selectEditPostMovie('${m.id}')">
+                <img src="${poster || 'https://via.placeholder.com/32x44/1a1a2e/666?text=🎬'}" alt="" onerror="this.src='https://via.placeholder.com/32x44/1a1a2e/666?text=🎬'">
+                <div class="comm-movie-search-item-info">
+                    <span class="movie-title">${escapeHtml(m.title)}</span>
+                    ${meta ? `<span class="movie-meta">${escapeHtml(meta)}</span>` : ''}
+                </div>
+            </div>`;
+    }).join('');
+}
+
+/**
+ * Chọn phim cho bài viết đang sửa (dùng allMovies cache)
+ */
+function selectEditPostMovie(movieId) {
+    if (typeof allMovies === 'undefined') return;
+    const movie = allMovies.find(m => m.id === movieId);
+    if (!movie) return;
+
+    editSelectedMovieId = movieId;
+    const poster = movie.posterUrl || movie.poster_url || movie.poster || '';
+    const title = movie.title || '';
+    const year = movie.year || '';
+    const category = movie.category || '';
+    const meta = [year, category].filter(Boolean).join(' • ');
+
+    document.getElementById('editPostMovieContent').innerHTML = `
+        <img src="${poster || 'https://via.placeholder.com/36x50/1a1a2e/666?text=🎬'}" alt="${title}" onerror="this.src='https://via.placeholder.com/36x50/1a1a2e/666?text=🎬'">
+        <div class="comm-movie-tag-info">
+            <span class="tag-title">${escapeHtml(title)}</span>
+            ${meta ? `<span class="tag-meta">${escapeHtml(meta)}</span>` : ''}
+        </div>`;
+    document.getElementById('editPostMovieTag').style.display = 'flex';
+    document.getElementById('editPostMovieResults').innerHTML = '';
+    document.getElementById('editPostMovieSearch').value = '';
+}
+
+/**
+ * Bỏ chọn phim khỏi bài viết đang sửa
+ */
+function removeEditPostMovie() {
+    editSelectedMovieId = null;
+    document.getElementById('editPostMovieTag').style.display = 'none';
+    document.getElementById('editPostMovieContent').innerHTML = '';
 }
 
 function closeEditPostModal() {
     document.getElementById("editPostModal").style.display = "none";
     editingPostId = null;
+    editExistingUrls = [];
+    editNewFiles = [];
+    editRemovedUrls = [];
+    editSelectedMovieId = null;
 }
 
+/**
+ * Cập nhật bài viết — xử lý nội dung + ảnh + phim
+ */
 async function updatePost() {
     if (!editingPostId || !currentUser) return;
     
     const newContent = document.getElementById("editPostContent").value.trim();
-    if (!newContent) {
-        showNotification("Nội dung không được để trống", "warning");
+    const hasImages = editExistingUrls.length > 0 || editNewFiles.length > 0;
+
+    if (!newContent && !hasImages && !editSelectedMovieId) {
+        showNotification("Bài viết cần có nội dung, ảnh hoặc phim", "warning");
         return;
     }
 
+    const btn = document.getElementById('editPostSaveBtn');
     try {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang lưu...';
+        btn.disabled = true;
+
+        // 1. Upload ảnh mới (nếu có)
+        let newUrls = [];
+        if (editNewFiles.length > 0) {
+            const userName = currentUser.display_name || currentUser.displayName || 'user';
+            const shortId = Date.now();
+            const startIdx = editExistingUrls.length + 1;
+
+            for (let i = 0; i < editNewFiles.length; i++) {
+                btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Tải ảnh ${i + 1}/${editNewFiles.length}...`;
+                const url = await uploadPostImageToR2(editNewFiles[i], shortId, userName, startIdx + i);
+                if (url) newUrls.push(url);
+            }
+        }
+
+        // 2. Gom tất cả URLs (cũ giữ lại + mới upload)
+        const allUrls = [...editExistingUrls, ...newUrls];
+
+        // 3. Cập nhật DB
+        const updateData = {
+            content: newContent || null,
+            movie_id: editSelectedMovieId || null,
+            media_url: allUrls.length > 0 ? allUrls[0] : null,
+            media_urls: allUrls.length > 0 ? allUrls : []
+        };
+
         const { error } = await supabase
             .from('community_posts')
-            .update({ content: newContent })
+            .update(updateData)
             .eq('id', editingPostId);
 
         if (error) throw error;
 
+        // 4. Xóa ảnh đã bỏ trên R2
+        if (editRemovedUrls.length > 0 && typeof window.deleteImageFromR2 === 'function') {
+            editRemovedUrls.forEach(url => window.deleteImageFromR2(url));
+        }
+
         showNotification("Cập nhật bài viết thành công!", "success");
-        
-        // Cập nhật UI ngay lập tức
-        const contentEl = document.getElementById(`post-content-${editingPostId}`);
-        if (contentEl) contentEl.textContent = newContent;
-        
         closeEditPostModal();
+        await fetchPosts(); // Refresh feed
     } catch (e) {
         console.error("Lỗi sửa bài:", e);
         showNotification("Không thể cập nhật bài viết", "error");
+    } finally {
+        btn.innerHTML = 'Cập nhật';
+        btn.disabled = false;
     }
 }
 
@@ -2382,6 +3445,11 @@ async function openChat(targetUserId, targetUserName, targetAvatar) {
         currentChatUserId = targetUserId;
         currentChatTarget = { id: targetUserId, display_name: targetUserName, avatar: targetAvatar }; // Store target user info
         
+        // Đánh dấu đã đọc tất cả notification chat_message của người này
+        if (typeof markChatNotifAsRead === 'function') {
+            markChatNotifAsRead(targetUserName);
+        }
+        
         // Cập nhật highlight item đang chọn trong danh sách chat
         document.querySelectorAll('.comm-chat-item').forEach(item => {
             item.classList.remove('active');
@@ -2443,9 +3511,9 @@ async function openChat(targetUserId, targetUserName, targetAvatar) {
         // Cập nhật Info Sidebar
         if (infoNameEl) infoNameEl.textContent = targetUserName;
         if (infoAvatarEl) infoAvatarEl.src = targetAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(targetUserName)}&background=random`;
-        // Gán @username giả lập từ tên hiển thị
-        const infoDetails = document.querySelector(".comm-info-details > div > div > div:first-child");
-        if(infoDetails) infoDetails.textContent = "@" + targetUserName.toLowerCase().replace(/\s/g, "");
+        // Gán @username thật (dùng ID rút gọn 8 ký tự đầu)
+        const infoUsernameEl = document.getElementById("commInfoUsername");
+        if (infoUsernameEl) infoUsernameEl.textContent = "@" + (targetUserId || '').slice(0, 8);
 
         if (inputEl) {
             inputEl.disabled = false;
@@ -3515,6 +4583,17 @@ function _subscribeToMessages() {
                             if (preview.length > 50) preview = preview.substring(0, 47) + '...';
                             
                             showChatToast(senderName, senderAvatar, preview, senderId);
+                            
+                            // Lưu notification vào DB (type: chat_message)
+                            // Sẽ đánh dấu đã đọc khi user mở chat với người này
+                            if (typeof sendNotification === 'function') {
+                                sendNotification(
+                                    currentUser.id,
+                                    `💬 ${senderName}`,
+                                    preview || 'Đã gửi tin nhắn cho bạn',
+                                    'chat_message'
+                                );
+                            }
                         }
                     } catch (e) {
                         console.warn('Lỗi lấy thông tin người gửi:', e);
@@ -4014,6 +5093,7 @@ async function loadChatList() {
                 <div class="comm-chat-item ${isActive ? 'active' : ''} ${item.isPinned ? 'pinned' : ''} ${showUnread ? 'has-unread' : ''}" 
                      id="chat-item-${item.id}"
                      data-user-id="${item.id}"
+                     data-user-name="${item.display_name}"
                      data-last-seen="${item.last_seen || ''}"
                      onclick="openChat('${item.id}', '${item.display_name.replace(/'/g, "\\'")}', '${avatar}')">
                     
@@ -4294,16 +5374,20 @@ async function renderFriendsView() {
         
         profiles.forEach(user => {
             const avatar = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.display_name)}&background=random`;
+            // Kiểm tra trạng thái online từ userPresenceMap
+            const presence = userPresenceMap.get(String(user.id).trim());
+            const isOnline = presence?.online === true;
+            const dotClass = isOnline ? 'online' : 'offline';
             
             html += `
-                <div class="comm-post-card comm-friend-card">
+                <div class="comm-post-card comm-friend-card" data-friend-id="${user.id}">
                     <div class="comm-friend-avatar-wrap">
                         <img src="${avatar}" onclick="viewUserProfile('${user.id}')" class="comm-friend-avatar" alt="${user.display_name}">
-                        <span class="comm-friend-online-dot offline"></span>
+                        <span class="comm-friend-online-dot ${dotClass}"></span>
                     </div>
                     <div class="comm-friend-info">
                         <h3 onclick="viewUserProfile('${user.id}')" class="comm-friend-name">${user.display_name} ${user.role==='admin' ? '<i class="fas fa-check-circle" style="color:#4db8ff; font-size:0.75em;" title="Admin"></i>' : ''}</h3>
-                        <p class="comm-friend-role"><i class="fas fa-user-check" style="font-size:0.6em;"></i> Bạn bè</p>
+                        <p class="comm-friend-role"><i class="fas fa-user-check" style="font-size:0.6em;"></i> ${isOnline ? '<span style="color:#4caf50;">Đang hoạt động</span>' : 'Bạn bè'}</p>
                     </div>
                     <div class="comm-friend-actions">
                         <button class="comm-btn-follow" onclick="openChat('${user.id}', '${user.display_name.replace(/'/g, "\\'")}', '${avatar}')"><i class="fas fa-comment-dots"></i> Chat</button>
@@ -4432,7 +5516,7 @@ async function fetchFriendRequests() {
 // ===========================================
 let searchTimeout;
 async function searchCommunityUsers(event) {
-    const query = event.target.value.trim();
+    let query = event.target.value.trim();
     const resultsContainer = document.getElementById("commSearchResults");
     
     if (!query) {
@@ -4447,12 +5531,42 @@ async function searchCommunityUsers(event) {
         resultsContainer.innerHTML = `<div class="loading-spinner" style="margin: 10px auto;"></div>`;
         
         try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('id, display_name, avatar, role')
-                .ilike('display_name', `%${query}%`)
-                .neq('id', currentUser ? currentUser.id : '00000000-0000-0000-0000-000000000000')
-                .limit(5);
+            let data, error;
+
+            // Kiểm tra nếu nhập URI QR: moviechain://user/<uuid>
+            if (query.startsWith('moviechain://user/')) {
+                const userId = query.replace('moviechain://user/', '').trim();
+                ({ data, error } = await supabase
+                    .from('profiles')
+                    .select('id, display_name, avatar, role')
+                    .eq('id', userId)
+                    .limit(1));
+            }
+            // Kiểm tra nếu nhập @id — partial match ngay từ 2 ký tự
+            else if (query.startsWith('@')) {
+                const userId = query.substring(1).trim().toLowerCase(); // Bỏ ký tự @
+                if (!userId || userId.length < 2) {
+                    resultsContainer.innerHTML = `<p class="text-muted" style="font-size: 0.85rem; text-align: center; padding: 10px;">Nhập thêm vài ký tự ID... (VD: @3a5b...)</p>`;
+                    return;
+                }
+                // Supabase không hỗ trợ ilike trên UUID, fetch rồi filter JS
+                const { data: allProfiles, error: fetchErr } = await supabase
+                    .from('profiles')
+                    .select('id, display_name, avatar, role')
+                    .neq('id', currentUser ? currentUser.id : '00000000-0000-0000-0000-000000000000')
+                    .limit(500);
+                error = fetchErr;
+                data = allProfiles ? allProfiles.filter(p => p.id.toLowerCase().includes(userId)).slice(0, 8) : [];
+            }
+            // Tìm theo tên (logic gốc)
+            else {
+                ({ data, error } = await supabase
+                    .from('profiles')
+                    .select('id, display_name, avatar, role')
+                    .ilike('display_name', `%${query}%`)
+                    .neq('id', currentUser ? currentUser.id : '00000000-0000-0000-0000-000000000000')
+                    .limit(5));
+            }
                 
             if (error) throw error;
             
@@ -4460,16 +5574,54 @@ async function searchCommunityUsers(event) {
                 resultsContainer.innerHTML = `<p class="text-muted" style="font-size: 0.85rem; text-align: center; padding: 10px;">Không tìm thấy ai</p>`;
                 return;
             }
+
+            // Lấy danh sách bạn bè + lời mời đã gửi để hiển thị nút phù hợp
+            let friendIds = new Set();
+            let pendingIds = new Set();
+            if (currentUser) {
+                const { data: friends } = await supabase
+                    .from('community_friends')
+                    .select('user_id, friend_id, status')
+                    .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`);
+                if (friends) {
+                    friends.forEach(f => {
+                        const otherId = f.user_id === currentUser.id ? f.friend_id : f.user_id;
+                        if (f.status === 'accepted') friendIds.add(otherId);
+                        else if (f.status === 'pending' && f.user_id === currentUser.id) pendingIds.add(otherId);
+                    });
+                }
+            }
             
             resultsContainer.innerHTML = data.map(user => {
                 const avatar = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.display_name)}&background=random`;
+                // Hiển thị ID rút gọn nếu tìm bằng @id
+                const idBadge = query.startsWith('@') || query.startsWith('moviechain://')
+                    ? `<span style="font-size: 0.7rem; color: var(--text-muted); display: block;">ID: ${user.id.slice(0, 8)}...</span>`
+                    : '';
+                
+                // Nút hành động tùy theo trạng thái bạn bè
+                let actionBtn = '';
+                if (friendIds.has(user.id)) {
+                    // Đã là bạn bè → nút Chat
+                    actionBtn = `<button class="comm-btn-follow" style="padding: 4px 8px; font-size: 0.75rem" onclick="openChat('${user.id}', '${user.display_name.replace(/'/g, "\\'")}', '${avatar}')"><i class="fas fa-comment-dots"></i> Chat</button>`;
+                } else if (pendingIds.has(user.id)) {
+                    // Đã gửi lời mời → nút disabled
+                    actionBtn = `<button class="comm-btn-follow" style="padding: 4px 8px; font-size: 0.75rem; opacity: 0.5; cursor: default;" disabled>Đã gửi</button>`;
+                } else {
+                    // Chưa kết bạn → nút Kết bạn
+                    actionBtn = `<button class="comm-btn-follow" style="padding: 4px 8px; font-size: 0.75rem" onclick="sendFriendRequest('${user.id}')">Kết bạn</button>`;
+                }
+
                 return `
                     <div class="comm-user-item" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-                        <div class="comm-user-info" onclick="viewUserProfile('${user.id}')" style="cursor: pointer; display: flex; align-items: center; gap: 10px;">
+                        <div class="comm-user-info" onclick="event.stopPropagation(); document.getElementById('commSearchResults').style.display='none'; document.getElementById('commSearchUserInput').value=''; viewUserProfile('${user.id}')" style="cursor: pointer; display: flex; align-items: center; gap: 10px;">
                             <img src="${avatar}" style="width: 30px; height: 30px; border-radius: 50%;">
-                            <span class="name" style="font-size: 0.9rem;">${user.display_name}</span>
+                            <div>
+                                <span class="name" style="font-size: 0.9rem;">${user.display_name}</span>
+                                ${idBadge}
+                            </div>
                         </div>
-                        <button class="comm-btn-follow" style="padding: 4px 8px; font-size: 0.75rem" onclick="sendFriendRequest('${user.id}')">Kết bạn</button>
+                        ${actionBtn}
                     </div>
                 `;
             }).join("");
@@ -4480,6 +5632,65 @@ async function searchCommunityUsers(event) {
         }
     }, 500); // debounce 500ms
 }
+
+/**
+ * Toggle hiện/ẩn phần mã QR của tôi trong modal
+ */
+function toggleMyQRCode() {
+    const section = document.getElementById('qrMyCodeSection');
+    const btn = document.querySelector('.comm-qr-toggle-btn');
+    if (!section) return;
+
+    const isHidden = section.style.display === 'none';
+    section.style.display = isHidden ? 'flex' : 'none';
+
+    if (btn) {
+        btn.classList.toggle('active', isHidden);
+        // Đổi text nút
+        const icon = btn.querySelector('.fa-qrcode');
+        if (icon) icon.nextSibling.textContent = isHidden ? ' Ẩn mã QR của tôi' : ' Hiện mã QR của tôi';
+    }
+}
+
+/**
+ * Mở modal QR để tìm kiếm user từ nút QR trên ô tìm kiếm
+ * Sử dụng lại modal QR đã tạo, nhưng focus vào phần tìm kiếm
+ */
+function openSearchQRModal() {
+    const modal = document.getElementById('commUserQRModal');
+    if (!modal) {
+        showNotification('Modal QR chưa sẵn sàng', 'warning');
+        return;
+    }
+
+    // Cập nhật thông tin QR cho user hiện tại (mình)
+    if (currentUser) {
+        const avatarEl = document.getElementById('qrUserAvatar');
+        const nameEl = document.getElementById('qrUserName');
+        const usernameEl = document.getElementById('qrUserUsername');
+
+        const myName = currentUser.displayName || currentUser.display_name || 'User';
+        const myAvatar = currentUser.photoURL || currentUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(myName)}&background=random`;
+
+        if (avatarEl) avatarEl.src = myAvatar;
+        if (nameEl) nameEl.textContent = myName;
+        if (usernameEl) usernameEl.textContent = `@${currentUser.id.slice(0, 8)}`;
+
+        // Tạo QR cho chính mình
+        generateUserQR(currentUser.id);
+    }
+
+    // Hiện modal
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+
+    // Focus vào ô tìm kiếm trong modal QR
+    setTimeout(() => {
+        const searchInput = document.getElementById('qrSearchInput');
+        if (searchInput) searchInput.focus();
+    }, 300);
+}
+
 
 // Lắng nghe thay đổi kết bạn realtime
 let friendSubscription;
@@ -4501,6 +5712,17 @@ function subscribeToFriends() {
             if (payload.eventType === 'INSERT' && row.friend_id === currentUser.id && row.status === 'pending') {
                 showNotification("Bạn có 1 lời mời kết bạn mới!", "info");
                 if (typeof fetchFriendRequests === 'function') fetchFriendRequests();
+                
+                // Lưu notification lời mời kết bạn
+                if (typeof sendNotification === 'function') {
+                    (async () => {
+                        try {
+                            const { data: senderProfile } = await supabase.from('profiles').select('display_name').eq('id', row.user_id).single();
+                            const senderName = senderProfile?.display_name || 'Người dùng';
+                            sendNotification(currentUser.id, `👋 Lời mời kết bạn`, `${senderName} đã gửi lời mời kết bạn cho bạn`, 'friend_request');
+                        } catch(e) { console.warn('Lỗi gửi notif kết bạn:', e); }
+                    })();
+                }
             }
             
             // 2. Chấp nhận kết bạn (UPDATE -> accepted)
@@ -4513,6 +5735,18 @@ function subscribeToFriends() {
                 if (row.user_id === currentUser.id || row.friend_id === currentUser.id) {
                     if (isActualApproval) {
                         showNotification("Có 1 yêu cầu kết bạn đã được phê duyệt!", "success");
+                        
+                        // Lưu notification chấp nhận kết bạn cho người gửi lời mời
+                        if (typeof sendNotification === 'function') {
+                            const recipientId = (row.user_id === currentUser.id) ? row.friend_id : row.user_id;
+                            (async () => {
+                                try {
+                                    const { data: accepterProfile } = await supabase.from('profiles').select('display_name').eq('id', currentUser.id).single();
+                                    const accepterName = accepterProfile?.display_name || 'Người dùng';
+                                    sendNotification(recipientId, `🤝 Đã kết bạn`, `${accepterName} đã chấp nhận lời mời kết bạn của bạn`, 'friend_accepted');
+                                } catch(e) { console.warn('Lỗi gửi notif accepted:', e); }
+                            })();
+                        }
                     }
                     
                     // Cập nhật UI (Luôn cập nhật nếu có thay đổi để đảm bảo đồng bộ Ghim/Ẩn/Xóa)
@@ -6139,12 +7373,12 @@ function resetWallpaper() {
     applyChatWallpaper(null);
 }
 
-async function uploadWallpaperImgBB(event) {
+async function uploadWallpaperToR2(event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-        showNotification("Ảnh không được vượt quá 5MB", "warning");
+    if (file.size > 10 * 1024 * 1024) {
+        showNotification("Ảnh không được vượt quá 10MB", "warning");
         return;
     }
 
@@ -6152,14 +7386,31 @@ async function uploadWallpaperImgBB(event) {
     if (!uploadArea) return;
 
     const originalHTML = uploadArea.innerHTML;
-    uploadArea.innerHTML = '<div class="loading-spinner"></div><p>Đang tải lên...</p>';
+    uploadArea.innerHTML = '<div class="loading-spinner"></div><p>Đang tải lên Cloudflare...</p>';
     uploadArea.style.pointerEvents = "none";
 
     try {
-        // Sử dụng hàm upload chung của hệ thống để đảm bảo ổn định và đúng API Key
-        const url = await uploadToImgBB(file);
-        
+        // Upload lên Cloudflare R2 với folder chat-wallpapers/{userId}
+        const folder = `chat-wallpapers/${currentUser.id}`;
+        const formData = new FormData();
+        formData.append('file', file, file.name || 'wallpaper.jpg');
+        formData.append('folder', folder);
+
+        const response = await fetch(`${R2_WORKER_URL}/upload`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const url = data.url;
+
         if (url) {
+            // Lưu URL vào danh sách ảnh nền cá nhân
             let customWps = JSON.parse(localStorage.getItem('custom_chat_wallpapers') || "[]");
             if (!customWps.includes(url)) {
                 customWps.unshift(url);
@@ -6168,10 +7419,11 @@ async function uploadWallpaperImgBB(event) {
 
             renderCustomWallpapers();
             applyChatWallpaper(url);
+            console.log(`✅ Upload ảnh nền R2 OK: ${url}`);
             showNotification("Tải lên và áp dụng thành công!", "success");
         }
     } catch (e) {
-        console.error("Lỗi upload hình nền:", e);
+        console.error("Lỗi upload hình nền R2:", e);
         showNotification("Tải ảnh thất bại: " + e.message, "error");
     } finally {
         uploadArea.innerHTML = originalHTML;
@@ -6184,6 +7436,9 @@ function deleteChatWallpaper(url) {
     
     if (!confirm("Xóa hình nền này khỏi danh sách cá nhân?")) return;
 
+    // Xóa ảnh trên Cloudflare R2 nếu URL từ R2
+    deleteWallpaperFromR2(url);
+
     let customWps = JSON.parse(localStorage.getItem('custom_chat_wallpapers') || "[]");
     customWps = customWps.filter(item => item !== url);
     localStorage.setItem('custom_chat_wallpapers', JSON.stringify(customWps));
@@ -6195,6 +7450,39 @@ function deleteChatWallpaper(url) {
     }
 
     renderCustomWallpapers();
+}
+
+/**
+ * Xóa ảnh nền chat khỏi Cloudflare R2 thông qua Worker DELETE endpoint
+ * Chỉ xóa nếu URL là từ R2 (chứa workers.dev hoặc .r2.dev)
+ * @param {string} url - URL ảnh nền cần xóa
+ */
+async function deleteWallpaperFromR2(url) {
+    if (!url || (!url.includes('workers.dev') && !url.includes('.r2.dev'))) return;
+
+    try {
+        const urlObj = new URL(url);
+        // Lấy key từ pathname (bỏ dấu / ở đầu)
+        const key = urlObj.pathname.substring(1);
+        if (!key) return;
+
+        console.log(`📡 Đang xóa ảnh nền trên R2: ${key}`);
+
+        const response = await fetch(`${R2_WORKER_URL}/delete`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key })
+        });
+
+        if (response.ok) {
+            console.log(`✅ Đã xóa ảnh nền R2 thành công: ${key}`);
+        } else {
+            const errText = await response.text();
+            console.warn(`⚠️ Không thể xóa ảnh nền R2: ${key}`, errText);
+        }
+    } catch (error) {
+        console.warn('⚠️ Lỗi khi xóa ảnh nền R2:', error);
+    }
 }
 
 function applyWallpaperFromLink() {
@@ -6820,6 +8108,546 @@ function updateNavUnreadBadge(displayItems) {
         badge.style.display = 'flex';
     } else {
         badge.style.display = 'none';
+    }
+}
+
+// ==========================================
+// QR CODE USER - Tạo và hiển thị mã QR cho user
+// ==========================================
+
+/**
+ * Hiển thị modal QR Code cho user đang xem trong Chat Info Sidebar
+ * Lấy thông tin từ biến currentChatTarget (người đang chat cùng)
+ */
+function showUserQRCode() {
+    try {
+        if (!currentChatTarget) {
+            showNotification('Không tìm thấy thông tin người dùng', 'error');
+            return;
+        }
+
+        const userId = currentChatTarget.id || currentChatTarget.user_id;
+        const userName = currentChatTarget.name || currentChatTarget.display_name || 'User';
+        const userAvatar = currentChatTarget.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=random`;
+        const username = currentChatTarget.username || userId.slice(0, 8);
+
+        // Cập nhật thông tin trên section QR
+        const avatarEl = document.getElementById('qrUserAvatar');
+        const nameEl = document.getElementById('qrUserName');
+        const usernameEl = document.getElementById('qrUserUsername');
+
+        if (avatarEl) avatarEl.src = userAvatar;
+        if (nameEl) nameEl.textContent = userName;
+        if (usernameEl) usernameEl.textContent = `@${username}`;
+
+        // Tạo mã QR
+        generateUserQR(userId);
+
+        // Hiện modal
+        const modal = document.getElementById('commUserQRModal');
+        if (!modal) return;
+        modal.style.display = 'flex';
+        modal.classList.add('active');
+
+        // Ẩn phần quét — chỉ hiện QR người đó
+        const scanActions = modal.querySelector('.comm-qr-scan-actions');
+        const cameraPreview = document.getElementById('qrCameraPreview');
+        const searchGroup = modal.querySelector('.comm-qr-search');
+        const scanResult = document.getElementById('qrScanResult');
+        const fileInput = document.getElementById('qrFileInput');
+
+        const hideEls = [scanActions, cameraPreview, searchGroup, scanResult, fileInput];
+        hideEls.forEach(el => { if (el) el.style.display = 'none'; });
+
+        // Đổi tiêu đề
+        const titleEl = modal.querySelector('.comm-qr-header-title');
+        const descEl = modal.querySelector('.comm-qr-header-desc');
+        const origTitle = titleEl ? titleEl.textContent : '';
+        const origDesc = descEl ? descEl.textContent : '';
+        if (titleEl) titleEl.textContent = `Mã QR - ${userName}`;
+        if (descEl) descEl.textContent = 'Quét mã này để kết nối';
+
+        // Hiện section QR
+        const section = document.getElementById('qrMyCodeSection');
+        if (section) section.style.display = 'block';
+
+        // Khi đóng → khôi phục
+        const closeBtn = modal.querySelector('.comm-modal-close');
+        const origHandler = closeBtn ? closeBtn.onclick : null;
+        if (closeBtn) {
+            closeBtn.onclick = function() {
+                hideEls.forEach(el => { if (el) el.style.display = ''; });
+                if (titleEl) titleEl.textContent = origTitle;
+                if (descEl) descEl.textContent = origDesc;
+                if (section) section.style.display = 'none';
+                modal.style.display = 'none';
+                modal.classList.remove('active');
+                if (origHandler) closeBtn.onclick = origHandler;
+            };
+        }
+
+        console.log(`📱 Hiển thị QR Code cho user: ${userName} (${userId})`);
+    } catch (e) {
+        console.error('Lỗi hiển thị QR Code:', e);
+        showNotification('Có lỗi khi tạo mã QR', 'error');
+    }
+}
+
+/**
+ * Tạo mã QR Code từ User ID và render vào container
+ * QR data format: moviechain://user/<user_id>
+ * @param {string} userId - UUID của user
+ */
+function generateUserQR(userId) {
+    const container = document.getElementById('qrCodeContainer');
+    if (!container) return;
+
+    // Xóa QR cũ nếu có
+    container.innerHTML = '';
+
+    // Kiểm tra thư viện qrcode-generator đã load chưa
+    if (typeof qrcode === 'undefined') {
+        container.innerHTML = '<p style="color: #ff4d4d; font-size: 0.8rem;">Thư viện QR chưa sẵn sàng</p>';
+        console.error('qrcode-generator chưa được load');
+        return;
+    }
+
+    try {
+        // Tạo dữ liệu QR (URI format)
+        const qrData = `moviechain://user/${userId}`;
+
+        // Tạo QR code (typeNumber 0 = auto, errorCorrectionLevel M = 15%)
+        const qr = qrcode(0, 'M');
+        qr.addData(qrData);
+        qr.make();
+
+        // Render QR thành thẻ img
+        const imgTag = qr.createImgTag(5, 0); // cellSize=5, margin=0
+        container.innerHTML = imgTag;
+
+        // Lưu userId vào data attribute để dùng khi download
+        container.dataset.userId = userId;
+    } catch (e) {
+        console.error('Lỗi tạo QR Code:', e);
+        container.innerHTML = '<p style="color: #ff4d4d; font-size: 0.8rem;">Không thể tạo mã QR</p>';
+    }
+}
+
+/**
+ * Tải mã QR xuống dưới dạng ảnh PNG
+ * Render canvas đẹp với avatar, tên, QR code và branding
+ */
+function downloadUserQR() {
+    try {
+        const container = document.getElementById('qrCodeContainer');
+        const qrImg = container ? container.querySelector('img') : null;
+        if (!qrImg) {
+            showNotification('Chưa có mã QR để tải', 'warning');
+            return;
+        }
+
+        const userName = document.getElementById('qrUserName')?.textContent || 'User';
+        const userUsername = document.getElementById('qrUserUsername')?.textContent || '';
+
+        // Tạo canvas để render ảnh QR đẹp
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const size = 400;
+        canvas.width = size;
+        canvas.height = size + 120; // Thêm không gian cho tên + branding
+
+        // Background gradient tối
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, '#0f1923');
+        gradient.addColorStop(1, '#1a2332');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Viền trang trí accent
+        ctx.strokeStyle = '#4db8ff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+
+        // Tên user
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 20px "Montserrat", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(userName, size / 2, 40);
+
+        // Username
+        ctx.fillStyle = '#4db8ff';
+        ctx.font = '14px "Montserrat", sans-serif';
+        ctx.fillText(userUsername, size / 2, 62);
+
+        // Vẽ nền trắng cho QR
+        const qrBgSize = 220;
+        const qrBgX = (size - qrBgSize) / 2;
+        const qrBgY = 80;
+        ctx.fillStyle = '#ffffff';
+        // Bo góc cho nền
+        const radius = 12;
+        ctx.beginPath();
+        ctx.moveTo(qrBgX + radius, qrBgY);
+        ctx.lineTo(qrBgX + qrBgSize - radius, qrBgY);
+        ctx.quadraticCurveTo(qrBgX + qrBgSize, qrBgY, qrBgX + qrBgSize, qrBgY + radius);
+        ctx.lineTo(qrBgX + qrBgSize, qrBgY + qrBgSize - radius);
+        ctx.quadraticCurveTo(qrBgX + qrBgSize, qrBgY + qrBgSize, qrBgX + qrBgSize - radius, qrBgY + qrBgSize);
+        ctx.lineTo(qrBgX + radius, qrBgY + qrBgSize);
+        ctx.quadraticCurveTo(qrBgX, qrBgY + qrBgSize, qrBgX, qrBgY + qrBgSize - radius);
+        ctx.lineTo(qrBgX, qrBgY + radius);
+        ctx.quadraticCurveTo(qrBgX, qrBgY, qrBgX + radius, qrBgY);
+        ctx.closePath();
+        ctx.fill();
+
+        // Vẽ QR code lên canvas
+        const qrSize = 200;
+        const qrX = (size - qrSize) / 2;
+        const qrY = 90;
+        ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
+
+        // Branding
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.font = '12px "Montserrat", sans-serif';
+        ctx.fillText('Trạm Phim • MovieChain', size / 2, canvas.height - 50);
+
+        // Gợi ý
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.font = '10px "Montserrat", sans-serif';
+        ctx.fillText('Quét mã QR để kết nối', size / 2, canvas.height - 30);
+
+        // Download
+        const link = document.createElement('a');
+        link.download = `QR_${userName.replace(/\s+/g, '_')}_TramPhim.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+
+        showNotification('Đã tải mã QR thành công!', 'success');
+    } catch (e) {
+        console.error('Lỗi tải QR:', e);
+        showNotification('Có lỗi khi tải mã QR', 'error');
+    }
+}
+
+/**
+ * Tìm kiếm user bằng ID (nhập từ ô input hoặc quét QR)
+ * Query Supabase theo UUID rồi mở profile
+ */
+async function searchUserByQR() {
+    const input = document.getElementById('qrSearchInput');
+    if (!input) return;
+
+    let searchId = input.value.trim();
+    if (!searchId) {
+        showNotification('Vui lòng nhập ID người dùng', 'warning');
+        return;
+    }
+
+    // Hỗ trợ parse URI format: moviechain://user/<uuid>
+    if (searchId.startsWith('moviechain://user/')) {
+        searchId = searchId.replace('moviechain://user/', '');
+    }
+
+    try {
+        // Query profile từ Supabase
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('id, display_name, avatar')
+            .eq('id', searchId)
+            .single();
+
+        if (error || !data) {
+            showNotification('Không tìm thấy người dùng với ID này', 'warning');
+            return;
+        }
+
+        // Đóng modal QR
+        closeUserQRModal();
+
+        // Mở profile người dùng tìm được
+        showNotification(`Đã tìm thấy: ${data.display_name || 'User'}`, 'success');
+        viewUserProfile(data.id);
+
+    } catch (e) {
+        console.error('Lỗi tìm kiếm user:', e);
+        showNotification('Có lỗi khi tìm kiếm người dùng', 'error');
+    }
+}
+
+/**
+ * Đóng modal QR Code + dừng camera nếu đang quét
+ */
+function closeUserQRModal() {
+    // Dừng camera nếu đang quét
+    stopQRCameraScanner();
+    
+    const modal = document.getElementById('commUserQRModal');
+    if (modal) {
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+    }
+    // Reset ô tìm kiếm + kết quả
+    const input = document.getElementById('qrSearchInput');
+    if (input) input.value = '';
+    const result = document.getElementById('qrScanResult');
+    if (result) result.style.display = 'none';
+    // Reset file input
+    const fileInput = document.getElementById('qrFileInput');
+    if (fileInput) fileInput.value = '';
+}
+
+// === QR SCANNER: Biến global ===
+let qrCameraStream = null; // Stream camera đang mở
+let qrScanAnimationId = null; // requestAnimationFrame ID
+
+/**
+ * Xử lý upload ảnh QR từ thiết bị, decode bằng jsQR
+ * @param {Event} event - Sự kiện change của input file
+ */
+function handleQRImageUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const resultEl = document.getElementById('qrScanResult');
+    if (resultEl) {
+        resultEl.style.display = 'block';
+        resultEl.className = 'comm-qr-scan-result';
+        resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang đọc mã QR...';
+    }
+
+    // Kiểm tra thư viện jsQR
+    if (typeof jsQR === 'undefined') {
+        if (resultEl) {
+            resultEl.className = 'comm-qr-scan-result error';
+            resultEl.textContent = 'Thư viện quét QR chưa sẵn sàng. Thử tải lại trang.';
+        }
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            try {
+                // Vẽ ảnh lên canvas ẩn để lấy pixel data
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+                if (code && code.data) {
+                    console.log('📱 Đã quét QR từ ảnh:', code.data);
+                    processQRResult(code.data);
+                } else {
+                    if (resultEl) {
+                        resultEl.className = 'comm-qr-scan-result error';
+                        resultEl.textContent = '❌ Không tìm thấy mã QR trong ảnh. Hãy thử ảnh khác.';
+                    }
+                }
+            } catch (err) {
+                console.error('Lỗi decode QR:', err);
+                if (resultEl) {
+                    resultEl.className = 'comm-qr-scan-result error';
+                    resultEl.textContent = '❌ Lỗi khi đọc mã QR. Vui lòng thử lại.';
+                }
+            }
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+
+    // Reset file input để cho phép chọn lại cùng file
+    event.target.value = '';
+}
+
+/**
+ * Mở camera và quét mã QR real-time
+ * Sử dụng getUserMedia + jsQR để decode mỗi frame
+ */
+async function startQRCameraScanner() {
+    const previewEl = document.getElementById('qrCameraPreview');
+    const videoEl = document.getElementById('qrCameraVideo');
+    const canvasEl = document.getElementById('qrCameraCanvas');
+    const resultEl = document.getElementById('qrScanResult');
+
+    if (!previewEl || !videoEl || !canvasEl) return;
+
+    // Kiểm tra thư viện jsQR
+    if (typeof jsQR === 'undefined') {
+        showNotification('Thư viện quét QR chưa sẵn sàng', 'error');
+        return;
+    }
+
+    // Kiểm tra camera có sẵn không
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showNotification('Trình duyệt không hỗ trợ camera. Hãy dùng tính năng tải ảnh QR.', 'warning');
+        return;
+    }
+
+    try {
+        // Mở camera (ưu tiên camera sau trên mobile)
+        qrCameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 640 } }
+        });
+
+        videoEl.srcObject = qrCameraStream;
+        previewEl.style.display = 'block';
+
+        if (resultEl) {
+            resultEl.style.display = 'block';
+            resultEl.className = 'comm-qr-scan-result';
+            resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang quét...';
+        }
+
+        // Đợi video sẵn sàng rồi bắt đầu quét
+        videoEl.onloadedmetadata = () => {
+            canvasEl.width = videoEl.videoWidth;
+            canvasEl.height = videoEl.videoHeight;
+            scanQRFrame(videoEl, canvasEl, resultEl);
+        };
+
+        console.log('📷 Đã mở camera quét QR');
+    } catch (err) {
+        console.error('Lỗi mở camera:', err);
+        if (err.name === 'NotAllowedError') {
+            showNotification('Bạn cần cho phép truy cập camera để quét QR', 'warning');
+        } else {
+            showNotification('Không thể mở camera. Thử dùng tính năng tải ảnh QR.', 'error');
+        }
+    }
+}
+
+/**
+ * Quét QR từ mỗi frame của video camera
+ * Sử dụng requestAnimationFrame để quét liên tục
+ */
+function scanQRFrame(video, canvas, resultEl) {
+    if (!qrCameraStream) return; // Đã dừng
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    try {
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert'
+        });
+
+        if (code && code.data) {
+            console.log('📱 Đã quét QR từ camera:', code.data);
+            // Dừng camera khi quét thành công
+            stopQRCameraScanner();
+            processQRResult(code.data);
+            return;
+        }
+    } catch (e) {
+        // Bỏ qua lỗi nhỏ khi quét frame
+    }
+
+    // Tiếp tục quét frame tiếp theo (throttle ~300ms)
+    qrScanAnimationId = setTimeout(() => {
+        requestAnimationFrame(() => scanQRFrame(video, canvas, resultEl));
+    }, 300);
+}
+
+/**
+ * Dừng camera quét QR
+ */
+function stopQRCameraScanner() {
+    // Dừng stream camera
+    if (qrCameraStream) {
+        qrCameraStream.getTracks().forEach(track => track.stop());
+        qrCameraStream = null;
+    }
+    // Dừng animation loop
+    if (qrScanAnimationId) {
+        clearTimeout(qrScanAnimationId);
+        qrScanAnimationId = null;
+    }
+    // Ẩn preview
+    const previewEl = document.getElementById('qrCameraPreview');
+    if (previewEl) previewEl.style.display = 'none';
+
+    const videoEl = document.getElementById('qrCameraVideo');
+    if (videoEl) videoEl.srcObject = null;
+
+    // Cập nhật kết quả: nếu đang hiển thị "Đang quét..." thì đổi thành thông báo dừng
+    const resultEl = document.getElementById('qrScanResult');
+    if (resultEl && resultEl.style.display !== 'none') {
+        const currentText = resultEl.textContent || '';
+        if (currentText.includes('Đang quét')) {
+            resultEl.className = 'comm-qr-scan-result error';
+            resultEl.textContent = 'Đã dừng quét. Không tìm thấy mã QR nào.';
+        }
+    }
+}
+
+/**
+ * Xử lý kết quả quét QR: parse URI, tìm user trên Supabase, mở profile
+ * @param {string} qrData - Dữ liệu QR đã decode
+ */
+async function processQRResult(qrData) {
+    const resultEl = document.getElementById('qrScanResult');
+
+    // Parse user ID từ QR data
+    let userId = qrData;
+    if (qrData.startsWith('moviechain://user/')) {
+        userId = qrData.replace('moviechain://user/', '').trim();
+    }
+
+    // Validate format UUID cơ bản
+    if (!userId || userId.length < 8) {
+        if (resultEl) {
+            resultEl.style.display = 'block';
+            resultEl.className = 'comm-qr-scan-result error';
+            resultEl.textContent = '❌ Mã QR không hợp lệ. Không phải mã QR của Trạm Phim.';
+        }
+        return;
+    }
+
+    if (resultEl) {
+        resultEl.style.display = 'block';
+        resultEl.className = 'comm-qr-scan-result';
+        resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tìm người dùng...';
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('id, display_name, avatar')
+            .eq('id', userId)
+            .single();
+
+        if (error || !data) {
+            if (resultEl) {
+                resultEl.className = 'comm-qr-scan-result error';
+                resultEl.textContent = '❌ Không tìm thấy người dùng với mã QR này.';
+            }
+            return;
+        }
+
+        // Tìm thấy user!
+        if (resultEl) {
+            resultEl.className = 'comm-qr-scan-result success';
+            resultEl.innerHTML = `✅ Đã tìm thấy: <strong>${data.display_name || 'User'}</strong>. Đang mở profile...`;
+        }
+
+        // Đợi 1s cho user đọc kết quả rồi mở profile
+        setTimeout(() => {
+            closeUserQRModal();
+            viewUserProfile(data.id);
+            showNotification(`Đã tìm thấy: ${data.display_name || 'User'}`, 'success');
+        }, 1000);
+
+    } catch (e) {
+        console.error('Lỗi xử lý QR:', e);
+        if (resultEl) {
+            resultEl.className = 'comm-qr-scan-result error';
+            resultEl.textContent = '❌ Có lỗi khi tìm kiếm. Vui lòng thử lại.';
+        }
     }
 }
 
