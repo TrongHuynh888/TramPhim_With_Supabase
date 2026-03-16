@@ -340,6 +340,14 @@ function showPage(pageName, addToHistory = true) {
   if (pageName === "actors" && typeof renderActorsPage === "function") {
     renderActorsPage();
   }
+  // 👉 Load hiệu ứng visual (tuyết, sao, pháo hoa) khi vào trang chủ
+  if (pageName === "home" && typeof loadAndApplyHomeEffects === "function") {
+    setTimeout(() => {
+      loadAndApplyHomeEffects();
+      if (typeof loadAndShowMarquee === 'function') loadAndShowMarquee();
+      if (typeof loadAndShowPopup === 'function') loadAndShowPopup();
+    }, 500);
+  }
   // Cuộn lên đầu
   window.scrollTo(0, 0);
 }
@@ -723,6 +731,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+});
+
+// Áp dụng cài đặt giao diện + marquee + popup từ Supabase khi load trang
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    if (typeof applyAppearanceOnLoad === 'function') applyAppearanceOnLoad();
+    if (typeof loadAndShowMarquee === 'function') loadAndShowMarquee();
+    if (typeof loadAndShowPopup === 'function') loadAndShowPopup();
+  }, 1500);
 });
 
 // ============================================

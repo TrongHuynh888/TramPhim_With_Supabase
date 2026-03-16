@@ -117,6 +117,14 @@
           <i class="fas fa-users-viewfinder" style="color: #ff9ff3;"></i>
           <span>Quản lý Phòng</span>
         </div>
+        <div
+          class="admin-nav-item"
+          data-panel="visualEffects"
+          onclick="showAdminPanel('visualEffects')"
+        >
+          <i class="fas fa-magic" style="color: #a78bfa;"></i>
+          <span>Giao diện & Hiệu ứng</span>
+        </div>
       </nav>
     </aside>
 
@@ -1516,6 +1524,412 @@
           </tbody>
         </table>
         <div id="adminRoomPagination" class="pagination-container"></div>
+      </div>
+
+      <!-- Visual Effects Panel -->
+      <div class="admin-panel" id="visualEffectsPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title"><i class="fas fa-magic"></i> Giao diện & Hiệu ứng</h2>
+          <span class="text-muted">Tùy chỉnh hiệu ứng visual và banner trang chủ</span>
+        </div>
+
+        <!-- PHẦN 1: Hiệu ứng Web -->
+        <div class="ve-section">
+          <h3 class="ve-section-title"><i class="fas fa-sparkles" style="color: #fcd535;"></i> Hiệu ứng trang chủ</h3>
+          <p class="text-muted" style="margin-bottom: 20px; font-size: 0.9rem;">Bật/tắt các hiệu ứng visual cho banner trang chủ. Hiệu ứng sẽ áp dụng ngay cho tất cả người dùng.</p>
+
+          <div class="ve-effects-grid">
+            <!-- Tuyết rơi -->
+            <div class="ve-effect-card" id="veCardSnow">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #74b9ff, #a29bfe);">
+                <i class="fas fa-snowflake"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Tuyết rơi ❄️</h4>
+                <p>Hiệu ứng tuyết rơi nhẹ nhàng trên banner trang chủ, phù hợp mùa đông hoặc sự kiện đặc biệt.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleSnow" onchange="toggleVisualEffect('snow', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Sao rơi -->
+            <div class="ve-effect-card" id="veCardStars">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #ffecd2, #fcb69f);">
+                <i class="fas fa-star"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Sao rơi ⭐</h4>
+                <p>Các ngôi sao lấp lánh bay qua banner, tạo cảm giác sang trọng và huyền bí.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleStars" onchange="toggleVisualEffect('stars', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Pháo hoa -->
+            <div class="ve-effect-card" id="veCardFirework">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #ff6b6b, #feca57);">
+                <i class="fas fa-fire"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Pháo hoa 🎆</h4>
+                <p>Hiệu ứng pháo hoa rực rỡ cho các dịp lễ, sự kiện lớn hoặc ra mắt phim hot.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleFirework" onchange="toggleVisualEffect('firework', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Bong bóng -->
+            <div class="ve-effect-card" id="veCardBubbles">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #48dbfb, #0abde3);">
+                <i class="fas fa-circle"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Bong bóng 🫧</h4>
+                <p>Bong bóng trong suốt bay lên nhẹ nhàng, tạo cảm giác thư giãn và sinh động.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleBubbles" onchange="toggleVisualEffect('bubbles', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Trái tim -->
+            <div class="ve-effect-card" id="veCardHearts">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #ff6b81, #ee5a24);">
+                <i class="fas fa-heart"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Trái tim 💖</h4>
+                <p>Những trái tim bay lên lãng mạn, thích hợp cho sự kiện Valentine hoặc phim tình cảm.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleHearts" onchange="toggleVisualEffect('hearts', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Lá rơi -->
+            <div class="ve-effect-card" id="veCardLeaves">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #f7971e, #ffd200);">
+                <i class="fas fa-leaf"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Lá rơi 🍂</h4>
+                <p>Lá vàng rơi nhẹ theo gió mùa thu, mang đến cảm giác hoài niệm và ấm áp.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleLeaves" onchange="toggleVisualEffect('leaves', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Mưa rơi -->
+            <div class="ve-effect-card" id="veCardRain">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #636e72, #2d3436);">
+                <i class="fas fa-cloud-rain"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Mưa rơi 🌧️</h4>
+                <p>Giọt mưa xiên rơi tạo bầu không khí u ám, huyền bí phù hợp phim kinh dị.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleRain" onchange="toggleVisualEffect('rain', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Confetti -->
+            <div class="ve-effect-card" id="veCardConfetti">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #e056fd, #686de0);">
+                <i class="fas fa-gift"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Confetti 🎊</h4>
+                <p>Giấy confetti nhiều màu bay tung, dùng cho sự kiện mừng hoặc lễ kỷ niệm.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleConfetti" onchange="toggleVisualEffect('confetti', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- PHẦN 2: Tùy chỉnh giao diện -->
+        <div class="ve-section" style="margin-top: 30px;">
+          <h3 class="ve-section-title"><i class="fas fa-palette" style="color: #a78bfa;"></i> Tùy chỉnh giao diện</h3>
+          <p class="text-muted" style="margin-bottom: 20px; font-size: 0.9rem;">Thay đổi màu sắc, font chữ và theme mặc định cho toàn bộ website.</p>
+
+          <div class="ve-customize-grid">
+            <!-- 1. Màu Accent -->
+            <div class="ve-customize-card">
+              <div class="ve-customize-header">
+                <i class="fas fa-fill-drip" style="color: var(--accent-primary);"></i>
+                <h4>Màu chủ đạo</h4>
+              </div>
+              <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 12px;">Màu accent chính sẽ áp dụng cho nút bấm, link, badge và các phần tử nổi bật.</p>
+              <div class="ve-color-presets" id="veColorPresets">
+                <button class="ve-color-btn active" data-color="#4db8ff" style="background:#4db8ff;" onclick="selectAccentColor('#4db8ff')" title="Xanh lơ (Mặc định)"></button>
+                <button class="ve-color-btn" data-color="#e50914" style="background:#e50914;" onclick="selectAccentColor('#e50914')" title="Đỏ Netflix"></button>
+                <button class="ve-color-btn" data-color="#a78bfa" style="background:#a78bfa;" onclick="selectAccentColor('#a78bfa')" title="Tím Lavender"></button>
+                <button class="ve-color-btn" data-color="#10b981" style="background:#10b981;" onclick="selectAccentColor('#10b981')" title="Xanh lá"></button>
+                <button class="ve-color-btn" data-color="#f59e0b" style="background:#f59e0b;" onclick="selectAccentColor('#f59e0b')" title="Vàng cam"></button>
+                <button class="ve-color-btn" data-color="#ec4899" style="background:#ec4899;" onclick="selectAccentColor('#ec4899')" title="Hồng"></button>
+                <button class="ve-color-btn" data-color="#06b6d4" style="background:#06b6d4;" onclick="selectAccentColor('#06b6d4')" title="Cyan"></button>
+                <button class="ve-color-btn" data-color="#ff6b35" style="background:#ff6b35;" onclick="selectAccentColor('#ff6b35')" title="Cam đất"></button>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+                <label class="text-muted" style="font-size:0.82rem; white-space:nowrap;">Tùy chọn:</label>
+                <input type="color" id="veCustomColor" value="#4db8ff" onchange="selectAccentColor(this.value)" style="width:36px;height:28px;border:none;cursor:pointer;border-radius:6px;">
+                <span class="text-muted" id="veCurrentColorCode" style="font-size:0.82rem;font-family:monospace;">#4db8ff</span>
+              </div>
+            </div>
+
+            <!-- 2. Font chữ -->
+            <div class="ve-customize-card">
+              <div class="ve-customize-header">
+                <i class="fas fa-font" style="color: #fbbf24;"></i>
+                <h4>Font chữ</h4>
+              </div>
+              <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 12px;">Chọn font chữ áp dụng cho toàn bộ website. Font sẽ được tải từ Google Fonts.</p>
+              <select id="veFontSelect" class="form-select ve-font-select" onchange="selectSiteFont(this.value)">
+                <option value="Inter" style="font-family: Inter;">Inter (Mặc định)</option>
+                <option value="Roboto" style="font-family: Roboto;">Roboto</option>
+                <option value="Outfit" style="font-family: Outfit;">Outfit</option>
+                <option value="Montserrat" style="font-family: Montserrat;">Montserrat</option>
+                <option value="Nunito" style="font-family: Nunito;">Nunito</option>
+                <option value="Poppins" style="font-family: Poppins;">Poppins</option>
+                <option value="Be Vietnam Pro" style="font-family: 'Be Vietnam Pro';">Be Vietnam Pro</option>
+                <option value="Quicksand" style="font-family: Quicksand;">Quicksand</option>
+              </select>
+              <div class="ve-font-preview" id="veFontPreview">
+                <span>Trạm Phim — Nền tảng xem phim Blockchain</span>
+              </div>
+            </div>
+
+            <!-- 3. Theme mặc định -->
+            <div class="ve-customize-card">
+              <div class="ve-customize-header">
+                <i class="fas fa-moon" style="color: #818cf8;"></i>
+                <h4>Theme mặc định</h4>
+              </div>
+              <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 12px;">Chọn theme mặc định cho người dùng mới truy cập (chưa có cài đặt riêng).</p>
+              <div class="ve-theme-options">
+                <label class="ve-theme-option active" id="veThemeDark">
+                  <input type="radio" name="veDefaultTheme" value="dark" checked onchange="selectDefaultTheme('dark')">
+                  <div class="ve-theme-preview dark">
+                    <i class="fas fa-moon"></i>
+                    <span>Dark Mode</span>
+                  </div>
+                </label>
+                <label class="ve-theme-option" id="veThemeLight">
+                  <input type="radio" name="veDefaultTheme" value="light" onchange="selectDefaultTheme('light')">
+                  <div class="ve-theme-preview light">
+                    <i class="fas fa-sun"></i>
+                    <span>Light Mode</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Nút lưu -->
+          <div style="margin-top: 20px; text-align: right;">
+            <button class="btn btn-primary" onclick="saveAppearanceSettings()" id="veSaveBtn">
+              <i class="fas fa-save"></i> Lưu cài đặt giao diện
+            </button>
+          </div>
+        </div>
+
+        <!-- PHẦN 3: Thông báo chạy chữ (Marquee) -->
+        <div class="ve-section" style="margin-top: 30px;">
+          <h3 class="ve-section-title"><i class="fas fa-bullhorn" style="color: #f59e0b;"></i> Thông báo chạy chữ (Marquee)</h3>
+          <p class="text-muted" style="margin-bottom: 16px; font-size: 0.9rem;">Dòng chữ chạy ngang ở đầu trang chủ, dùng để thông báo sự kiện, phim mới, bảo trì...</p>
+
+          <div class="ve-marquee-controls">
+            <!-- Toggle + Tốc độ -->
+            <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:14px;">
+              <label class="ve-toggle-switch" style="margin:0;">
+                <input type="checkbox" id="veMarqueeEnabled" onchange="window._marqueeEnabled = this.checked">
+                <span class="ve-toggle-slider"></span>
+              </label>
+              <span style="font-weight:600;">Bật Marquee</span>
+
+              <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+                <label class="text-muted" style="font-size:0.82rem;">Tốc độ:</label>
+                <select id="veMarqueeSpeed" class="ve-font-select" style="width:auto; padding:6px 10px;" onchange="updateMarqueePreview()">
+                  <option value="slow">Chậm</option>
+                  <option value="normal" selected>Bình thường</option>
+                  <option value="fast">Nhanh</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Nội dung -->
+            <textarea id="veMarqueeText" class="ve-textarea" rows="2" placeholder="VD: 🎉 Phim mới ra mắt! | 🔧 Bảo trì lúc 2h sáng | 🎬 Xem ngay bộ phim hot nhất tuần" oninput="document.getElementById('veMarqueePreviewText').textContent = this.value || '🎉 Preview sẽ hiện ở đây...'"></textarea>
+
+            <!-- Màu sắc -->
+            <div style="display:flex; gap:16px; margin-top:10px; flex-wrap:wrap;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label class="text-muted" style="font-size:0.82rem;">Màu nền:</label>
+                <input type="color" id="veMarqueeBg" value="#1a1a2e" style="width:32px;height:24px;border:none;cursor:pointer;border-radius:4px;" oninput="updateMarqueePreview()">
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label class="text-muted" style="font-size:0.82rem;">Màu chữ:</label>
+                <input type="color" id="veMarqueeColor" value="#fbbf24" style="width:32px;height:24px;border:none;cursor:pointer;border-radius:4px;" oninput="updateMarqueePreview()">
+              </div>
+            </div>
+
+            <!-- Preview -->
+            <div class="ve-marquee-preview" id="veMarqueePreview" style="margin-top:14px;">
+              <div class="ve-marquee-inner" id="veMarqueePreviewText">🎉 Preview sẽ hiện ở đây...</div>
+            </div>
+
+            <button class="btn btn-primary" onclick="saveMarqueeSettings()" style="margin-top:14px;">
+              <i class="fas fa-save"></i> Lưu Marquee
+            </button>
+          </div>
+        </div>
+
+        <!-- PHẦN 4: Popup thông báo toàn site -->
+        <div class="ve-section" style="margin-top: 30px;">
+          <h3 class="ve-section-title"><i class="fas fa-window-maximize" style="color: #ec4899;"></i> Popup thông báo toàn site</h3>
+          <p class="text-muted" style="margin-bottom: 16px; font-size: 0.9rem;">Modal popup hiện theo tần suất tùy chỉnh. Dùng để giới thiệu tính năng mới, sự kiện, khuyến mãi...</p>
+
+          <div class="ve-popup-controls">
+            <!-- Toggle + Tần suất -->
+            <div style="display:flex; align-items:center; gap:16px; margin-bottom:14px; flex-wrap:wrap;">
+              <label class="ve-toggle-switch" style="margin:0;">
+                <input type="checkbox" id="vePopupEnabled" onchange="window._popupEnabled = this.checked">
+                <span class="ve-toggle-slider"></span>
+              </label>
+              <span style="font-weight:600;">Bật Popup</span>
+            </div>
+
+            <!-- Tần suất (radio - chọn 1) -->
+            <div style="margin-bottom:14px;">
+              <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:8px;">Tần suất hiển thị:</label>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freqEveryVisit" value="every_visit"> 🔄 Mỗi lần mở web
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freq30min" value="30min"> ⏱️ Lặp lại sau 30 phút
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freq1hour" value="1hour"> ⏰ Lặp lại sau 1 giờ
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freqOnceDay" value="once_day" checked> 📅 1 lần / ngày
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freqOnceWeek" value="once_week"> 📆 1 lần / tuần
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freqOnceOnly" value="once_only"> 🔒 1 lần duy nhất
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freqNewUser" value="new_user"> 👋 Chỉ user mới
+                </label>
+              </div>
+            </div>
+
+            <!-- Tiêu đề -->
+            <div style="margin-bottom:10px;">
+              <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Tiêu đề:</label>
+              <input type="text" id="vePopupTitle" class="ve-textarea" style="padding:10px 14px; height:auto;" placeholder="VD: 🎬 Chào mừng bạn đến Trạm Phim!">
+            </div>
+
+            <!-- Nội dung -->
+            <div style="margin-bottom:10px;">
+              <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Nội dung:</label>
+              <textarea id="vePopupContent" class="ve-textarea" rows="4" placeholder="VD: Trạm Phim đã cập nhật tính năng xem chung Watch Party! Mời bạn trải nghiệm ngay."></textarea>
+            </div>
+
+            <!-- Màu tiêu đề + Màu nội dung -->
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
+              <div style="flex:1; min-width:140px;">
+                <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Màu tiêu đề:</label>
+                <input type="color" id="vePopupTitleColor" value="#ffffff" style="width:100%; height:36px; border:none; border-radius:8px; cursor:pointer; background:transparent;" oninput="document.getElementById('vePopupTitle').style.color=this.value">
+              </div>
+              <div style="flex:1; min-width:140px;">
+                <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Màu nội dung:</label>
+                <input type="color" id="vePopupContentColor" value="#d9d9d9" style="width:100%; height:36px; border:none; border-radius:8px; cursor:pointer; background:transparent;" oninput="document.getElementById('vePopupContent').style.color=this.value">
+              </div>
+            </div>
+            <div style="margin-bottom:10px;">
+              <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Ảnh minh họa (tùy chọn):</label>
+              <input type="hidden" id="vePopupImage" value="">
+              
+              <!-- Preview ảnh (ẩn mặc định) -->
+              <div id="vePopupImagePreview" style="display:none; position:relative; margin-bottom:10px; border-radius:10px; overflow:hidden; max-width:400px;">
+                <img id="vePopupImagePreviewImg" src="" alt="Preview" style="width:100%; border-radius:10px; display:block;">
+                <button onclick="removePopupImage()" style="position:absolute; top:8px; right:8px; background:rgba(220,38,38,0.9); color:#fff; border:none; border-radius:50%; width:28px; height:28px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center;" title="Xóa ảnh">
+                  <i class="fas fa-trash-alt"></i>
+                </button>
+              </div>
+
+              <!-- Upload area -->
+              <div id="vePopupUploadArea" onclick="document.getElementById('vePopupFileInput').click()" 
+                   style="border:2px dashed rgba(255,255,255,0.15); border-radius:10px; padding:20px; text-align:center; cursor:pointer; transition:all 0.3s; background:rgba(255,255,255,0.02);"
+                   onmouseover="this.style.borderColor='var(--accent-primary, #4db8ff)'; this.style.background='rgba(77,184,255,0.05)'"
+                   onmouseout="this.style.borderColor='rgba(255,255,255,0.15)'; this.style.background='rgba(255,255,255,0.02)'">
+                <i class="fas fa-cloud-upload-alt" style="font-size:1.5rem; color:var(--accent-primary, #4db8ff); margin-bottom:6px;"></i>
+                <p style="margin:0; font-size:0.85rem; color:var(--text-muted);">Click để chọn ảnh hoặc nhập URL</p>
+                <p style="margin:4px 0 0; font-size:0.75rem; color:rgba(255,255,255,0.3);">PNG, JPG, GIF • Tối đa 5MB • Lưu trên Cloudflare R2</p>
+              </div>
+              <input type="file" id="vePopupFileInput" accept="image/*" style="display:none;" onchange="handlePopupImageUpload(this)">
+              
+              <!-- Hoặc nhập URL -->
+              <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+                <input type="text" id="vePopupImageUrl" class="ve-textarea" style="padding:8px 12px; height:auto; flex:1; font-size:0.82rem;" placeholder="Hoặc dán URL ảnh: https://example.com/banner.jpg" oninput="previewPopupImageUrl(this.value)">
+              </div>
+            </div>
+
+            <!-- Nút bấm -->
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
+              <div style="flex:1; min-width:150px;">
+                <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Text nút bấm:</label>
+                <input type="text" id="vePopupBtnText" class="ve-textarea" style="padding:10px 14px; height:auto;" placeholder="Khám phá ngay" value="Khám phá ngay">
+              </div>
+              <div style="flex:1; min-width:150px;">
+                <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Link nút (tùy chọn):</label>
+                <input type="text" id="vePopupBtnLink" class="ve-textarea" style="padding:10px 14px; height:auto;" placeholder="#/community">
+              </div>
+              <div style="min-width:100px;">
+                <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Màu chữ nút:</label>
+                <input type="color" id="vePopupBtnColor" value="#ffffff" style="width:100%; height:36px; border:none; border-radius:8px; cursor:pointer; background:transparent;" oninput="document.getElementById('vePopupBtnText').style.color=this.value">
+              </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="savePopupSettings()" style="margin-top:8px;">
+              <i class="fas fa-save"></i> Lưu Popup
+            </button>
+            <button class="btn" onclick="previewSitePopup()" style="margin-top:8px; margin-left:8px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15);">
+              <i class="fas fa-eye"></i> Xem trước
+            </button>
+          </div>
+        </div>
+
+        <!-- PHẦN 5: Banner quảng cáo -->
+        <div class="ve-section" style="margin-top: 30px;">
+          <h3 class="ve-section-title"><i class="fas fa-ad" style="color: #4db8ff;"></i> Banner quảng cáo</h3>
+          <div class="ve-banner-placeholder">
+            <i class="fas fa-photo-video"></i>
+            <h4>Tính năng đang phát triển</h4>
+            <p>Quản lý banner quảng cáo hiển thị trên trang chủ sẽ được cập nhật trong phiên bản tiếp theo.</p>
+            <span class="ve-coming-soon">Coming Soon</span>
+          </div>
+        </div>
       </div>
 
     </div>

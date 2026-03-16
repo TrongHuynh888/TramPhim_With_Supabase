@@ -9540,3 +9540,1594 @@ async function adminJoinRoom(roomId, type) {
         }, 100);
     }
 }
+
+/* ============================================
+   QUẢN LÝ GIAO DIỆN & HIỆU ỨNG (VISUAL EFFECTS)
+   ============================================ */
+
+// Cache settings hiện tại
+let currentVisualEffects = { snow: false, stars: false, firework: false, bubbles: false, hearts: false, leaves: false, rain: false, confetti: false };
+
+/**
+ * Load cài đặt hiệu ứng từ Supabase
+ */
+async function loadVisualEffectsSettings() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings')
+            .select('value')
+            .eq('key', 'visual_effects')
+            .single();
+
+        if (error) throw error;
+
+        currentVisualEffects = data.value || { snow: false, stars: false, firework: false, bubbles: false, hearts: false, leaves: false, rain: false, confetti: false };
+
+        // Cập nhật UI toggle cho tất cả hiệu ứng
+        const effectKeys = ['snow', 'stars', 'firework', 'bubbles', 'hearts', 'leaves', 'rain', 'confetti'];
+        effectKeys.forEach(key => {
+            const toggleId = 'veToggle' + key.charAt(0).toUpperCase() + key.slice(1);
+            const toggle = document.getElementById(toggleId);
+            if (toggle) toggle.checked = !!currentVisualEffects[key];
+
+            const cardId = 'veCard' + key.charAt(0).toUpperCase() + key.slice(1);
+            updateEffectCardState(cardId, !!currentVisualEffects[key]);
+        });
+
+        console.log('✅ Loaded visual effects settings:', currentVisualEffects);
+    } catch (err) {
+        console.error('❌ Lỗi load visual effects:', err);
+    }
+}
+
+/**
+ * Cập nhật class active cho card hiệu ứng
+ */
+function updateEffectCardState(cardId, isActive) {
+    const card = document.getElementById(cardId);
+    if (card) {
+        if (isActive) card.classList.add('active');
+        else card.classList.remove('active');
+    }
+}
+
+/**
+ * Toggle bật/tắt hiệu ứng + lưu Supabase
+ */
+async function toggleVisualEffect(effectName, isEnabled) {
+    if (!supabase) return;
+    try {
+        // Cập nhật local
+        currentVisualEffects[effectName] = isEnabled;
+
+        // Cập nhật card active
+        const cardId = 'veCard' + effectName.charAt(0).toUpperCase() + effectName.slice(1);
+        updateEffectCardState(cardId, isEnabled);
+
+        // Lưu lên Supabase
+        const { error } = await supabase
+            .from('site_settings')
+            .update({ 
+                value: currentVisualEffects,
+                updated_at: new Date().toISOString()
+            })
+            .eq('key', 'visual_effects');
+
+        if (error) throw error;
+
+        const effectNames = { snow: 'Tuyết rơi', stars: 'Sao rơi', firework: 'Pháo hoa', bubbles: 'Bong bóng', hearts: 'Trái tim', leaves: 'Lá rơi', rain: 'Mưa rơi', confetti: 'Confetti' };
+        showNotification(
+            `${isEnabled ? '✅ Đã bật' : '⛔ Đã tắt'} hiệu ứng "${effectNames[effectName]}"`,
+            isEnabled ? 'success' : 'info'
+        );
+
+        // Render/Remove hiệu ứng ngay trên trang chủ nếu đang mở
+        if (isEnabled) {
+            renderHomeEffect(effectName);
+        } else {
+            removeHomeEffect(effectName);
+        }
+
+    } catch (err) {
+        console.error('❌ Lỗi toggle visual effect:', err);
+        showNotification('Lỗi khi cập nhật hiệu ứng!', 'error');
+        // Revert toggle
+        const toggle = document.getElementById(`veToggle${effectName.charAt(0).toUpperCase() + effectName.slice(1)}`);
+        if (toggle) toggle.checked = !isEnabled;
+    }
+}
+
+/**
+ * Render hiệu ứng trên banner trang chủ
+ */
+function renderHomeEffect(effectName) {
+    // Tìm banner container
+    const banner = document.querySelector('.banner-slider') || document.querySelector('.hero-section') || document.querySelector('#homePage');
+    if (!banner) return;
+
+    // Xóa hiệu ứng cũ nếu có
+    removeHomeEffect(effectName);
+
+    // Tạo canvas cho hiệu ứng
+    const canvas = document.createElement('canvas');
+    canvas.id = `effect-${effectName}`;
+    canvas.className = 'home-effect-canvas';
+    canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;';
+    
+    // Đảm bảo banner có position relative
+    if (getComputedStyle(banner).position === 'static') {
+        banner.style.position = 'relative';
+    }
+    banner.appendChild(canvas);
+
+    // Khởi tạo animation
+    const ctx = canvas.getContext('2d');
+    canvas.width = banner.offsetWidth;
+    canvas.height = banner.offsetHeight;
+
+    const particles = [];
+    const config = getEffectConfig(effectName, canvas);
+
+    // Tạo particles
+    for (let i = 0; i < config.count; i++) {
+        particles.push(createParticle(config, canvas));
+    }
+
+    // Animation loop
+    function animate() {
+        if (!document.getElementById(`effect-${effectName}`)) return; // Dừng nếu canvas bị xóa
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        particles.forEach((p, i) => {
+            config.update(p, canvas);
+            config.draw(ctx, p);
+
+            // Reset khi ra ngoài
+            if (p.y > canvas.height + 10 || p.x > canvas.width + 10 || p.x < -10) {
+                particles[i] = createParticle(config, canvas);
+                particles[i].y = -10;
+            }
+        });
+
+        requestAnimationFrame(animate);
+    }
+    animate();
+
+    // Resize handler
+    const resizeHandler = () => {
+        const currentCanvas = document.getElementById(`effect-${effectName}`);
+        if (currentCanvas && banner) {
+            currentCanvas.width = banner.offsetWidth;
+            currentCanvas.height = banner.offsetHeight;
+        }
+    };
+    window.addEventListener('resize', resizeHandler);
+    canvas._resizeHandler = resizeHandler;
+}
+
+/**
+ * Cấu hình cho mỗi loại hiệu ứng
+ */
+function getEffectConfig(type, canvas) {
+    switch (type) {
+        case 'snow':
+            return {
+                count: 60,
+                update: (p) => {
+                    p.y += p.speed;
+                    p.x += Math.sin(p.angle) * 0.5;
+                    p.angle += 0.01;
+                },
+                draw: (ctx, p) => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
+                    ctx.fill();
+                }
+            };
+        case 'stars':
+            return {
+                count: 30,
+                update: (p) => {
+                    p.y += p.speed;
+                    p.x += p.speedX;
+                    p.opacity = 0.3 + Math.abs(Math.sin(p.angle)) * 0.7;
+                    p.angle += 0.03;
+                },
+                draw: (ctx, p) => {
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.rotation);
+                    ctx.fillStyle = `rgba(255, 215, 0, ${p.opacity})`;
+                    drawStar(ctx, 0, 0, 5, p.size, p.size / 2);
+                    ctx.restore();
+                    p.rotation += 0.02;
+                }
+            };
+        case 'firework':
+            return {
+                count: 40,
+                update: (p) => {
+                    p.y += p.speed;
+                    p.x += p.speedX;
+                    p.opacity -= 0.005;
+                    p.size *= 0.99;
+                    if (p.opacity <= 0) {
+                        p.opacity = 0.8;
+                        p.x = Math.random() * canvas.width;
+                        p.y = Math.random() * canvas.height * 0.5;
+                        p.speed = (Math.random() - 0.5) * 2;
+                        p.speedX = (Math.random() - 0.5) * 3;
+                        p.size = Math.random() * 3 + 1;
+                    }
+                },
+                draw: (ctx, p) => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(${p.r}, ${p.g}, ${p.b}, ${p.opacity})`;
+                    ctx.fill();
+                }
+            };
+        case 'bubbles':
+            return {
+                count: 25,
+                update: (p) => {
+                    p.y -= p.speed; // Bay lên
+                    p.x += Math.sin(p.angle) * 0.8;
+                    p.angle += 0.02;
+                    p.opacity = 0.15 + Math.abs(Math.sin(p.angle * 2)) * 0.25;
+                },
+                draw: (ctx, p) => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
+                    ctx.strokeStyle = `rgba(150, 220, 255, ${p.opacity})`;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    // Ánh sáng nhỏ trong bong bóng
+                    ctx.beginPath();
+                    ctx.arc(p.x - p.size, p.y - p.size, p.size * 0.5, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity * 0.6})`;
+                    ctx.fill();
+                }
+            };
+        case 'hearts':
+            return {
+                count: 20,
+                update: (p) => {
+                    p.y -= p.speed * 0.8; // Bay lên
+                    p.x += Math.sin(p.angle) * 0.6;
+                    p.angle += 0.02;
+                    p.scale = 0.8 + Math.sin(p.angle * 3) * 0.2;
+                },
+                draw: (ctx, p) => {
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    const s = p.size * (p.scale || 1);
+                    ctx.fillStyle = `rgba(255, ${80 + Math.floor(p.r * 0.3)}, ${120 + Math.floor(p.g * 0.2)}, ${p.opacity})`;
+                    ctx.beginPath();
+                    ctx.moveTo(0, s * 0.3);
+                    ctx.bezierCurveTo(-s, -s * 0.5, -s * 0.5, -s * 1.2, 0, -s * 0.5);
+                    ctx.bezierCurveTo(s * 0.5, -s * 1.2, s, -s * 0.5, 0, s * 0.3);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            };
+        case 'leaves':
+            return {
+                count: 20,
+                update: (p) => {
+                    p.y += p.speed * 0.6;
+                    p.x += Math.sin(p.angle) * 1.2;
+                    p.angle += 0.015;
+                    p.rotation += 0.03;
+                },
+                draw: (ctx, p) => {
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.rotation);
+                    // Vẽ lá hình oval
+                    const leafColors = ['rgba(200, 150, 50,', 'rgba(180, 100, 30,', 'rgba(220, 180, 60,', 'rgba(160, 80, 20,'];
+                    const colorBase = leafColors[Math.floor(p.r / 70) % leafColors.length];
+                    ctx.fillStyle = `${colorBase} ${p.opacity})`;
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, p.size * 2.5, p.size, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Gân lá
+                    ctx.strokeStyle = `${colorBase} ${p.opacity * 0.5})`;
+                    ctx.lineWidth = 0.5;
+                    ctx.beginPath();
+                    ctx.moveTo(-p.size * 2, 0);
+                    ctx.lineTo(p.size * 2, 0);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            };
+        case 'rain':
+            return {
+                count: 80,
+                update: (p) => {
+                    p.y += p.speed * 3;
+                    p.x += 1.5; // Xiên
+                },
+                draw: (ctx, p) => {
+                    ctx.beginPath();
+                    ctx.moveTo(p.x, p.y);
+                    ctx.lineTo(p.x + 1.5, p.y + p.size * 5);
+                    ctx.strokeStyle = `rgba(174, 194, 224, ${p.opacity * 0.5})`;
+                    ctx.lineWidth = 0.8;
+                    ctx.stroke();
+                }
+            };
+        case 'confetti':
+            return {
+                count: 45,
+                update: (p) => {
+                    p.y += p.speed;
+                    p.x += Math.sin(p.angle) * 1.5;
+                    p.angle += 0.04;
+                    p.rotation += 0.08;
+                },
+                draw: (ctx, p) => {
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.rotation);
+                    ctx.fillStyle = `rgba(${p.r}, ${p.g}, ${p.b}, ${p.opacity})`;
+                    ctx.fillRect(-p.size * 1.5, -p.size * 0.5, p.size * 3, p.size);
+                    ctx.restore();
+                }
+            };
+        default:
+            return { count: 0, update: () => {}, draw: () => {} };
+    }
+}
+
+/**
+ * Tạo 1 particle mới
+ */
+function createParticle(config, canvas) {
+    const colors = [
+        [255, 100, 100], [100, 200, 255], [255, 215, 0],
+        [150, 255, 150], [255, 150, 255], [255, 180, 100]
+    ];
+    const c = colors[Math.floor(Math.random() * colors.length)];
+    return {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 3 + 1,
+        speed: Math.random() * 1.5 + 0.5,
+        speedX: (Math.random() - 0.5) * 1,
+        opacity: Math.random() * 0.6 + 0.2,
+        angle: Math.random() * Math.PI * 2,
+        rotation: Math.random() * Math.PI * 2,
+        r: c[0], g: c[1], b: c[2]
+    };
+}
+
+/**
+ * Vẽ ngôi sao 5 cánh
+ */
+function drawStar(ctx, cx, cy, spikes, outerR, innerR) {
+    let rot = Math.PI / 2 * 3;
+    let step = Math.PI / spikes;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - outerR);
+    for (let i = 0; i < spikes; i++) {
+        ctx.lineTo(cx + Math.cos(rot) * outerR, cy + Math.sin(rot) * outerR);
+        rot += step;
+        ctx.lineTo(cx + Math.cos(rot) * innerR, cy + Math.sin(rot) * innerR);
+        rot += step;
+    }
+    ctx.lineTo(cx, cy - outerR);
+    ctx.closePath();
+    ctx.fill();
+}
+
+/**
+ * Xóa hiệu ứng khỏi DOM
+ */
+function removeHomeEffect(effectName) {
+    const canvas = document.getElementById(`effect-${effectName}`);
+    if (canvas) {
+        if (canvas._resizeHandler) {
+            window.removeEventListener('resize', canvas._resizeHandler);
+        }
+        canvas.remove();
+    }
+}
+
+/**
+ * Load hiệu ứng khi mở trang chủ (gọi từ home.js hoặc main.js)
+ */
+async function loadAndApplyHomeEffects() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings')
+            .select('value')
+            .eq('key', 'visual_effects')
+            .single();
+
+        if (error || !data) return;
+
+        const effects = data.value || {};
+        // Tự động render tất cả hiệu ứng đang bật
+        Object.keys(effects).forEach(key => {
+            if (effects[key]) renderHomeEffect(key);
+        });
+    } catch (err) {
+        console.error('Lỗi load home effects:', err);
+    }
+}
+
+/* ============================================
+   TÙY CHỈNH GIAO DIỆN (APPEARANCE SETTINGS)
+   ============================================ */
+
+// Biến tạm lưu cài đặt đang chỉnh
+let pendingAppearance = {
+    accentColor: '#4db8ff',
+    fontFamily: 'Inter',
+    defaultTheme: 'dark'
+};
+
+/**
+ * Chọn màu accent chính — preview ngay trên trang
+ */
+function selectAccentColor(color) {
+    pendingAppearance.accentColor = color;
+
+    // Cập nhật UI preset buttons
+    document.querySelectorAll('.ve-color-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.color === color);
+    });
+
+    // Cập nhật color input + text
+    const customInput = document.getElementById('veCustomColor');
+    const codeText = document.getElementById('veCurrentColorCode');
+    if (customInput) customInput.value = color;
+    if (codeText) codeText.textContent = color;
+
+    // Preview realtime — áp dụng CSS variables tạm
+    applyAccentColor(color);
+}
+
+/**
+ * Áp dụng màu accent lên CSS variables
+ */
+function applyAccentColor(color) {
+    const root = document.documentElement;
+    root.style.setProperty('--accent-primary', color);
+
+    // Tính accent-secondary (đậm hơn 20%)
+    const secondary = adjustBrightness(color, -30);
+    root.style.setProperty('--accent-secondary', secondary);
+
+    // Tính accent-tertiary (sáng hơn 20%)
+    const tertiary = adjustBrightness(color, 30);
+    root.style.setProperty('--accent-tertiary', tertiary);
+
+    // Cập nhật gradient
+    root.style.setProperty('--accent-gradient', `linear-gradient(135deg, ${secondary} 0%, ${color} 100%)`);
+    root.style.setProperty('--accent-neon', `linear-gradient(135deg, ${color}, ${secondary})`);
+    root.style.setProperty('--shadow-neon', `0 0 20px ${color}80`);
+}
+
+/**
+ * Điều chỉnh độ sáng hex color
+ */
+function adjustBrightness(hex, amount) {
+    hex = hex.replace('#', '');
+    const r = Math.max(0, Math.min(255, parseInt(hex.substr(0, 2), 16) + amount));
+    const g = Math.max(0, Math.min(255, parseInt(hex.substr(2, 2), 16) + amount));
+    const b = Math.max(0, Math.min(255, parseInt(hex.substr(4, 2), 16) + amount));
+    return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+/**
+ * Chọn font chữ — preview ngay
+ */
+function selectSiteFont(fontName) {
+    pendingAppearance.fontFamily = fontName;
+
+    // Load font từ Google Fonts
+    loadGoogleFont(fontName);
+
+    // Preview
+    const preview = document.getElementById('veFontPreview');
+    if (preview) preview.style.fontFamily = `'${fontName}', sans-serif`;
+}
+
+/**
+ * Load Google Font động
+ */
+function loadGoogleFont(fontName) {
+    const linkId = 'dynamic-google-font';
+    let link = document.getElementById(linkId);
+    if (!link) {
+        link = document.createElement('link');
+        link.id = linkId;
+        link.rel = 'stylesheet';
+        document.head.appendChild(link);
+    }
+    const encodedFont = fontName.replace(/ /g, '+');
+    link.href = `https://fonts.googleapis.com/css2?family=${encodedFont}:wght@300;400;500;600;700&display=swap`;
+}
+
+/**
+ * Áp dụng font cho toàn trang
+ */
+function applySiteFont(fontName) {
+    loadGoogleFont(fontName);
+    document.documentElement.style.setProperty('font-family', `'${fontName}', sans-serif`);
+    document.body.style.fontFamily = `'${fontName}', sans-serif`;
+}
+
+/**
+ * Chọn theme mặc định
+ */
+function selectDefaultTheme(theme) {
+    pendingAppearance.defaultTheme = theme;
+}
+
+/**
+ * Lưu tất cả cài đặt giao diện lên Supabase
+ */
+async function saveAppearanceSettings() {
+    if (!supabase) return;
+    try {
+        // Kiểm tra đã có row 'appearance' chưa
+        const { data: existing } = await supabase
+            .from('site_settings')
+            .select('key')
+            .eq('key', 'appearance')
+            .single();
+
+        let error;
+        if (existing) {
+            // Update
+            const result = await supabase
+                .from('site_settings')
+                .update({
+                    value: pendingAppearance,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('key', 'appearance');
+            error = result.error;
+        } else {
+            // Insert
+            const result = await supabase
+                .from('site_settings')
+                .insert({
+                    key: 'appearance',
+                    value: pendingAppearance
+                });
+            error = result.error;
+        }
+
+        if (error) throw error;
+
+        showNotification('✅ Đã lưu cài đặt giao diện thành công!', 'success');
+
+        // Áp dụng ngay
+        applyAccentColor(pendingAppearance.accentColor);
+        applySiteFont(pendingAppearance.fontFamily);
+
+    } catch (err) {
+        console.error('❌ Lỗi lưu appearance:', err);
+        showNotification('Lỗi khi lưu cài đặt giao diện!', 'error');
+    }
+}
+
+/**
+ * Load cài đặt giao diện từ Supabase (Gọi khi mở tab admin)
+ */
+async function loadAppearanceSettings() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings')
+            .select('value')
+            .eq('key', 'appearance')
+            .single();
+
+        if (error || !data) return;
+
+        const settings = data.value || {};
+        pendingAppearance = {
+            accentColor: settings.accentColor || '#4db8ff',
+            fontFamily: settings.fontFamily || 'Inter',
+            defaultTheme: settings.defaultTheme || 'dark'
+        };
+
+        // Cập nhật UI
+        selectAccentColor(pendingAppearance.accentColor);
+
+        const fontSelect = document.getElementById('veFontSelect');
+        if (fontSelect) fontSelect.value = pendingAppearance.fontFamily;
+        selectSiteFont(pendingAppearance.fontFamily);
+
+        const themeRadio = document.querySelector(`input[name="veDefaultTheme"][value="${pendingAppearance.defaultTheme}"]`);
+        if (themeRadio) themeRadio.checked = true;
+
+        console.log('✅ Loaded appearance settings:', pendingAppearance);
+    } catch (err) {
+        console.error('❌ Lỗi load appearance:', err);
+    }
+}
+
+/**
+ * Áp dụng cài đặt giao diện khi load trang (Gọi từ main.js hoặc utils.js)
+ */
+async function applyAppearanceOnLoad() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings')
+            .select('value')
+            .eq('key', 'appearance')
+            .single();
+
+        if (error || !data) return;
+
+        const s = data.value || {};
+
+        // Áp dụng màu accent
+        if (s.accentColor && s.accentColor !== '#4db8ff') {
+            applyAccentColor(s.accentColor);
+        }
+
+        // Áp dụng font
+        if (s.fontFamily && s.fontFamily !== 'Inter') {
+            applySiteFont(s.fontFamily);
+        }
+
+        // Áp dụng theme mặc định cho user mới (chưa chọn theme)
+        if (s.defaultTheme && !localStorage.getItem('theme')) {
+            document.documentElement.setAttribute('data-theme', s.defaultTheme);
+            const icon = document.getElementById('themeIcon');
+            if (icon) icon.className = s.defaultTheme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
+        }
+    } catch (err) {
+        console.error('Lỗi apply appearance on load:', err);
+    }
+}
+
+/* ============================================
+   MARQUEE — THÔNG BÁO CHẠY CHỮ
+   ============================================ */
+
+/**
+ * Lưu cài đặt Marquee lên Supabase
+ */
+/**
+ * Cập nhật preview Marquee realtime khi chỉnh tốc độ/màu
+ */
+function updateMarqueePreview() {
+    const preview = document.getElementById('veMarqueePreview');
+    const previewText = document.getElementById('veMarqueePreviewText');
+    const bg = document.getElementById('veMarqueeBg');
+    const color = document.getElementById('veMarqueeColor');
+    const speed = document.getElementById('veMarqueeSpeed');
+
+    if (preview && bg) preview.style.background = bg.value;
+    if (previewText && color) previewText.style.color = color.value;
+    if (previewText && speed) {
+        const durations = { slow: '20s', normal: '12s', fast: '5s' };
+        previewText.style.animationDuration = durations[speed.value] || '12s';
+    }
+}
+
+async function saveMarqueeSettings() {
+    if (!supabase) return;
+    try {
+        const settings = {
+            enabled: document.getElementById('veMarqueeEnabled')?.checked || false,
+            text: document.getElementById('veMarqueeText')?.value || '',
+            speed: document.getElementById('veMarqueeSpeed')?.value || 'normal',
+            bgColor: document.getElementById('veMarqueeBg')?.value || '#1a1a2e',
+            textColor: document.getElementById('veMarqueeColor')?.value || '#fbbf24'
+        };
+
+        // Upsert (insert nếu chưa có, update nếu có)
+        const { data: existing } = await supabase
+            .from('site_settings').select('key').eq('key', 'marquee').single();
+
+        let error;
+        if (existing) {
+            const r = await supabase.from('site_settings')
+                .update({ value: settings, updated_at: new Date().toISOString() })
+                .eq('key', 'marquee');
+            error = r.error;
+        } else {
+            const r = await supabase.from('site_settings')
+                .insert({ key: 'marquee', value: settings });
+            error = r.error;
+        }
+
+        if (error) throw error;
+        showNotification('✅ Đã lưu cài đặt Marquee!', 'success');
+    } catch (err) {
+        console.error('❌ Lỗi lưu marquee:', err);
+        showNotification('Lỗi khi lưu Marquee!', 'error');
+    }
+}
+
+/**
+ * Load cài đặt Marquee (gọi khi mở tab admin)
+ */
+async function loadMarqueeSettings() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings').select('value').eq('key', 'marquee').single();
+        if (error || !data) return;
+
+        const s = data.value || {};
+        const toggle = document.getElementById('veMarqueeEnabled');
+        const text = document.getElementById('veMarqueeText');
+        const speed = document.getElementById('veMarqueeSpeed');
+        const bg = document.getElementById('veMarqueeBg');
+        const color = document.getElementById('veMarqueeColor');
+        const preview = document.getElementById('veMarqueePreviewText');
+
+        if (toggle) toggle.checked = s.enabled || false;
+        if (text) text.value = s.text || '';
+        if (speed) speed.value = s.speed || 'normal';
+        if (bg) bg.value = s.bgColor || '#1a1a2e';
+        if (color) color.value = s.textColor || '#fbbf24';
+        if (preview && s.text) {
+            preview.textContent = s.text;
+            preview.style.color = s.textColor || '#fbbf24';
+            preview.parentElement.style.background = s.bgColor || '#1a1a2e';
+        }
+    } catch (err) {
+        console.error('Lỗi load marquee settings:', err);
+    }
+}
+
+/**
+ * Hiển thị Marquee trên trang chủ (gọi khi load trang)
+ */
+async function loadAndShowMarquee() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings').select('value').eq('key', 'marquee').single();
+        if (error || !data) return;
+
+        const s = data.value || {};
+        if (!s.enabled || !s.text) return;
+
+        const bar = document.getElementById('siteMarqueeBar');
+        const inner = document.getElementById('siteMarqueeInner');
+        if (!bar || !inner) return;
+
+        inner.textContent = s.text;
+        bar.style.background = `linear-gradient(90deg, ${s.bgColor || '#1a1a2e'} 0%, ${adjustBrightness(s.bgColor || '#1a1a2e', 15)} 50%, ${s.bgColor || '#1a1a2e'} 100%)`;
+        inner.style.color = s.textColor || '#fbbf24';
+        bar.setAttribute('data-speed', s.speed || 'normal');
+        bar.style.display = 'block';
+        document.body.classList.add('marquee-active');
+    } catch (err) {
+        console.error('Lỗi show marquee:', err);
+    }
+}
+
+/**
+ * Đóng Marquee (user click X)
+ */
+function closeSiteMarquee() {
+    const bar = document.getElementById('siteMarqueeBar');
+    if (bar) {
+        bar.style.display = 'none';
+        document.body.classList.remove('marquee-active');
+    }
+}
+
+/* ============================================
+   POPUP — THÔNG BÁO TOÀN SITE
+   ============================================ */
+
+/**
+ * Lưu cài đặt Popup lên Supabase
+ */
+async function savePopupSettings() {
+    if (!supabase) return;
+    try {
+        const settings = {
+            enabled: document.getElementById('vePopupEnabled')?.checked || false,
+            frequency: getSelectedFrequencies(),
+            title: document.getElementById('vePopupTitle')?.value || '',
+            content: document.getElementById('vePopupContent')?.value || '',
+            titleColor: document.getElementById('vePopupTitleColor')?.value || '#ffffff',
+            contentColor: document.getElementById('vePopupContentColor')?.value || '#d9d9d9',
+            image: document.getElementById('vePopupImage')?.value || '',
+            btnText: document.getElementById('vePopupBtnText')?.value || 'Khám phá ngay',
+            btnLink: document.getElementById('vePopupBtnLink')?.value || '',
+            btnColor: document.getElementById('vePopupBtnColor')?.value || '#ffffff'
+        };
+
+        // Upload ảnh pending lên Cloudflare R2 trước nếu có
+        if (window._pendingPopupImage) {
+            showNotification('☁️ Đang tải ảnh lên Cloudflare R2...', 'info');
+            const file = window._pendingPopupImage;
+            const R2_URL = 'https://r2-uploader.thinhnd-2003.workers.dev';
+            const customFilename = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '')}`;
+            const formData = new FormData();
+            formData.append('file', file, customFilename);
+            formData.append('folder', 'popup-images');
+            formData.append('customFilename', customFilename);
+
+            const resp = await fetch(`${R2_URL}/upload`, { method: 'POST', body: formData });
+            if (!resp.ok) {
+                const errData = await resp.json().catch(() => ({}));
+                throw new Error('Upload ảnh thất bại: ' + (errData.error || resp.statusText));
+            }
+            const result = await resp.json();
+            settings.image = result.url;
+            document.getElementById('vePopupImage').value = result.url;
+            window._pendingPopupImage = null; // Xóa pending
+
+        }
+
+        const { data: existing } = await supabase
+            .from('site_settings').select('key').eq('key', 'popup').single();
+
+        let error;
+        if (existing) {
+            const r = await supabase.from('site_settings')
+                .update({ value: settings, updated_at: new Date().toISOString() })
+                .eq('key', 'popup');
+            error = r.error;
+        } else {
+            const r = await supabase.from('site_settings')
+                .insert({ key: 'popup', value: settings });
+            error = r.error;
+        }
+
+        if (error) throw error;
+        showNotification('✅ Đã lưu cài đặt Popup!', 'success');
+    } catch (err) {
+        console.error('❌ Lỗi lưu popup:', err);
+        showNotification('Lỗi khi lưu Popup!', 'error');
+    }
+}
+
+/**
+ * Load cài đặt Popup (gọi khi mở tab admin)
+ */
+async function loadPopupSettings() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings').select('value').eq('key', 'popup').single();
+        if (error || !data) return;
+
+        const s = data.value || {};
+        const toggle = document.getElementById('vePopupEnabled');
+        const title = document.getElementById('vePopupTitle');
+        const content = document.getElementById('vePopupContent');
+        const image = document.getElementById('vePopupImage');
+        const btnText = document.getElementById('vePopupBtnText');
+        const btnLink = document.getElementById('vePopupBtnLink');
+
+        if (toggle) toggle.checked = s.enabled || false;
+        // Load frequency (radio - single value)
+        let freq = s.frequency || 'once_day';
+        // Tương thích dữ liệu cũ (array) → lấy phần tử đầu
+        if (Array.isArray(freq)) freq = freq[0] || 'once_day';
+        const radio = document.querySelector(`input[name="popupFrequency"][value="${freq}"]`);
+        if (radio) radio.checked = true;
+        if (title) title.value = s.title || '';
+        if (content) content.value = s.content || '';
+        const titleColor = document.getElementById('vePopupTitleColor');
+        const contentColor = document.getElementById('vePopupContentColor');
+        if (titleColor) titleColor.value = s.titleColor || '#ffffff';
+        if (contentColor) contentColor.value = s.contentColor || '#d9d9d9';
+        // Áp dụng màu xem trước vào ô tiêu đề + nội dung
+        if (title) title.style.color = s.titleColor || '#ffffff';
+        if (content) content.style.color = s.contentColor || '#d9d9d9';
+        if (image) {
+            image.value = s.image || '';
+            // Hiện preview nếu có ảnh
+            if (s.image) {
+                showPopupImagePreview(s.image);
+                const urlInput = document.getElementById('vePopupImageUrl');
+                if (urlInput) urlInput.value = s.image;
+            }
+        }
+        if (btnText) btnText.value = s.btnText || 'Khám phá ngay';
+        if (btnLink) btnLink.value = s.btnLink || '';
+        const btnColor = document.getElementById('vePopupBtnColor');
+        if (btnColor) btnColor.value = s.btnColor || '#ffffff';
+        if (btnText) btnText.style.color = s.btnColor || '#ffffff';
+    } catch (err) {
+        console.error('Lỗi load popup settings:', err);
+    }
+}
+
+/**
+ * Kiểm tra có nên hiện popup hay không (dựa vào frequency)
+ */
+function shouldShowPopup(freq) {
+    const now = Date.now();
+    // Tương thích dữ liệu cũ (array)
+    if (Array.isArray(freq)) freq = freq[0] || 'once_day';
+
+    switch (freq) {
+        case 'every_visit':
+            return !window._sitePopupShownThisLoad;
+        case '30min': {
+            const last30 = parseInt(localStorage.getItem('sitePopupLast30m') || '0');
+            return (now - last30) >= 30 * 60 * 1000;
+        }
+        case '1hour': {
+            const last1h = parseInt(localStorage.getItem('sitePopupLast1h') || '0');
+            return (now - last1h) >= 60 * 60 * 1000;
+        }
+        case 'once_day': {
+            const today = new Date().toISOString().split('T')[0];
+            return localStorage.getItem('sitePopupLastDate') !== today;
+        }
+        case 'once_week':
+            return localStorage.getItem('sitePopupLastWeek') !== getWeekNumber();
+        case 'once_only':
+            return !localStorage.getItem('sitePopupShownOnce');
+        case 'new_user':
+            return !localStorage.getItem('sitePopupNewUserSeen');
+        default:
+            return false;
+    }
+}
+
+/**
+ * Đánh dấu đã hiện popup (cập nhật localStorage theo frequency)
+ */
+function markPopupShown(freq) {
+    const now = Date.now();
+    // Tương thích dữ liệu cũ (array)
+    if (Array.isArray(freq)) freq = freq[0] || 'once_day';
+
+    switch (freq) {
+        case 'every_visit':
+            window._sitePopupShownThisLoad = true;
+            break;
+        case '30min':
+            localStorage.setItem('sitePopupLast30m', now.toString());
+            break;
+        case '1hour':
+            localStorage.setItem('sitePopupLast1h', now.toString());
+            break;
+        case 'once_day':
+            localStorage.setItem('sitePopupLastDate', new Date().toISOString().split('T')[0]);
+            break;
+        case 'once_week':
+            localStorage.setItem('sitePopupLastWeek', getWeekNumber());
+            break;
+        case 'once_only':
+            localStorage.setItem('sitePopupShownOnce', '1');
+            break;
+        case 'new_user':
+            localStorage.setItem('sitePopupNewUserSeen', '1');
+            break;
+    }
+}
+
+/**
+ * Lấy danh sách frequency đã chọn từ checkboxes
+ */
+/**
+ * Upload ảnh popup lên Cloudflare R2
+ */
+async function handlePopupImageUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+        showNotification('Vui lòng chọn file hình ảnh!', 'error');
+        return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+        showNotification('Ảnh quá lớn! Tối đa 5MB.', 'error');
+        return;
+    }
+
+    // Chỉ preview cục bộ, KHÔNG upload ngay
+    const previewUrl = URL.createObjectURL(file);
+    window._pendingPopupImage = file; // Lưu file chờ upload khi bấm Lưu
+    showPopupImagePreview(previewUrl);
+    
+    showNotification('📷 Ảnh đã sẵn sàng! Bấm "Lưu Popup" để tải lên Cloudflare R2.', 'info');
+    
+    // Reset file input
+    input.value = '';
+}
+
+/**
+ * Xóa ảnh popup (xóa trên R2 nếu là URL R2 + xóa preview)
+ */
+async function removePopupImage() {
+    // Xác nhận trước khi xóa
+    const result = await Swal.fire({
+        title: 'Xóa ảnh minh họa?',
+        text: 'Ảnh sẽ bị xóa khỏi Cloudflare R2 (nếu có). Bạn chắc chắn?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '🗑️ Xóa',
+        cancelButtonText: 'Hủy',
+        background: 'var(--bg-secondary, #1a1a2e)',
+        color: '#fff'
+    });
+    if (!result.isConfirmed) return;
+
+    const imageInput = document.getElementById('vePopupImage');
+    const currentUrl = imageInput?.value || '';
+
+    // Xóa trên Cloudflare R2 nếu URL từ workers.dev
+    if (currentUrl && (currentUrl.includes('workers.dev') || currentUrl.includes('.r2.dev'))) {
+        try {
+            const R2_URL = 'https://r2-uploader.thinhnd-2003.workers.dev';
+            const urlObj = new URL(currentUrl);
+            const key = urlObj.pathname.substring(1); // Bỏ dấu / đầu
+
+            if (key) {
+                const resp = await fetch(`${R2_URL}/delete`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key })
+                });
+                if (resp.ok) {
+
+                } else {
+                    console.warn('⚠️ Không thể xóa ảnh R2:', await resp.text());
+                }
+            }
+        } catch (err) {
+            console.error('Lỗi xóa ảnh R2:', err);
+        }
+    }
+
+    // Xóa pending image nếu có
+    window._pendingPopupImage = null;
+
+    // Xóa UI
+    if (imageInput) imageInput.value = '';
+    const preview = document.getElementById('vePopupImagePreview');
+    const uploadArea = document.getElementById('vePopupUploadArea');
+    const urlInput = document.getElementById('vePopupImageUrl');
+
+    if (preview) preview.style.display = 'none';
+    if (uploadArea) {
+        uploadArea.style.display = 'block';
+        uploadArea.innerHTML = `
+            <i class="fas fa-cloud-upload-alt" style="font-size:1.5rem; color:var(--accent-primary, #4db8ff); margin-bottom:6px;"></i>
+            <p style="margin:0; font-size:0.85rem; color:var(--text-muted);">Click để chọn ảnh hoặc nhập URL</p>
+            <p style="margin:4px 0 0; font-size:0.75rem; color:rgba(255,255,255,0.3);">PNG, JPG, GIF • Tối đa 5MB • Lưu trên Cloudflare R2</p>`;
+    }
+    if (urlInput) urlInput.value = '';
+
+    showNotification('🗑️ Đã xóa ảnh minh họa!', 'info');
+
+    // Cập nhật Supabase: xóa URL ảnh khỏi DB
+    try {
+        const { data: existing } = await supabase
+            .from('site_settings').select('value').eq('key', 'popup').single();
+        if (existing && existing.value) {
+            existing.value.image = '';
+            await supabase.from('site_settings')
+                .update({ value: existing.value, updated_at: new Date().toISOString() })
+                .eq('key', 'popup');
+            console.log('✅ Đã xóa URL ảnh trong Supabase');
+        }
+    } catch (err) {
+        console.error('Lỗi cập nhật DB sau xóa ảnh:', err);
+    }
+}
+
+/**
+ * Preview ảnh khi dán URL
+ */
+function previewPopupImageUrl(url) {
+    if (!url || url.length < 10) return;
+    document.getElementById('vePopupImage').value = url;
+    showPopupImagePreview(url);
+}
+
+/**
+ * Hiện preview ảnh + ẩn upload area
+ */
+function showPopupImagePreview(url) {
+    const preview = document.getElementById('vePopupImagePreview');
+    const previewImg = document.getElementById('vePopupImagePreviewImg');
+    const uploadArea = document.getElementById('vePopupUploadArea');
+
+    if (previewImg) previewImg.src = url;
+    if (preview) preview.style.display = 'block';
+    if (uploadArea) uploadArea.style.display = 'none';
+}
+
+function getSelectedFrequencies() {
+    const selected = document.querySelector('input[name="popupFrequency"]:checked');
+    return selected ? selected.value : 'once_day';
+}
+
+/**
+ * Lấy số tuần hiện tại (năm-tuần)
+ */
+function getWeekNumber() {
+    const d = new Date();
+    const start = new Date(d.getFullYear(), 0, 1);
+    const diff = d - start;
+    const oneWeek = 604800000;
+    const week = Math.ceil(diff / oneWeek);
+    return `${d.getFullYear()}-W${week}`;
+}
+
+/**
+ * Hiển thị Popup trên trang (gọi khi load trang — kiểm tra frequency)
+ */
+async function loadAndShowPopup() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings').select('value').eq('key', 'popup').single();
+        
+        if (error || !data) return;
+
+        const s = data.value || {};
+
+
+        if (!s.enabled) return;
+        if (!s.title && !s.content) return;
+
+        let frequency = s.frequency || 'once_day';
+        // Tương thích dữ liệu cũ (array) → lấy phần tử đầu
+        if (Array.isArray(frequency)) frequency = frequency[0] || 'once_day';
+
+        // Kiểm tra tần suất
+        if (!shouldShowPopup(frequency)) return;
+
+
+
+        // Render popup
+        renderSitePopup(s);
+
+        // Hiện popup sau 2 giây
+        setTimeout(() => {
+            const overlay = document.getElementById('sitePopupOverlay');
+            if (overlay) overlay.style.display = 'flex';
+        }, 2000);
+
+        // Đánh dấu đã hiện
+        markPopupShown(frequency);
+    } catch (err) {
+        console.error('Lỗi show popup:', err);
+    }
+}
+
+/**
+ * Render nội dung popup
+ */
+function renderSitePopup(settings) {
+    const titleEl = document.getElementById('sitePopupTitle');
+    const contentEl = document.getElementById('sitePopupContent');
+    const imageEl = document.getElementById('sitePopupImage');
+    const btnEl = document.getElementById('sitePopupBtn');
+    const card = document.querySelector('.site-popup-card');
+
+    if (titleEl) titleEl.textContent = settings.title || '';
+    if (contentEl) contentEl.textContent = settings.content || '';
+
+    // Áp dụng màu chữ tùy chỉnh
+    if (titleEl) titleEl.style.color = settings.titleColor || '#ffffff';
+    if (contentEl) contentEl.style.color = settings.contentColor || '#d9d9d9';
+
+    // Dùng ảnh làm background cho popup card
+    if (imageEl) imageEl.style.display = 'none'; // Ẩn img riêng
+    if (card) {
+        if (settings.image) {
+            card.style.backgroundImage = `linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.1) 35%, rgba(0,0,0,0.1) 55%, rgba(0,0,0,0.65) 100%), url('${settings.image}')`;
+            card.style.backgroundSize = 'cover';
+            card.style.backgroundPosition = 'center';
+            card.style.minHeight = '380px';
+        } else {
+            card.style.backgroundImage = 'none';
+            card.style.minHeight = 'auto';
+        }
+    }
+
+    if (btnEl) {
+        btnEl.textContent = settings.btnText || 'Khám phá ngay';
+        btnEl.style.color = settings.btnColor || '#ffffff';
+        if (settings.btnLink) {
+            btnEl.href = settings.btnLink;
+        } else {
+            btnEl.href = '#';
+            btnEl.onclick = (e) => { e.preventDefault(); closeSitePopup(); };
+        }
+    }
+
+    // Áp dụng vị trí tùy chỉnh nếu admin đã kéo thả
+    if (card && (settings.titlePos || settings.contentPos || settings.btnPos)) {
+        card.style.position = 'relative';
+        const posMap = [
+            { sel: '.site-popup-top', pos: settings.titlePos },
+            { sel: '.site-popup-middle', pos: settings.contentPos },
+            { sel: '.site-popup-bottom', pos: settings.btnPos }
+        ];
+        setTimeout(() => {
+            posMap.forEach(({ sel, pos }) => {
+                const el = card.querySelector(sel);
+                if (el && pos) {
+                    el.style.position = 'absolute';
+                    el.style.left = pos.leftPct + '%';
+                    el.style.top = pos.topPct + '%';
+                    el.style.width = 'calc(100% - 48px)';
+                    el.style.textAlign = 'center';
+                }
+            });
+        }, 100);
+    }
+}
+
+/**
+ * Xem trước Popup (Admin click "Xem trước")
+ */
+async function previewSitePopup() {
+    // Nếu có ảnh pending (chưa upload), dùng blob URL để preview
+    let imageUrl = document.getElementById('vePopupImage')?.value || '';
+    if (window._pendingPopupImage) {
+        imageUrl = URL.createObjectURL(window._pendingPopupImage);
+    }
+
+    const settings = {
+        title: document.getElementById('vePopupTitle')?.value || '(Chưa có tiêu đề)',
+        content: document.getElementById('vePopupContent')?.value || '(Chưa có nội dung)',
+        titleColor: document.getElementById('vePopupTitleColor')?.value || '#ffffff',
+        contentColor: document.getElementById('vePopupContentColor')?.value || '#d9d9d9',
+        image: imageUrl,
+        btnText: document.getElementById('vePopupBtnText')?.value || 'Khám phá ngay',
+        btnLink: document.getElementById('vePopupBtnLink')?.value || '',
+        btnColor: document.getElementById('vePopupBtnColor')?.value || '#ffffff'
+    };
+
+    // Load vị trí đã lưu từ Supabase
+    try {
+        const { data } = await supabase
+            .from('site_settings').select('value').eq('key', 'popup').single();
+        if (data && data.value) {
+            if (data.value.titlePos) settings.titlePos = data.value.titlePos;
+            if (data.value.contentPos) settings.contentPos = data.value.contentPos;
+            if (data.value.btnPos) settings.btnPos = data.value.btnPos;
+        }
+    } catch (err) {
+        console.warn('Không load được vị trí đã lưu:', err);
+    }
+
+    renderSitePopup(settings);
+
+    const overlay = document.getElementById('sitePopupOverlay');
+    if (overlay) overlay.style.display = 'flex';
+
+    // Sau khi layout ổn định → kích hoạt drag mode
+    setTimeout(() => setupPopupDragMode(), 500);
+}
+
+/**
+ * Thiết lập chế độ kéo thả + toolbar Hủy/Cập nhật
+ */
+function setupPopupDragMode() {
+    const card = document.getElementById('sitePopupCard');
+    if (!card) return;
+
+    const sections = [
+        { sel: '.site-popup-top', name: 'titlePos' },
+        { sel: '.site-popup-middle', name: 'contentPos' },
+        { sel: '.site-popup-bottom', name: 'btnPos' }
+    ];
+
+    card.style.position = 'relative';
+    const cardRect = card.getBoundingClientRect();
+
+    // Ẩn nút X để tránh ấn nhầm
+    const closeBtn = card.querySelector('.site-popup-close');
+    if (closeBtn) closeBtn.style.display = 'none';
+
+    // Chặn click link nút khi đang kéo thả
+    const btnEl = card.querySelector('.site-popup-btn');
+    if (btnEl) {
+        btnEl._origHref = btnEl.href;
+        btnEl.href = 'javascript:void(0)';
+        btnEl.onclick = (e) => e.preventDefault();
+    }
+
+    // Ghi nhận vị trí gốc trước khi chuyển absolute
+    const origPositions = [];
+    sections.forEach(({ sel }) => {
+        const el = card.querySelector(sel);
+        if (el) {
+            const r = el.getBoundingClientRect();
+            origPositions.push({
+                el,
+                left: r.left - cardRect.left,
+                top: r.top - cardRect.top,
+                width: r.width
+            });
+        }
+    });
+
+    // Biến lưu phần tử đang chọn
+    window._selectedPopupEl = null;
+    const nameMap = {
+        'site-popup-top': '📌 Tiêu đề',
+        'site-popup-middle': '📝 Nội dung',
+        'site-popup-bottom': '🔘 Nút bấm'
+    };
+
+    // Hàm chọn phần tử
+    function selectElement(el) {
+        // Bỏ chọn cũ
+        origPositions.forEach(({ el: e }) => {
+            e.style.outline = '2px dashed rgba(255,255,255,0.25)';
+            e.style.boxShadow = 'none';
+        });
+        // Chọn mới
+        window._selectedPopupEl = el;
+        el.style.outline = '2px solid #4db8ff';
+        el.style.boxShadow = '0 0 12px rgba(77,184,255,0.4)';
+        // Cập nhật toolbar hiện tên
+        const badge = document.querySelector('.popup-drag-selected-name');
+        if (badge) {
+            const clsName = [...el.classList].find(c => nameMap[c]);
+            badge.textContent = nameMap[clsName] || 'Đang chọn';
+        }
+    }
+
+    // Chuyển sang absolute giữ nguyên vị trí gốc
+    origPositions.forEach(({ el, left, top, width }) => {
+        el.style.position = 'absolute';
+        el.style.left = left + 'px';
+        el.style.top = top + 'px';
+        el.style.width = 'calc(100% - 48px)';
+        el.style.cursor = 'grab';
+        el.style.zIndex = '10';
+        el.style.userSelect = 'none';
+        el.style.transition = 'none';
+        el.style.borderRadius = '8px';
+        el.style.outline = '2px dashed rgba(255,255,255,0.25)';
+
+        // Click để chọn + bắt đầu kéo
+        let isDragging = false, startX, startY, origL, origT;
+
+        const onDown = (e) => {
+            e.preventDefault(); e.stopPropagation();
+            selectElement(el);
+            isDragging = true;
+            el.style.cursor = 'grabbing';
+            el.style.zIndex = '20';
+            const p = e.touches ? e.touches[0] : e;
+            startX = p.clientX; startY = p.clientY;
+            origL = parseInt(el.style.left) || 0;
+            origT = parseInt(el.style.top) || 0;
+        };
+        const onMove = (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const p = e.touches ? e.touches[0] : e;
+            el.style.left = (origL + p.clientX - startX) + 'px';
+            el.style.top = (origT + p.clientY - startY) + 'px';
+        };
+        const onUp = () => {
+            if (!isDragging) return;
+            isDragging = false;
+            el.style.cursor = 'grab';
+            el.style.zIndex = '10';
+        };
+
+        el.addEventListener('mousedown', onDown);
+        el.addEventListener('touchstart', onDown, { passive: false });
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('mouseup', onUp);
+        document.addEventListener('touchend', onUp);
+
+        // Lưu cleanup reference
+        el._dragCleanup = () => {
+            el.removeEventListener('mousedown', onDown);
+            el.removeEventListener('touchstart', onDown);
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.removeEventListener('touchend', onUp);
+        };
+    });
+
+    // Thêm toolbar nằm ngoài popup (dưới cùng màn hình)
+    let toolbar = document.querySelector('.popup-drag-toolbar');
+    if (toolbar) toolbar.remove();
+    toolbar = document.createElement('div');
+    toolbar.className = 'popup-drag-toolbar';
+    toolbar.style.cssText = 'position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:8px; padding:12px 20px; background:rgba(20,20,40,0.95); backdrop-filter:blur(10px); z-index:100000; border-radius:14px; box-shadow:0 4px 24px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.15); max-width:90vw;';
+    toolbar.innerHTML = `
+        <span class="popup-drag-selected-name" style="font-size:0.8rem; color:#4db8ff; width:100%; text-align:center; margin-bottom:4px; font-weight:600;">👆 Bấm chọn phần tử để chỉnh</span>
+        <button onclick="alignPopupCenter()" title="Canh giữa ngang" style="padding:6px 12px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.1); color:#fff; border-radius:8px; cursor:pointer; font-size:0.8rem;">↔️ Giữa ngang</button>
+        <button onclick="alignPopupVertical()" title="Canh giữa dọc" style="padding:6px 12px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.1); color:#fff; border-radius:8px; cursor:pointer; font-size:0.8rem;">↕️ Giữa dọc</button>
+        <button onclick="alignPopupAll()" title="Canh giữa cả ngang lẫn dọc" style="padding:6px 12px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.1); color:#fff; border-radius:8px; cursor:pointer; font-size:0.8rem;">⊞ Giữa tất cả</button>
+        <button onclick="alignPopupSpreadVertical()" title="Dàn đều dọc tất cả" style="padding:6px 12px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.1); color:#fff; border-radius:8px; cursor:pointer; font-size:0.8rem;">☰ Đều dọc</button>
+        <span style="width:1px; height:24px; background:rgba(255,255,255,0.2); margin:0 4px;"></span>
+        <button onclick="cancelPopupDrag()" style="padding:6px 16px; border:1px solid rgba(255,255,255,0.3); background:transparent; color:#fff; border-radius:8px; cursor:pointer; font-size:0.85rem;">Hủy</button>
+        <button onclick="savePopupPositions()" style="padding:6px 16px; background:linear-gradient(135deg,#007aff,#4db8ff); border:none; color:#fff; border-radius:8px; cursor:pointer; font-size:0.85rem; font-weight:600;">✅ Cập nhật</button>
+    `;
+    document.body.appendChild(toolbar);
+}
+
+/**
+ * Canh giữa ngang phần đang chọn (hoặc tất cả nếu chưa chọn)
+ */
+function alignPopupCenter() {
+    const card = document.getElementById('sitePopupCard');
+    if (!card) return;
+    const cardW = card.offsetWidth;
+    const el = window._selectedPopupEl;
+    if (el && el.style.position === 'absolute') {
+        el.style.left = ((cardW - el.offsetWidth) / 2) + 'px';
+    } else {
+        // Chưa chọn → canh tất cả
+        ['.site-popup-top', '.site-popup-middle', '.site-popup-bottom'].forEach(sel => {
+            const e = card.querySelector(sel);
+            if (e && e.style.position === 'absolute') {
+                e.style.left = ((cardW - e.offsetWidth) / 2) + 'px';
+            }
+        });
+    }
+}
+
+/**
+ * Canh giữa dọc phần đang chọn (hoặc tất cả)
+ */
+function alignPopupVertical() {
+    const card = document.getElementById('sitePopupCard');
+    if (!card) return;
+    const cardH = card.offsetHeight;
+    const el = window._selectedPopupEl;
+    if (el && el.style.position === 'absolute') {
+        el.style.top = ((cardH - el.offsetHeight) / 2) + 'px';
+    } else {
+        ['.site-popup-top', '.site-popup-middle', '.site-popup-bottom'].forEach(sel => {
+            const e = card.querySelector(sel);
+            if (e && e.style.position === 'absolute') {
+                e.style.top = ((cardH - e.offsetHeight) / 2) + 'px';
+            }
+        });
+    }
+}
+
+/**
+ * Canh giữa tất cả (ngang + dọc) phần đang chọn
+ */
+function alignPopupAll() {
+    alignPopupCenter();
+    alignPopupVertical();
+}
+
+/**
+ * Dàn đều dọc TẤT CẢ phần tử (luôn áp dụng cho cả 3)
+ */
+function alignPopupSpreadVertical() {
+    const card = document.getElementById('sitePopupCard');
+    if (!card) return;
+    const cardH = card.offsetHeight;
+    const sels = ['.site-popup-top', '.site-popup-middle', '.site-popup-bottom'];
+    const els = sels.map(s => card.querySelector(s)).filter(e => e && e.style.position === 'absolute');
+    if (els.length === 0) return;
+
+    const totalH = els.reduce((sum, el) => sum + el.offsetHeight, 0);
+    const gap = (cardH - totalH) / (els.length + 1);
+    let y = gap;
+    els.forEach(el => {
+        el.style.top = y + 'px';
+        y += el.offsetHeight + gap;
+    });
+}
+
+/**
+ * Hủy chỉnh vị trí → đóng popup, reset layout
+ */
+function cancelPopupDrag() {
+    cleanupDragMode();
+    const overlay = document.getElementById('sitePopupOverlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+/**
+ * Lưu vị trí đã kéo thả vào Supabase
+ */
+async function savePopupPositions() {
+    const card = document.getElementById('sitePopupCard');
+    if (!card) return;
+
+    const cardRect = card.getBoundingClientRect();
+    const positions = {};
+
+    ['.site-popup-top', '.site-popup-middle', '.site-popup-bottom'].forEach((sel, i) => {
+        const el = card.querySelector(sel);
+        if (el) {
+            const names = ['titlePos', 'contentPos', 'btnPos'];
+            // Lưu vị trí dạng % so với card
+            positions[names[i]] = {
+                leftPct: ((parseInt(el.style.left) || 0) / cardRect.width * 100).toFixed(1),
+                topPct: ((parseInt(el.style.top) || 0) / cardRect.height * 100).toFixed(1)
+            };
+        }
+    });
+
+    // Cập nhật vào Supabase
+    try {
+        const { data } = await supabase
+            .from('site_settings').select('value').eq('key', 'popup').single();
+        if (data && data.value) {
+            Object.assign(data.value, positions);
+            await supabase.from('site_settings')
+                .update({ value: data.value, updated_at: new Date().toISOString() })
+                .eq('key', 'popup');
+            showNotification('✅ Đã cập nhật vị trí hiển thị popup!', 'success');
+        }
+    } catch (err) {
+        console.error('Lỗi lưu vị trí popup:', err);
+        showNotification('Lỗi lưu vị trí!', 'error');
+    }
+
+    cleanupDragMode();
+    const overlay = document.getElementById('sitePopupOverlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+/**
+ * Dọn dẹp drag mode, reset styles
+ */
+function cleanupDragMode() {
+    const card = document.getElementById('sitePopupCard');
+    if (!card) return;
+
+    // Xóa toolbar (nằm ở body)
+    const toolbar = document.querySelector('.popup-drag-toolbar');
+    if (toolbar) toolbar.remove();
+    window._selectedPopupEl = null;
+
+    // Hiện lại nút X
+    const closeBtn = card.querySelector('.site-popup-close');
+    if (closeBtn) closeBtn.style.display = '';
+
+    // Reset styles
+    ['.site-popup-top', '.site-popup-middle', '.site-popup-bottom'].forEach(sel => {
+        const el = card.querySelector(sel);
+        if (el) {
+            if (el._dragCleanup) { el._dragCleanup(); el._dragCleanup = null; }
+            el.style.position = '';
+            el.style.left = '';
+            el.style.top = '';
+            el.style.width = '';
+            el.style.cursor = '';
+            el.style.zIndex = '';
+            el.style.userSelect = '';
+            el.style.outline = '';
+            el.style.transition = '';
+            el.style.borderRadius = '';
+            el.style.boxShadow = '';
+            el.onmouseenter = null;
+            el.onmouseleave = null;
+        }
+    });
+}
+
+/**
+ * Đóng Popup (user thường + click overlay)
+ */
+function closeSitePopup() {
+    cleanupDragMode();
+    const overlay = document.getElementById('sitePopupOverlay');
+    if (overlay) overlay.style.display = 'none';
+}

@@ -321,6 +321,12 @@
     <!-- ============================================
          MAIN CONTENT
          ============================================ -->
+    <!-- Marquee thông báo (nằm ngoài main để luôn hiển thị) -->
+    <div class="site-marquee-bar" id="siteMarqueeBar" style="display:none;">
+      <div class="site-marquee-inner" id="siteMarqueeInner"></div>
+      <button class="site-marquee-close" onclick="closeSiteMarquee()" title="Đóng"><i class="fas fa-times"></i></button>
+    </div>
+
     <main id="mainContent">
       <!-- HOME PAGE -->
       <div id="homePage" class="page active">
@@ -1078,6 +1084,23 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Popup thông báo toàn site (ẩn mặc định, JS sẽ hiện 1 lần/ngày) -->
+    <div class="site-popup-overlay" id="sitePopupOverlay" style="display:none;" onclick="if(event.target===this) closeSitePopup()">
+      <div class="site-popup-card" id="sitePopupCard">
+        <button class="site-popup-close" onclick="closeSitePopup()"><i class="fas fa-times"></i></button>
+        <img class="site-popup-image" id="sitePopupImage" src="" alt="" style="display:none;">
+        <div class="site-popup-top">
+          <h2 id="sitePopupTitle" class="site-popup-title"></h2>
+        </div>
+        <div class="site-popup-middle">
+          <p id="sitePopupContent" class="site-popup-text"></p>
+        </div>
+        <div class="site-popup-bottom">
+          <a id="sitePopupBtn" class="site-popup-btn" href="#">Khám phá ngay</a>
+        </div>
+      </div>
+    </div>
+
     <script src="js/supabase-config.js?v=2"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -1163,6 +1186,15 @@
         // Re-render biểu đồ khi quay lại Dashboard (fix kích thước canvas)
         if (panelName === "dashboard" && typeof loadAdminStats === "function") {
             setTimeout(function() { loadAdminStats(); }, 100);
+        }
+        // Load cài đặt hiệu ứng khi mở tab Giao diện & Hiệu ứng
+        if (panelName === "visualEffects" && typeof loadVisualEffectsSettings === "function") {
+            loadVisualEffectsSettings();
+            // Load cài đặt giao diện (màu, font, theme)
+            if (typeof loadAppearanceSettings === "function") loadAppearanceSettings();
+            // Load cài đặt Marquee + Popup
+            if (typeof loadMarqueeSettings === "function") loadMarqueeSettings();
+            if (typeof loadPopupSettings === "function") loadPopupSettings();
         }
 
         // 4. [NEW] Tự động đóng menu trên Mobile sau khi chọn
