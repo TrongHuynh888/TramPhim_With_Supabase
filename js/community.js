@@ -5533,9 +5533,9 @@ async function searchCommunityUsers(event) {
         try {
             let data, error;
 
-            // Kiểm tra nếu nhập URI QR: moviechain://user/<uuid>
-            if (query.startsWith('moviechain://user/')) {
-                const userId = query.replace('moviechain://user/', '').trim();
+            // Kiểm tra nếu nhập URI QR: tramphim://user/<uuid>
+            if (query.startsWith('tramphim://user/')) {
+                const userId = query.replace('tramphim://user/', '').trim();
                 ({ data, error } = await supabase
                     .from('profiles')
                     .select('id, display_name, avatar, role')
@@ -5595,7 +5595,7 @@ async function searchCommunityUsers(event) {
             resultsContainer.innerHTML = data.map(user => {
                 const avatar = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.display_name)}&background=random`;
                 // Hiển thị ID rút gọn nếu tìm bằng @id
-                const idBadge = query.startsWith('@') || query.startsWith('moviechain://')
+                const idBadge = query.startsWith('@') || query.startsWith('tramphim://')
                     ? `<span style="font-size: 0.7rem; color: var(--text-muted); display: block;">ID: ${user.id.slice(0, 8)}...</span>`
                     : '';
                 
@@ -8195,7 +8195,7 @@ function showUserQRCode() {
 
 /**
  * Tạo mã QR Code từ User ID và render vào container
- * QR data format: moviechain://user/<user_id>
+ * QR data format: tramphim://user/<user_id>
  * @param {string} userId - UUID của user
  */
 function generateUserQR(userId) {
@@ -8214,7 +8214,7 @@ function generateUserQR(userId) {
 
     try {
         // Tạo dữ liệu QR (URI format)
-        const qrData = `moviechain://user/${userId}`;
+        const qrData = `tramphim://user/${userId}`;
 
         // Tạo QR code (typeNumber 0 = auto, errorCorrectionLevel M = 15%)
         const qr = qrcode(0, 'M');
@@ -8308,7 +8308,7 @@ function downloadUserQR() {
         // Branding
         ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
         ctx.font = '12px "Montserrat", sans-serif';
-        ctx.fillText('Trạm Phim • MovieChain', size / 2, canvas.height - 50);
+        ctx.fillText('Trạm Phim • TramPhim', size / 2, canvas.height - 50);
 
         // Gợi ý
         ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
@@ -8342,9 +8342,9 @@ async function searchUserByQR() {
         return;
     }
 
-    // Hỗ trợ parse URI format: moviechain://user/<uuid>
-    if (searchId.startsWith('moviechain://user/')) {
-        searchId = searchId.replace('moviechain://user/', '');
+    // Hỗ trợ parse URI format: tramphim://user/<uuid>
+    if (searchId.startsWith('tramphim://user/')) {
+        searchId = searchId.replace('tramphim://user/', '');
     }
 
     try {
@@ -8594,8 +8594,8 @@ async function processQRResult(qrData) {
 
     // Parse user ID từ QR data
     let userId = qrData;
-    if (qrData.startsWith('moviechain://user/')) {
-        userId = qrData.replace('moviechain://user/', '').trim();
+    if (qrData.startsWith('tramphim://user/')) {
+        userId = qrData.replace('tramphim://user/', '').trim();
     }
 
     // Validate format UUID cơ bản

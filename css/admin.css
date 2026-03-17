@@ -588,7 +588,7 @@
 }
 .notif-type-badge.system {
   background: rgba(77, 184, 255, 0.15);
-  color: #4db8ff;
+  color: var(--accent-primary);
 }
 .notif-type-badge.new_movie {
   background: rgba(229, 9, 20, 0.15);
@@ -1180,7 +1180,7 @@
 }
 
 .image-source-indicator.cloudinary {
-    color: #4db8ff;
+    color: var(--accent-primary);
     border-color: rgba(77, 184, 255, 0.3);
     box-shadow: 0 0 10px rgba(77, 184, 255, 0.2);
 }
@@ -1563,7 +1563,7 @@
 }
 
 .dash-stat-card[data-color="red"] .dash-stat-icon { background: rgba(229, 9, 20, 0.15); color: #ff6b6b; }
-.dash-stat-card[data-color="blue"] .dash-stat-icon { background: rgba(0, 122, 255, 0.15); color: #4db8ff; }
+.dash-stat-card[data-color="blue"] .dash-stat-icon { background: rgba(0, 122, 255, 0.15); color: var(--accent-primary); }
 .dash-stat-card[data-color="green"] .dash-stat-icon { background: rgba(0, 200, 81, 0.15); color: #00ff88; }
 .dash-stat-card[data-color="orange"] .dash-stat-icon { background: rgba(255, 149, 0, 0.15); color: #ffaa00; }
 .dash-stat-card[data-color="gold"] .dash-stat-icon { background: rgba(255, 193, 7, 0.15); color: #ffd700; }
@@ -1759,7 +1759,7 @@
 .dash-activity-icon.movie { background: rgba(229, 9, 20, 0.15); color: #ff6b6b; }
 .dash-activity-icon.vip { background: rgba(255, 193, 7, 0.15); color: #ffd700; }
 .dash-activity-icon.error { background: rgba(255, 71, 87, 0.15); color: #ff6b81; }
-.dash-activity-icon.user { background: rgba(0, 122, 255, 0.15); color: #4db8ff; }
+.dash-activity-icon.user { background: rgba(0, 122, 255, 0.15); color: var(--accent-primary); }
 .dash-activity-icon.comment { background: rgba(0, 200, 81, 0.15); color: #00ff88; }
 
 .dash-activity-content {
@@ -2003,7 +2003,7 @@
 .chart-tab.active {
   background: rgba(77, 184, 255, 0.15);
   border-color: rgba(77, 184, 255, 0.4);
-  color: #4db8ff;
+  color: var(--accent-primary);
 }
 
 /* Light mode */
@@ -2028,7 +2028,7 @@
 [data-theme="light"] .chart-tab.active {
   background: rgba(0, 122, 255, 0.1);
   border-color: rgba(0, 122, 255, 0.3);
-  color: #007aff;
+  color: var(--accent-secondary);
 }
 
 /* Responsive */
@@ -2396,6 +2396,31 @@
   100% { transform: translateX(-100%); }
 }
 
+/* Nút chọn vị trí chữ Marquee */
+.ve-align-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.ve-align-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-primary);
+}
+.ve-align-btn.active {
+  background: rgba(77,184,255,0.15);
+  border-color: rgba(77,184,255,0.4);
+  color: var(--accent-primary, #4db8ff);
+  font-weight: 600;
+}
+
 /* ============================================
    FRONTEND MARQUEE BAR (TRANG CHỦ)
    ============================================ */
@@ -2404,27 +2429,48 @@
   top: 90px;
   left: 0;
   right: 0;
+  height: 36px;
+  line-height: 36px; /* Canh giữa dọc chính xác */
   overflow: hidden;
   background: linear-gradient(90deg, #0a0a1a, #141432, #1a1040, #141432, #0a0a1a);
   background-size: 200% 100%;
   animation: marqueeShimmerBg 6s linear infinite;
-  padding: 10px 40px 10px 40px;
+  padding: 0 40px;
   z-index: 999;
   border-top: 1px solid rgba(77, 184, 255, 0.3);
   border-bottom: 1px solid rgba(77, 184, 255, 0.15);
   box-shadow: 0 4px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03);
 }
 
-/* Icon loa bên trái */
+/* Icon loa bên trái — chữ ẩn sau icon khi chạy qua */
 .site-marquee-bar::before {
   content: '📢';
   position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 14px;
+  padding-top: 10px; /* Hạ icon loa xuống chút */
+  z-index: 3;
+  /* Nền che chữ — fade từ đặc sang trong suốt */
+  background: linear-gradient(90deg, var(--marquee-bg, #0a0a1a) 60%, transparent 100%);
+}
+
+/* Lớp che bên phải (chỗ nút X) — chữ xuất hiện từ dưới nút đóng */
+.site-marquee-bar::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 38px;
   z-index: 2;
-  animation: marqueePulseIcon 2s ease-in-out infinite;
+  background: linear-gradient(270deg, var(--marquee-bg, #0a0a1a) 60%, transparent 100%);
+  pointer-events: none; /* Không chặn click nút X */
 }
 
 @keyframes marqueeShimmerBg {
@@ -2443,9 +2489,9 @@
   animation: siteMarqueeRun 12s linear infinite;
   font-weight: 700;
   font-size: 0.92rem;
+  line-height: 36px; /* Khớp với height của bar = canh giữa hoàn hảo */
   color: #fbbf24;
   letter-spacing: 1px;
-  text-transform: uppercase;
   text-shadow: 0 0 8px rgba(251, 191, 36, 0.4), 0 0 20px rgba(251, 191, 36, 0.15);
   will-change: transform;
   backface-visibility: hidden;
@@ -2462,22 +2508,52 @@
 body.marquee-active #mainContent {
   padding-top: 38px;
 }
+
+/* === RESPONSIVE MOBILE: Marquee nằm sát dưới menu === */
+@media (max-width: 768px) {
+  .site-marquee-bar {
+    top: 60px !important; /* Sát dưới navbar mobile */
+    height: 28px !important; /* Mỏng hơn trên mobile */
+    line-height: 28px !important;
+    padding: 0 28px 0 30px !important;
+    z-index: 2000 !important; /* Trên nội dung, dưới modal */
+  }
+  .site-marquee-inner {
+    font-size: 0.82rem !important;
+    line-height: 28px !important; /* Khớp height mobile */
+  }
+  .site-marquee-bar::before {
+    width: 30px !important;
+    font-size: 11px !important;
+  }
+  .site-marquee-close {
+    right: 4px !important;
+    width: 18px !important;
+    height: 18px !important;
+    font-size: 8px !important;
+  }
+  body.marquee-active #mainContent {
+    padding-top: 34px !important;
+  }
+}
 .site-marquee-close {
   position: absolute;
-  right: 6px;
+  right: 8px;
   top: 50%;
-  transform: translateY(-50%);
-  background: rgba(255,255,255,0.08);
+  transform: translateY(-30%); /* Hạ nút X xuống chút */
+  background: rgba(255,255,255,0.1);
   border: none;
-  color: rgba(255,255,255,0.5);
-  width: 24px;
-  height: 24px;
+  color: rgba(255,255,255,0.6);
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 1;
+  z-index: 5; /* Nổi trên lớp ::after che chữ */
   transition: all 0.2s;
 }
 .site-marquee-close:hover {
@@ -2597,8 +2673,45 @@ body.marquee-active #mainContent {
   box-shadow: 0 4px 15px rgba(77,184,255,0.4);
 }
 
+/* Tablet: popup chiếm nhiều width hơn nhưng vẫn căn giữa */
+@media (max-width: 1024px) {
+  .site-popup-card {
+    max-width: 420px;
+    margin: 0 auto;
+  }
+}
+
+/* Mobile: popup gần full width, căn giữa tuyệt đối */
+@media (max-width: 768px) {
+  .site-popup-overlay {
+    padding: 16px;
+  }
+  .site-popup-card {
+    max-width: calc(100% - 32px);
+    width: 100%;
+    margin: 0 auto;
+    border-radius: 14px;
+  }
+  .site-popup-title { font-size: 1.2rem; }
+  .site-popup-text { font-size: 0.95rem; }
+  .site-popup-top { padding: 20px 20px 8px; }
+  .site-popup-middle { padding: 8px 20px; }
+  .site-popup-bottom { padding: 8px 20px 20px; }
+}
+
+/* Mobile nhỏ */
 @media (max-width: 480px) {
-  .site-popup-card { margin: 10px; border-radius: 12px; }
-  .site-popup-body { padding: 16px; }
+  .site-popup-overlay {
+    padding: 12px;
+  }
+  .site-popup-card {
+    max-width: calc(100% - 24px);
+    margin: 0 auto;
+    border-radius: 12px;
+  }
   .site-popup-title { font-size: 1.1rem; }
+  .site-popup-text { font-size: 0.9rem; }
+  .site-popup-top { padding: 18px 16px 6px; }
+  .site-popup-middle { padding: 6px 16px; }
+  .site-popup-bottom { padding: 6px 16px 18px; }
 }

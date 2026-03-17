@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="css/responsive.css?v=160" />
     <link rel="stylesheet" href="css/detail-redesign.css?v=3" />
     <link rel="stylesheet" href="css/intro.css?v=3" />
+    <link rel="stylesheet" href="css/policy.css?v=1" />
     <link rel="stylesheet" href="css/community.css?v=4.9" />
     
     <!-- Preload: Đã loại bỏ do trùng với các thẻ load bên dưới -->
@@ -21,11 +22,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Trạm Phim - Nền tảng xem phim Web3 tiên phong. Trải nghiệm điện ảnh đỉnh cao, bảo mật và tích hợp thanh toán Crypto."
+      content="Trạm Phim - Nền tảng xem phim trực tuyến miễn phí chất lượng cao. Xem phim mới nhất, tạo phòng xem chung cùng bạn bè và tham gia cộng đồng yêu phim."
     />
     <meta
       name="keywords"
-      content="blockchain, movie, streaming, CRO, crypto, NFT"
+      content="xem phim, phim mới, phim online, watch party, xem chung, cộng đồng phim, trạm phim"
     />
 
     <title>Trạm Phim - Trải Nghiệm Điện Ảnh Đẳng Cấp</title>
@@ -34,13 +35,13 @@
     <meta property="og:site_name" content="Trạm Phim" />
     <meta property="og:type" content="website" />
     <meta property="og:title" id="ogTitle" content="Trạm Phim - Trải Nghiệm Điện Ảnh Đẳng Cấp" />
-    <meta property="og:description" id="ogDescription" content="Nền tảng xem phim Web3 tiên phong. Trải nghiệm điện ảnh đỉnh cao, bảo mật và tích hợp thanh toán Crypto." />
+    <meta property="og:description" id="ogDescription" content="Xem phim mới nhất chất lượng cao, tạo phòng xem chung cùng bạn bè và tham gia cộng đồng yêu phim sôi động." />
     <meta property="og:image" id="ogImage" content="https://public-frontend-cos.metadl.com/mgx/img/favicon_atoms.ico" />
-    <meta property="og:url" id="ogUrl" content="https://tronghuynh888.github.io/MovieChain/" />
+    <meta property="og:url" id="ogUrl" content="https://tronghuynh888.github.io/TramPhim/" />
     <!-- Thẻ Twitter Card cho tương thích phụ -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" id="twTitle" content="Trạm Phim - Trải Nghiệm Điện Ảnh Đẳng Cấp">
-    <meta name="twitter:description" id="twDescription" content="Nền tảng xem phim Web3 tiên phong. Trải nghiệm điện ảnh đỉnh cao, bảo mật và tích hợp thanh toán Crypto.">
+    <meta name="twitter:description" id="twDescription" content="Xem phim mới nhất chất lượng cao, tạo phòng xem chung cùng bạn bè và tham gia cộng đồng yêu phim sôi động.">
     <meta name="twitter:image" id="twImage" content="https://public-frontend-cos.metadl.com/mgx/img/favicon_atoms.ico">
 
     <!-- Favicon -->
@@ -551,7 +552,7 @@
                     <i class="fas fa-unlock"></i> <span>Mua Vé Ngay</span>
                   </button>
                   <p class="secure-text">
-                    <i class="fas fa-shield-alt"></i> Thanh toán an toàn bằng CRO Token
+                    <i class="fas fa-shield-alt"></i> Thanh toán nhanh chóng, bảo mật tuyệt đối
                   </p>
                 </div>
               </div>
@@ -934,8 +935,8 @@
         <div class="footer-section">
           <h4><i class="fas fa-film"></i> Trạm Phim</h4>
           <p class="text-muted">
-            Nền tảng xem phim Blockchain. Thanh toán an toàn, minh bạch bằng
-            CRO.
+            Nền tảng xem phim trực tuyến — Xem chung cùng bạn bè, khám phá
+            cộng đồng yêu phim.
           </p>
           <div class="social-links">
             <a href="javascript:void(0)"><i class="fab fa-facebook-f"></i></a>
@@ -956,9 +957,9 @@
         <div class="footer-section">
           <h4>Hỗ Trợ</h4>
           <ul>
-            <li><a href="javascript:void(0)">Điều khoản</a></li>
-            <li><a href="javascript:void(0)">Bảo mật</a></li>
-            <li><a href="javascript:void(0)">Liên hệ Admin</a></li>
+            <li><a href="javascript:void(0)" onclick="showPage('terms')">Điều khoản</a></li>
+            <li><a href="javascript:void(0)" onclick="showPage('privacy')">Bảo mật</a></li>
+            <li><a href="javascript:void(0)" onclick="showPage('contact')">Liên hệ Admin</a></li>
           </ul>
         </div>
 
@@ -989,7 +990,7 @@
       </div>
 
       <div class="footer-bottom">
-        <p>&copy; 2026 Trạm Phim. Powered by Blockchain Technology.</p>
+        <p>&copy; 2026 Trạm Phim. All rights reserved.</p>
       </div>
     </footer>
     
@@ -1116,6 +1117,7 @@
     <!-- Chart.js cho Dashboard Admin -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="js/admin.js?v=3"></script>
+    <script src="js/contact-admin.js?v=1"></script>
 
     <script src="js/upgrade.js?v=2"></script>
     <script src="js/intro.js?v=2"></script>
@@ -1196,6 +1198,10 @@
             if (typeof loadMarqueeSettings === "function") loadMarqueeSettings();
             if (typeof loadPopupSettings === "function") loadPopupSettings();
         }
+        // Load yêu cầu liên hệ khi mở tab
+        if (panelName === "contactRequests") {
+            loadContactRequests();
+        }
 
         // 4. [NEW] Tự động đóng menu trên Mobile sau khi chọn
         if (window.innerWidth <= 768) {
@@ -1226,6 +1232,47 @@
 
       // Gọi hàm chạy ngay khi web mở
       loadUpgradePage();
+
+      // Load trang Chính sách Bảo mật
+      async function loadPrivacyPage() {
+        try {
+          const response = await fetch("./components/privacy.html");
+          const html = await response.text();
+          document.getElementById("mainContent").insertAdjacentHTML("beforeend", html);
+          console.log("✅ Đã tải trang Chính sách Bảo mật!");
+        } catch (error) {
+          console.error("Lỗi tải trang Privacy:", error);
+        }
+      }
+      loadPrivacyPage();
+
+      // Load trang Điều khoản sử dụng
+      async function loadTermsPage() {
+        try {
+          const response = await fetch("./components/terms.html");
+          const html = await response.text();
+          document.getElementById("mainContent").insertAdjacentHTML("beforeend", html);
+          console.log("✅ Đã tải trang Điều khoản!");
+        } catch (error) {
+          console.error("Lỗi tải trang Terms:", error);
+        }
+      }
+      loadTermsPage();
+
+      // Load trang Liên hệ Admin
+      async function loadContactPage() {
+        try {
+          const response = await fetch("./components/contact.html");
+          const html = await response.text();
+          document.getElementById("mainContent").insertAdjacentHTML("beforeend", html);
+          console.log("✅ Đã tải trang Liên hệ!");
+          // Kiểm tra user có yêu cầu pending không → ẩn form
+          if (typeof checkPendingContact === 'function') checkPendingContact();
+        } catch (error) {
+          console.error("Lỗi tải trang Contact:", error);
+        }
+      }
+      loadContactPage();
     </script>
     
     <!-- Resume Watch Modal -->

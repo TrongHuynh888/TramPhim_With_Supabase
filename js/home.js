@@ -152,7 +152,7 @@ function createMovieCard(movie, matchedTags = []) {
             </div>
         </div>
 
-        <div class="movie-popup-nfx" onclick="viewMovieDetail('${movie.id}')">
+        <div class="movie-popup-nfx" onclick="event.stopPropagation()">
             <div class="popup-header-img">
                 <img src="${movie.backgroundUrl || movie.posterUrl}" onerror="this.onerror=null; this.src='${fallbackImage}';">
             </div>
@@ -938,7 +938,7 @@ function createLandscapeMovieCard(movie) {
             </div>
 
             <!-- Popup khi rê chuột (Giao diện nâng cấp theo mẫu) -->
-            <div class="movie-popup-nfx">
+            <div class="movie-popup-nfx" onclick="event.stopPropagation()">
                 <div class="popup-header-img">
                     <img src="${imageUrl}" onerror="this.src='${fallbackImage}';">
                 </div>

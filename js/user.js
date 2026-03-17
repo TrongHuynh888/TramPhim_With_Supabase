@@ -20,7 +20,7 @@ function openProfileModal() {
   if (qrMini && typeof qrcode !== 'undefined') {
     try {
       const qr = qrcode(0, 'M');
-      qr.addData(`moviechain://user/${currentUser.id}`);
+      qr.addData(`tramphim://user/${currentUser.id}`);
       qr.make();
       qrMini.innerHTML = qr.createImgTag(2, 0);
       // Đảm bảo ảnh QR fill đúng container

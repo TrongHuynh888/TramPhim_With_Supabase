@@ -754,6 +754,18 @@
 .comm-movie-tag-badge i {
   font-size: 0.65rem;
 }
+/* Ảnh cờ quốc gia - ép kích thước cố định, tránh tràn trên mobile */
+.comm-movie-tag-badge img {
+  width: 16px !important;
+  height: 12px !important;
+  max-width: 16px !important;
+  max-height: 12px !important;
+  min-width: 16px;
+  object-fit: cover;
+  border-radius: 1px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
 /* Badge loại phim + số tập */
 .comm-movie-episodes-badge {
   display: inline-flex;
@@ -1502,7 +1514,7 @@
 
 .comm-chat-item.active {
   background: rgba(77, 184, 255, 0.12);
-  border-left: 3px solid #4db8ff;
+  border-left: 3px solid var(--accent-primary);
 }
 
 .comm-chat-item-avatar {
@@ -4745,8 +4757,8 @@ body.comm-chat-active .community-wrapper {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    border: 1px solid #4db8ff;
-    color: #4db8ff;
+    border: 1px solid var(--accent-primary);
+    color: var(--accent-primary);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4864,8 +4876,8 @@ body.comm-chat-active .community-wrapper {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    border: 1px solid #4db8ff;
-    color: #4db8ff;
+    border: 1px solid var(--accent-primary);
+    color: var(--accent-primary);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -7157,7 +7169,7 @@ body.comm-chat-active .community-wrapper {
     left: 20px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-left: 4px solid #4db8ff;
+    border-left: 4px solid var(--accent-primary);
     border-radius: 12px;
     padding: 14px 18px;
     display: flex;
@@ -7278,7 +7290,7 @@ body.comm-chat-active .community-wrapper {
 
 .comm-chat-toast-label {
     font-size: 0.7rem;
-    color: #4db8ff;
+    color: var(--accent-primary);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -7333,7 +7345,7 @@ body.comm-chat-active .community-wrapper {
 }
 
 .notif-popup-header i {
-    color: #4db8ff;
+    color: var(--accent-primary);
     font-size: 0.85rem;
 }
 
@@ -7405,7 +7417,7 @@ body.comm-chat-active .community-wrapper {
 }
 
 .notif-toggle.on {
-    background: #4db8ff;
+    background: var(--accent-primary);
 }
 
 .notif-toggle-knob {
@@ -7448,7 +7460,7 @@ body.comm-chat-active .community-wrapper {
 }
 
 .notif-timer-label i {
-    color: #4db8ff;
+    color: var(--accent-primary);
     font-size: 0.7rem;
 }
 
@@ -7489,14 +7501,14 @@ body.comm-chat-active .community-wrapper {
 }
 
 .notif-timer-opt input[type="radio"]:checked {
-    border-color: #4db8ff;
+    border-color: var(--accent-primary);
 }
 
 .notif-timer-opt input[type="radio"]:checked::after {
     content: '';
     width: 8px;
     height: 8px;
-    background: #4db8ff;
+    background: var(--accent-primary);
     border-radius: 50%;
     position: absolute;
     top: 50%;
@@ -7505,7 +7517,7 @@ body.comm-chat-active .community-wrapper {
 }
 
 .notif-timer-opt input[type="radio"]:checked + span {
-    color: #4db8ff;
+    color: var(--accent-primary);
 }
 
 /* Tráº¡ng thÃ¡i sound-off cho nÃºt chuÃ´ng */
@@ -8107,7 +8119,7 @@ body.comm-chat-active .community-wrapper {
     width: 48px;
     height: 48px;
     border-radius: 14px;
-    background: linear-gradient(135deg, #007aff, #4db8ff);
+    background: var(--accent-gradient);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -8208,7 +8220,7 @@ body.comm-chat-active .community-wrapper {
     position: absolute;
     width: 24px;
     height: 24px;
-    border-color: #4db8ff;
+    border-color: var(--accent-primary);
     border-style: solid;
 }
 

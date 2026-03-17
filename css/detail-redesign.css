@@ -4,7 +4,7 @@
 
 :root {
     --toolbar-bg: rgba(20, 20, 30, 0.95);
-    --switch-on: #4db8ff;
+    --switch-on: var(--accent-primary);
     --switch-off: #333;
     --section-gap: 25px; /* Khoảng cách thống nhất giữa các phần */
 }
@@ -613,6 +613,102 @@ body.cinema-mode.controls-visible .detail-toolbar {
 [data-theme="light"] .meta-item.year {
     background: rgba(0, 0, 0, 0.08);
     color: var(--text-primary);
+}
+
+/* Tất cả meta-item (quốc gia, phút, rating, thể loại...) */
+[data-theme="light"] .meta-item {
+    color: var(--text-secondary);
+}
+
+[data-theme="light"] .meta-item i {
+    color: var(--text-muted);
+}
+
+/* Origin title (tên gốc phim) */
+[data-theme="light"] .info-origin-title {
+    color: var(--text-muted) !important;
+}
+
+/* Thể loại phim */
+[data-theme="light"] .info-categories {
+    color: var(--accent-primary);
+}
+
+/* Phần % phù hợp */
+[data-theme="light"] .meta-item.match {
+    color: var(--accent-primary);
+}
+
+/* Meta value links (diễn viên, quốc gia...) */
+[data-theme="light"] .meta-value,
+[data-theme="light"] .meta-value a {
+    color: var(--text-primary);
+}
+
+/* Actor badges */
+[data-theme="light"] .actor-badge {
+    background: rgba(0, 0, 0, 0.06);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+/* Version buttons */
+[data-theme="light"] .version-btn-modern {
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+[data-theme="light"] .version-btn-modern:hover {
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.04);
+}
+[data-theme="light"] .version-btn-modern.active {
+    background: rgba(0, 0, 0, 0.06);
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+}
+
+/* Controls row */
+[data-theme="light"] .movie-extra-controls-inner {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: var(--border-color);
+}
+[data-theme="light"] .part-selector-trigger {
+    color: var(--text-primary);
+}
+[data-theme="light"] .divider-vertical {
+    background: var(--border-color);
+}
+
+/* Part dropdown */
+[data-theme="light"] .part-dropdown-menu {
+    background: #fff;
+    border-color: var(--border-color);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+[data-theme="light"] .part-dropdown-item {
+    color: var(--text-secondary);
+}
+[data-theme="light"] .part-dropdown-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+    color: var(--text-primary);
+}
+
+/* Back button */
+[data-theme="light"] .btn-back-album {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: var(--border-color);
+}
+
+/* Poster border */
+[data-theme="light"] .info-poster-wrapper {
+    border-color: var(--border-color);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+/* Payment hint */
+[data-theme="light"] .payment-hint {
+    color: var(--text-muted);
 }
 
 .info-link {

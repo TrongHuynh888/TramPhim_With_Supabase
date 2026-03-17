@@ -127,7 +127,7 @@
     flex-wrap: wrap;
 }
 .intro-match {
-    color: #46d369;
+    color: var(--accent-primary);
     font-weight: 700;
 }
 .intro-age {
@@ -136,12 +136,12 @@
     font-size: 0.9rem;
 }
 .intro-quality {
-    background: rgba(255,255,255,0.2);
+    background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
     padding: 2px 6px;
     border-radius: 3px;
     font-size: 0.8rem;
     font-weight: 700;
-    color: #fff;
+    color: var(--accent-primary);
 }
 
 /* Grid Info */
@@ -264,6 +264,30 @@
 .btn-play-intro {
     min-width: 180px;
     justify-content: center;
+}
+
+/* Version buttons (Vietsub / Dự phòng) - Dark mode mặc định */
+.version-btn {
+    margin-right: 5px;
+    margin-bottom: 5px;
+    background: #2a2a3a;
+    color: #fff;
+    border: 2px solid #3a3a4a;
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+.version-btn:hover {
+    background: #3a3a4a;
+    border-color: #5a5a6a;
+}
+.version-btn.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: #fff;
 }
 
 /* ============================================
@@ -473,4 +497,136 @@
     .intro-meta-row {
         font-size: 1.2rem;
     }
+}
+
+/* ============================================
+   4. LIGHT MODE OVERRIDES
+   ============================================ */
+
+/* Overlay: mỏng hơn để ảnh nền phim hiện rõ */
+[data-theme="light"] .intro-overlay {
+    background: linear-gradient(to top, var(--bg-primary) 5%, rgba(255,255,255,0.35) 45%, rgba(255,255,255,0.15) 100%);
+}
+
+/* Background image: giữ rõ hơn ở light mode */
+[data-theme="light"] .intro-bg-image {
+    opacity: 0.7;
+}
+
+/* Tiêu đề phim: bỏ gradient trắng, dùng text đậm */
+[data-theme="light"] .intro-title {
+    background: none;
+    -webkit-background-clip: unset;
+    -webkit-text-fill-color: initial;
+    color: var(--text-primary);
+    text-shadow: none;
+}
+
+/* Origin title (inline style trong HTML, cần !important) */
+[data-theme="light"] #introOriginTitle {
+    color: var(--text-muted) !important;
+}
+
+/* Meta row (năm, phút, tuổi) */
+[data-theme="light"] .intro-meta-row {
+    color: var(--text-secondary);
+}
+
+/* % phù hợp — dùng accent thay xanh lá */
+[data-theme="light"] .intro-match {
+    color: var(--accent-primary);
+}
+
+/* Badge tuổi */
+[data-theme="light"] .intro-age {
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+/* Badge chất lượng */
+[data-theme="light"] .intro-quality {
+    background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
+    color: var(--accent-primary);
+}
+
+/* Nhãn info (Quốc gia:, Thể loại:...) */
+[data-theme="light"] .info-label {
+    color: var(--text-muted);
+}
+
+/* Giá trị info (Hàn Quốc, Hành động...) */
+[data-theme="light"] .info-value {
+    color: var(--text-primary);
+}
+
+/* Cast chips (diễn viên) */
+[data-theme="light"] .cast-chip {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: var(--border-color);
+}
+[data-theme="light"] .cast-chip:hover {
+    background: rgba(0, 0, 0, 0.1);
+    border-color: var(--accent-primary);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+[data-theme="light"] .cast-chip span {
+    color: var(--text-primary);
+}
+
+/* Mô tả phim */
+[data-theme="light"] .intro-desc {
+    color: var(--text-secondary);
+    text-shadow: none;
+}
+
+/* Tags */
+[data-theme="light"] .intro-tag {
+    color: var(--text-muted);
+}
+
+/* Nút back */
+[data-theme="light"] .intro-back-btn {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--text-primary);
+    backdrop-filter: blur(10px);
+}
+[data-theme="light"] .intro-back-btn:hover {
+    background: var(--accent-primary);
+    color: #fff;
+}
+
+/* Nút hành động phụ (Yêu thích, Chia sẻ) */
+[data-theme="light"] .intro-actions .btn-icon-text {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--text-primary);
+}
+[data-theme="light"] .intro-actions .btn-icon-text:hover {
+    background: rgba(0, 0, 0, 0.12);
+}
+
+/* Poster border */
+[data-theme="light"] .intro-poster-box {
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    border-color: var(--border-color);
+}
+
+/* Version buttons (Vietsub/Dự phòng) — inline styles dùng !important */
+[data-theme="light"] .version-btn {
+    background: rgba(0, 0, 0, 0.05) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-secondary) !important;
+}
+[data-theme="light"] .version-btn:hover {
+    background: rgba(0, 0, 0, 0.1) !important;
+    color: var(--text-primary) !important;
+}
+[data-theme="light"] .version-btn.active {
+    background: var(--accent-primary) !important;
+    border-color: var(--accent-primary) !important;
+    color: #fff !important;
+}
+
+/* Intro content wrapper */
+[data-theme="light"] .intro-content {
+    color: var(--text-primary);
 }

@@ -156,7 +156,7 @@ async function viewMovieIntro(movieId, updateHistory = true) {
             sources.forEach((src, index) => {
                 const btn = document.createElement("button");
                 btn.className = "btn btn-sm version-btn";
-                btn.style.cssText = "margin-right: 5px; margin-bottom: 5px; background: #2a2a3a; color: #fff; border: 2px solid #3a3a4a; border-radius: 20px; padding: 6px 16px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.3s;";
+                /* Styles chuyển sang CSS class .version-btn trong intro.css */
                 btn.textContent = src.label;
                 btn.onclick = () => selectIntroVersion(src.label, index);
                 versionContainer.appendChild(btn);
@@ -318,15 +318,10 @@ function selectIntroVersion(label, index) {
     buttons.forEach(btn => {
         if (btn.textContent === mapLabel) {
             btn.classList.add("active");
-            btn.style.background = "var(--accent-primary, #e50914)";
-            btn.style.borderColor = "var(--accent-primary, #e50914)";
-            btn.style.color = "#fff";
         } else {
             btn.classList.remove("active");
-            btn.style.background = "#2a2a3a";
-            btn.style.borderColor = "#3a3a4a";
-            btn.style.color = "#fff";
         }
+        /* Styles handled by CSS class .version-btn / .version-btn.active trong intro.css */
     });
     
     console.log("🎬 Đã chọn phiên bản:", mapLabel);

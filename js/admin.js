@@ -10209,12 +10209,111 @@ function updateMarqueePreview() {
     const bg = document.getElementById('veMarqueeBg');
     const color = document.getElementById('veMarqueeColor');
     const speed = document.getElementById('veMarqueeSpeed');
+    const alignInput = document.getElementById('veMarqueeAlign');
+    const posInput = document.getElementById('veMarqueePosition');
 
     if (preview && bg) preview.style.background = bg.value;
     if (previewText && color) previewText.style.color = color.value;
-    if (previewText && speed) {
-        const durations = { slow: '20s', normal: '12s', fast: '5s' };
-        previewText.style.animationDuration = durations[speed.value] || '12s';
+
+    const alignVal = alignInput ? alignInput.value : 'scroll';
+
+    if (previewText) {
+        if (alignVal === 'scroll') {
+            // Chạy ngang — bật animation
+            previewText.style.animation = '';
+            previewText.style.display = 'inline-block';
+            previewText.style.textAlign = '';
+            previewText.style.width = '';
+            previewText.style.whiteSpace = 'nowrap';
+            previewText.style.transform = '';
+            previewText.style.position = '';
+            previewText.style.left = '';
+            if (speed) {
+                const durations = { slow: '20s', normal: '12s', fast: '5s' };
+                previewText.style.animationDuration = durations[speed.value] || '12s';
+            }
+        } else {
+            // Căn cố định — tắt animation, dùng vị trí tùy chỉnh
+            previewText.style.animation = 'none';
+            previewText.style.display = 'block';
+            previewText.style.whiteSpace = 'nowrap';
+            previewText.style.width = 'auto';
+            previewText.style.position = 'relative';
+
+            // Tính vị trí từ slider (0-100%)
+            const pos = posInput ? parseInt(posInput.value) : 50;
+            // Dùng text-align cho các vị trí preset, hoặc transform cho custom
+            if (alignVal === 'left') {
+                previewText.style.transform = `translateX(${pos}%)`;
+                previewText.style.textAlign = 'left';
+            } else if (alignVal === 'center') {
+                // 50% = giữa, 0% = trái, 100% = phải
+                const offset = pos - 50; // -50 -> +50
+                previewText.style.transform = `translateX(${offset}%)`;
+                previewText.style.textAlign = 'center';
+            } else if (alignVal === 'right') {
+                previewText.style.transform = `translateX(-${100 - pos}%)`;
+                previewText.style.textAlign = 'right';
+            }
+        }
+    }
+}
+
+/**
+ * Chọn chế độ căn chỉnh vị trí chữ Marquee (gọi từ nút bấm)
+ */
+function setMarqueeAlign(mode) {
+    // Cập nhật hidden input
+    const alignInput = document.getElementById('veMarqueeAlign');
+    if (alignInput) alignInput.value = mode;
+
+    // Highlight nút active
+    document.querySelectorAll('.ve-align-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.align === mode);
+    });
+
+    // Hiện/ẩn slider
+    const sliderWrap = document.getElementById('veMarqueeSliderWrap');
+    if (sliderWrap) {
+        sliderWrap.style.display = mode === 'scroll' ? 'none' : 'block';
+    }
+
+    // Reset slider về giá trị mặc định theo chế độ
+    const slider = document.getElementById('veMarqueePosition');
+    const label = document.getElementById('veMarqueePosLabel');
+    if (slider && mode !== 'scroll') {
+        const defaults = { left: 0, center: 50, right: 100 };
+        slider.value = defaults[mode] || 50;
+        if (label) label.textContent = slider.value + '%';
+    }
+
+    // Cập nhật preview
+    updateMarqueePreview();
+}
+
+/**
+ * Cập nhật vị trí từ slider kéo thả (gọi khi kéo thanh range)
+ */
+function updateMarqueePositionFromSlider(val) {
+    const label = document.getElementById('veMarqueePosLabel');
+    const posInput = document.getElementById('veMarqueePositionValue');
+    if (label) label.textContent = val + '%';
+    if (posInput) posInput.value = val;
+    updateMarqueePreview();
+}
+
+/**
+ * Cập nhật vị trí chiều dọc từ slider (gọi khi kéo thanh range dọc)
+ */
+function updateMarqueeVOffset(val) {
+    const label = document.getElementById('veMarqueeVLabel');
+    if (label) label.textContent = val + 'px';
+
+    // Cập nhật preview và frontend
+    const previewText = document.getElementById('veMarqueePreviewText');
+    if (previewText) {
+        previewText.style.position = 'relative';
+        previewText.style.top = val + 'px';
     }
 }
 
@@ -10225,6 +10324,9 @@ async function saveMarqueeSettings() {
             enabled: document.getElementById('veMarqueeEnabled')?.checked || false,
             text: document.getElementById('veMarqueeText')?.value || '',
             speed: document.getElementById('veMarqueeSpeed')?.value || 'normal',
+            textAlign: document.getElementById('veMarqueeAlign')?.value || 'scroll',
+            textPosition: parseInt(document.getElementById('veMarqueePosition')?.value || '50'),
+            vOffset: parseInt(document.getElementById('veMarqueeVOffset')?.value || '0'),
             bgColor: document.getElementById('veMarqueeBg')?.value || '#1a1a2e',
             textColor: document.getElementById('veMarqueeColor')?.value || '#fbbf24'
         };
@@ -10267,6 +10369,7 @@ async function loadMarqueeSettings() {
         const toggle = document.getElementById('veMarqueeEnabled');
         const text = document.getElementById('veMarqueeText');
         const speed = document.getElementById('veMarqueeSpeed');
+        const align = document.getElementById('veMarqueeAlign');
         const bg = document.getElementById('veMarqueeBg');
         const color = document.getElementById('veMarqueeColor');
         const preview = document.getElementById('veMarqueePreviewText');
@@ -10274,6 +10377,7 @@ async function loadMarqueeSettings() {
         if (toggle) toggle.checked = s.enabled || false;
         if (text) text.value = s.text || '';
         if (speed) speed.value = s.speed || 'normal';
+        if (align) align.value = s.textAlign || 'scroll';
         if (bg) bg.value = s.bgColor || '#1a1a2e';
         if (color) color.value = s.textColor || '#fbbf24';
         if (preview && s.text) {
@@ -10281,6 +10385,25 @@ async function loadMarqueeSettings() {
             preview.style.color = s.textColor || '#fbbf24';
             preview.parentElement.style.background = s.bgColor || '#1a1a2e';
         }
+
+        // Khôi phục vị trí chữ
+        const posSlider = document.getElementById('veMarqueePosition');
+        const posLabel = document.getElementById('veMarqueePosLabel');
+        if (posSlider && s.textPosition !== undefined) {
+            posSlider.value = s.textPosition;
+        }
+        if (posLabel && s.textPosition !== undefined) {
+            posLabel.textContent = s.textPosition + '%';
+        }
+        // Gọi setMarqueeAlign để highlight nút + hiện/ẩn slider + cập nhật preview
+        setMarqueeAlign(s.textAlign || 'scroll');
+
+        // Khôi phục chiều dọc
+        const vSlider = document.getElementById('veMarqueeVOffset');
+        const vLabel = document.getElementById('veMarqueeVLabel');
+        if (vSlider) vSlider.value = s.vOffset || 0;
+        if (vLabel) vLabel.textContent = (s.vOffset || 0) + 'px';
+        updateMarqueeVOffset(s.vOffset || 0);
     } catch (err) {
         console.error('Lỗi load marquee settings:', err);
     }
@@ -10304,11 +10427,54 @@ async function loadAndShowMarquee() {
         if (!bar || !inner) return;
 
         inner.textContent = s.text;
-        bar.style.background = `linear-gradient(90deg, ${s.bgColor || '#1a1a2e'} 0%, ${adjustBrightness(s.bgColor || '#1a1a2e', 15)} 50%, ${s.bgColor || '#1a1a2e'} 100%)`;
+        const bgCol = s.bgColor || '#1a1a2e';
+        bar.style.background = `linear-gradient(90deg, ${bgCol} 0%, ${adjustBrightness(bgCol, 15)} 50%, ${bgCol} 100%)`;
+        bar.style.setProperty('--marquee-bg', bgCol); /* Cho icon loa dùng cùng màu nền */
         inner.style.color = s.textColor || '#fbbf24';
         bar.setAttribute('data-speed', s.speed || 'normal');
+
+        // Xử lý vị trí chữ (scroll / center / left / right + position %)
+        const alignMode = s.textAlign || 'scroll';
+        const textPos = s.textPosition !== undefined ? s.textPosition : 50;
+        if (alignMode === 'scroll') {
+            // Chạy ngang — mặc định
+            inner.style.animation = '';
+            inner.style.display = 'inline-block';
+            inner.style.textAlign = '';
+            inner.style.width = '';
+            inner.style.whiteSpace = 'nowrap';
+            inner.style.transform = '';
+            inner.style.position = '';
+            inner.style.left = '';
+        } else {
+            // Căn cố định — tắt animation, dùng position tùy chỉnh
+            inner.style.animation = 'none';
+            inner.style.display = 'block';
+            inner.style.whiteSpace = 'nowrap';
+            inner.style.width = 'auto';
+            inner.style.position = 'relative';
+
+            if (alignMode === 'left') {
+                inner.style.textAlign = 'left';
+                inner.style.transform = `translateX(${textPos}%)`;
+            } else if (alignMode === 'center') {
+                inner.style.textAlign = 'center';
+                const offset = textPos - 50;
+                inner.style.transform = `translateX(${offset}%)`;
+            } else if (alignMode === 'right') {
+                inner.style.textAlign = 'right';
+                inner.style.transform = `translateX(-${100 - textPos}%)`;
+            }
+        }
+
         bar.style.display = 'block';
         document.body.classList.add('marquee-active');
+
+        // Áp dụng chiều dọc (vOffset)
+        if (s.vOffset && s.vOffset !== 0) {
+            inner.style.position = 'relative';
+            inner.style.top = s.vOffset + 'px';
+        }
     } catch (err) {
         console.error('Lỗi show marquee:', err);
     }

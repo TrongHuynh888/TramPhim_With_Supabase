@@ -510,15 +510,19 @@
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.15); /* Nền mờ kính */
-  color: white;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--accent-primary);
   backdrop-filter: blur(5px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--accent-primary);
+  font-weight: 600;
+  transition: all 0.3s ease;
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: white;
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+  box-shadow: 0 4px 15px color-mix(in srgb, var(--accent-primary) 40%, transparent);
 }
 
 /* Neon Button - Sunset Style */
@@ -877,7 +881,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 1);
-  color: #fff; /* Fix: Luôn hiển thị màu trắng trên nền tối */
+  color: var(--accent-primary); /* Màu chủ đạo web (accent) */
 }
 .movie-card-static .card-meta {
   font-size: 12px;
@@ -888,6 +892,12 @@
 
 /* --- POPUP KHI RÊ CHUỘT (Giao diện mới) --- */
 /* --- 1. Khung Popup --- */
+.movie-popup-nfx,
+.movie-popup-nfx *,
+.movie-card-wrapper,
+.movie-card-landscape {
+  -webkit-tap-highlight-color: transparent;
+}
 .movie-popup-nfx {
   position: absolute;
   top: 50%;
@@ -1045,7 +1055,7 @@
   font-size: 18px;
   font-weight: 700;
   margin-bottom: 10px;
-  color: var(--text-primary);
+  color: var(--accent-primary); /* Màu chủ đạo web */
   line-height: 1.4;
   width: 100%; /* Chiếm hết chiều ngang popup */
   white-space: normal; /* Cho phép xuống dòng thoải mái */
@@ -1061,7 +1071,7 @@
   flex-wrap: wrap;
 }
 .meta-match {
-  color: var(--success);
+  color: var(--accent-primary); /* Màu chủ đạo web */
   font-weight: bold;
   white-space: nowrap;
 }
@@ -1372,7 +1382,7 @@
 .btn-upgrade:hover {
   transform: translateY(-2px);
   box-shadow: 0 0 20px rgba(0, 122, 255, 0.6);
-  background: linear-gradient(135deg, #007aff, #4db8ff);
+  background: var(--accent-gradient);
 }
 .dropdown-list {
   list-style: none;
@@ -1874,7 +1884,7 @@
 
 .popup-subtitle-orig {
   font-size: 14px;
-  color: #ff00cc;
+  color: var(--accent-primary);
   margin-top: -3px;
   margin-bottom: 12px;
   font-weight: 500;
@@ -1884,7 +1894,7 @@
 
 /* Nút Xem ngay gradient */
 .btn-play-pink {
-  background: linear-gradient(90deg, #ff00cc 0%, #a800ff 100%) !important;
+  background: var(--accent-gradient) !important;
   border: none !important;
   border-radius: 6px !important;
   padding: 8px 16px !important;
@@ -1895,7 +1905,7 @@
   align-items: center !important;
   gap: 6px !important;
   cursor: pointer !important;
-  box-shadow: 0 4px 15px rgba(255, 0, 204, 0.3) !important;
+  box-shadow: 0 4px 15px color-mix(in srgb, var(--accent-primary) 30%, transparent) !important;
 }
 
 /* Nút hành động kính */
@@ -1922,8 +1932,8 @@
 }
 
 .btn-action-glass.liked {
-  color: #ff00cc !important;
-  border-color: rgba(255, 0, 204, 0.4) !important;
+  color: var(--accent-primary) !important;
+  border-color: color-mix(in srgb, var(--accent-primary) 40%, transparent) !important;
 }
 
 /* Metadata Badges */
@@ -3404,4 +3414,278 @@ body.modal-open .scroll-top-btn {
     #myAlbumsListContainer, #albumMoviesContainer {
         padding: 15px;
     }
+}
+
+/* ============================================
+   LIGHT MODE — COMPONENTS OVERRIDES
+   Bổ sung tương phản cho nền sáng
+   ============================================ */
+
+/* --- Navbar items --- */
+[data-theme="light"] .navbar {
+  background: var(--bg-secondary) !important;
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .nav-link {
+  color: var(--text-secondary);
+}
+[data-theme="light"] .nav-link:hover,
+[data-theme="light"] .nav-link.active {
+  color: var(--text-primary);
+}
+
+/* --- Search Navbar Popup --- */
+[data-theme="light"] .search-overlay {
+  background: rgba(0, 0, 0, 0.4);
+}
+[data-theme="light"] .search-popup {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+[data-theme="light"] .search-popup input {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+[data-theme="light"] .search-popup input::placeholder {
+  color: var(--text-muted);
+}
+[data-theme="light"] .search-suggestion-item {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-color);
+}
+[data-theme="light"] .search-suggestion-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* --- Login button on light mode --- */
+[data-theme="light"] .login-btn-pro {
+  border-color: var(--border-color);
+}
+
+/* --- Movie Card Static --- */
+[data-theme="light"] .movie-card-static {
+  border-color: var(--border-color);
+}
+[data-theme="light"] .movie-card-static:hover {
+  border-color: var(--accent-primary);
+}
+/* LƯU Ý: .card-info-bottom nằm trên overlay gradient tối → giữ màu sáng */
+
+/* --- History Card --- */
+[data-theme="light"] .history-card {
+  border-color: var(--border-color);
+}
+[data-theme="light"] .history-card:hover {
+  border-color: var(--accent-secondary);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+}
+[data-theme="light"] .history-info h4 {
+  color: var(--text-primary);
+}
+[data-theme="light"] .history-info span {
+  color: var(--text-muted);
+}
+
+/* --- Library Card --- */
+[data-theme="light"] #libraryList .card {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+[data-theme="light"] #libraryList .card:hover {
+  border-color: var(--accent-secondary);
+}
+[data-theme="light"] #libraryList .card-body {
+  background: var(--bg-secondary);
+}
+[data-theme="light"] #libraryList .card-title {
+  color: var(--text-primary);
+}
+[data-theme="light"] #libraryList .card-meta {
+  color: var(--text-muted);
+}
+
+/* --- Modal (Generic) --- */
+[data-theme="light"] .modal {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+[data-theme="light"] .modal-header {
+  border-bottom-color: var(--border-color);
+}
+[data-theme="light"] .modal-title {
+  color: var(--text-primary);
+}
+[data-theme="light"] .modal-footer {
+  border-top-color: var(--border-color);
+}
+
+/* --- Form inputs chung --- */
+[data-theme="light"] .form-input,
+[data-theme="light"] .form-select,
+[data-theme="light"] .form-textarea,
+[data-theme="light"] input[type="text"],
+[data-theme="light"] input[type="email"],
+[data-theme="light"] input[type="password"],
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+[data-theme="light"] .form-input::placeholder,
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* --- Album system --- */
+[data-theme="light"] .album-card {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+[data-theme="light"] .album-card:hover {
+  border-color: var(--accent-primary);
+}
+[data-theme="light"] .album-name {
+  color: var(--text-primary);
+}
+[data-theme="light"] .album-count {
+  color: var(--text-muted);
+}
+
+/* --- Category Card --- */
+[data-theme="light"] .category-card-pro {
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* --- Tags --- */
+[data-theme="light"] .tag {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+/* --- Status Badge --- */
+[data-theme="light"] .status-badge.free {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-muted);
+  border-color: var(--border-color);
+}
+
+/* --- Skeleton Loading --- */
+[data-theme="light"] .skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-tertiary) 25%,
+    #e0e0e0 50%,
+    var(--bg-tertiary) 75%
+  );
+  background-size: 200% 100%;
+}
+
+/* --- Actor Card / Timeline --- */
+[data-theme="light"] .timeline-year-badge {
+  color: var(--text-primary);
+}
+[data-theme="light"] .timeline-movie-card {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+/* --- Dropdown Upgrade --- */
+[data-theme="light"] .dropdown-upgrade {
+  background: var(--bg-tertiary);
+}
+[data-theme="light"] .dropdown-upgrade p {
+  color: var(--text-secondary);
+}
+
+/* --- Nút "Xem tất cả" (btn-secondary) --- */
+[data-theme="light"] .btn-secondary {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--accent-secondary);
+  border: 1px solid var(--border-color);
+  backdrop-filter: none;
+  font-weight: 600;
+}
+[data-theme="light"] .btn-secondary:hover {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+}
+
+/* --- Ô tìm kiếm & Bộ lọc (Trang Kho Phim) --- */
+[data-theme="light"] .search-box {
+  background: #fff !important;
+  border-color: var(--border-color) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] .search-box:hover {
+  background: #fff !important;
+  border-color: rgba(0, 0, 0, 0.25) !important;
+}
+[data-theme="light"] .search-box:focus-within {
+  background: #fff !important;
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important;
+}
+[data-theme="light"] .search-box i {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] .search-box:focus-within i {
+  color: var(--accent-primary) !important;
+}
+[data-theme="light"] .search-box input {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .search-box input::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* Filter boxes */
+[data-theme="light"] .custom-filter-box {
+  background: #fff !important;
+  border-color: var(--border-color) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] .custom-filter-box:hover,
+[data-theme="light"] .custom-filter-box.active {
+  background: #fff !important;
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+}
+[data-theme="light"] .custom-filter-box i {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] .custom-filter-box:hover i,
+[data-theme="light"] .custom-filter-box.active i {
+  color: var(--accent-primary) !important;
+}
+[data-theme="light"] .custom-filter-box input {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .custom-filter-box input::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* Suggestions dropdown */
+[data-theme="light"] .suggestions-dropdown {
+  background: #fff !important;
+  border-color: var(--border-color) !important;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15) !important;
+}
+[data-theme="light"] .suggestion-item {
+  color: var(--text-secondary) !important;
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+[data-theme="light"] .suggestion-item:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .suggestion-item.selected {
+  background: var(--accent-primary) !important;
+  color: #fff !important;
 }
