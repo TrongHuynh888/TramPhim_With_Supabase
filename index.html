@@ -80,6 +80,7 @@
     <!-- QR Code Reader/Decoder cho tính năng quét QR -->
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" defer></script>
     <script src="js/emoji-picker.js" defer></script>
+    <script src="js/home-comments.js" defer></script>
 
     <!-- Custom CSS -->
   </head>
@@ -378,6 +379,75 @@
 
         <!-- Country Sections (Hàn Quốc, Trung Quốc, US-UK) -->
         <div id="countrySections"></div>
+
+        <!-- TOP BÌNH LUẬN — Carousel + Grid Thống Kê chung 1 khung -->
+        <section class="section top-comments-section" id="topCommentsSection" style="display:none;">
+          <div class="section-header">
+            <h2 class="section-title"><i class="fas fa-comments" style="color:#fbbf24;"></i> Top Bình Luận</h2>
+          </div>
+          <div class="tc-main-wrapper">
+            <!-- Carousel -->
+            <div class="tc-carousel-area">
+              <button class="tc-nav-btn tc-prev" onclick="scrollTopComments('prev')" aria-label="Trước">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <div class="tc-carousel-track" id="topCommentsTrack">
+                <!-- Cards render bởi home-comments.js -->
+              </div>
+              <button class="tc-nav-btn tc-next" onclick="scrollTopComments('next')" aria-label="Sau">
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+            <!-- Đường ngăn cách -->
+            <div class="tc-divider"></div>
+            <!-- Grid 5 cột thống kê -->
+            <div class="home-stats-grid">
+              <div class="hs-column">
+                <h3 class="hs-column-title"><i class="fas fa-fire"></i> SÔI NỔI NHẤT</h3>
+                <ol class="hs-list" id="hsHottestList">
+                  <li class="hs-loading">Đang tải...</li>
+                </ol>
+                <button class="hs-more-btn" onclick="showHsPopup('hottest')">Xem thêm</button>
+              </div>
+              <div class="hs-column">
+                <h3 class="hs-column-title"><i class="fas fa-heart"></i> YÊU THÍCH TUẦN</h3>
+                <ol class="hs-list" id="hsWeeklyList">
+                  <li class="hs-loading">Đang tải...</li>
+                </ol>
+                <button class="hs-more-btn" onclick="showHsPopup('weekly')">Xem thêm</button>
+              </div>
+              <div class="hs-column">
+                <h3 class="hs-column-title"><i class="fas fa-tags"></i> THỂ LOẠI HOT</h3>
+                <ol class="hs-list" id="hsHotCategoryList">
+                  <li class="hs-loading">Đang tải...</li>
+                </ol>
+                <button class="hs-more-btn" onclick="showHsPopup('categories')">Xem thêm</button>
+              </div>
+              <div class="hs-column">
+                <h3 class="hs-column-title"><i class="fas fa-comment-dots"></i> BÌNH LUẬN MỚI</h3>
+                <div class="hs-comments-list" id="hsRecentComments">
+                  <div class="hs-loading">Đang tải...</div>
+                </div>
+              </div>
+              <div class="hs-column">
+                <h3 class="hs-column-title"><i class="fas fa-star"></i> REVIEW PHIM</h3>
+                <div class="hs-reviews-list" id="hsReviewsList">
+                  <div class="hs-loading">Đang tải...</div>
+                </div>
+                <button class="hs-more-btn" onclick="showNotification('🚀 Tính năng Review Phim đang được phát triển!', 'info')">Xem thêm</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- POPUP TOP 10 -->
+      <div class="hs-popup-overlay" id="hsPopupOverlay" onclick="closeHsPopup()">
+        <div class="hs-popup" onclick="event.stopPropagation()">
+          <button class="hs-popup-close" onclick="closeHsPopup()"><i class="fas fa-times"></i></button>
+          <h3 class="hs-popup-title" id="hsPopupTitle"></h3>
+          <div class="hs-popup-list" id="hsPopupList"></div>
+        </div>
       </div>
 
       <!-- MOVIES PAGE -->

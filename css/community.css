@@ -1036,7 +1036,7 @@
   position: fixed;
   top: 50%;
   transform: translateY(-50%);
-  background: rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.25);
   color: #fff;
   border: none;
   width: 44px;
@@ -1047,13 +1047,35 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.2s;
   z-index: 10001;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.15);
 }
 .post-viewer-prev { left: 15px; }
 .post-viewer-next { right: 15px; }
 .post-viewer-prev:hover, .post-viewer-next:hover {
-  background: rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.4);
+}
+
+/* Mobile: ảnh nhỏ lại để mũi tên không đè lên ảnh */
+@media (max-width: 768px) {
+  .post-image-viewer-content {
+    max-width: 75vw;
+  }
+  .post-image-viewer-content img {
+    max-width: 75vw;
+    max-height: 80vh;
+  }
+  .post-viewer-prev, .post-viewer-next {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+    background: rgba(255,255,255,0.35);
+  }
+  .post-viewer-prev { left: 8px; }
+  .post-viewer-next { right: 8px; }
 }
 
 .comm-post-footer {
@@ -1944,12 +1966,21 @@
 
 .comm-chat-messages {
   flex: 1;
-  padding: 20px;
+  padding: 20px 20px 20px 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 15px;
   min-height: 0; /* Quan trong: Cho phep co lai trong Flexbox */
+}
+
+/* Khoảng đệm cuối tin nhắn — luôn nằm cuối dù DOM thay đổi */
+.comm-chat-messages::after {
+  content: '';
+  display: block;
+  min-height: 80px;
+  flex-shrink: 0;
+  width: 100%;
 }
 
 .comm-msg {
@@ -2063,6 +2094,17 @@
   gap: 15px;
   background: var(--bg-secondary);
   flex-shrink: 0; /* Khong cho phep bi bop meo khi tin nhan nhieu */
+  flex-wrap: wrap; /* Cho reply bar nằm trên 1 dòng riêng */
+}
+
+/* Reply bar nằm bên trong input area — chiếm full width */
+.comm-chat-input-area > .comm-chat-reply-bar {
+  width: 100%;
+  margin: -8px -8px 4px -8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  border-top: none;
+  order: -1; /* Luôn nằm trên cùng */
 }
 
 /* Tăng khoảng đệm dưới trên Tablet/Mobile để input không chìm sát đáy */
@@ -2154,6 +2196,194 @@
   align-items: center;
   overflow: hidden;
   position: relative;
+}
+
+/* ============ CINECHAT SIDEBAR BANNER ============ */
+.cinechat-sidebar-banner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 350px;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  animation: sidebarBannerFadeIn 0.4s ease;
+}
+
+.cinechat-sidebar-banner .cinechat-trailer {
+  flex: 1;
+  min-height: 280px;
+}
+
+@keyframes sidebarBannerFadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.sidebar-banner-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.sidebar-banner-logo {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c3aed, #4fb8ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  color: #fff;
+  box-shadow: 0 0 20px rgba(79, 184, 255, 0.3);
+  animation: sidebarLogoPulse 2s ease-in-out infinite;
+}
+
+@keyframes sidebarLogoPulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(79, 184, 255, 0.3); }
+  50% { box-shadow: 0 0 30px rgba(79, 184, 255, 0.5); }
+}
+
+.sidebar-banner-content h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary, #e2e8f0);
+  margin: 0;
+}
+
+.sidebar-banner-content p {
+  font-size: 0.8rem;
+  color: var(--text-muted, #94a3b8);
+  margin: 0;
+}
+
+.sidebar-banner-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.sidebar-banner-tags span {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  color: var(--text-muted, #94a3b8);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sidebar-banner-tags span i {
+  font-size: 0.65rem;
+  color: var(--accent-primary, #4fb8ff);
+}
+
+.sidebar-banner-back {
+  margin-top: 8px;
+  background: rgba(79, 184, 255, 0.1);
+  border: 1px solid rgba(79, 184, 255, 0.2);
+  color: var(--accent-primary, #4fb8ff);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-banner-back:hover {
+  background: rgba(79, 184, 255, 0.2);
+}
+
+/* ============ CINECHAT BANNER OVERLAY (Mobile/Tablet) ============ */
+.cinechat-banner-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+  background: var(--bg-primary, #0f0f23);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.cinechat-banner-overlay.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Nút đóng overlay */
+.cinechat-banner-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10001;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.2s;
+  backdrop-filter: blur(8px);
+}
+
+.cinechat-banner-close:hover {
+  background: rgba(255, 80, 80, 0.3);
+  transform: scale(1.1);
+}
+
+/* Trailer responsive cho overlay mobile */
+.cinechat-banner-overlay .cinechat-trailer {
+  width: 100%;
+  height: 100%;
+}
+
+/* Thu nhỏ logo ring trên mobile */
+@media (max-width: 768px) {
+  .cinechat-banner-overlay .trailer-logo-ring {
+    width: 70px;
+    height: 70px;
+    font-size: 1.6rem;
+  }
+  .cinechat-banner-overlay .trailer-text-slider h2 {
+    font-size: 1.3rem;
+  }
+  .cinechat-banner-overlay .trailer-text-slider p {
+    font-size: 0.85rem;
+  }
+  .cinechat-banner-overlay .trailer-badge {
+    font-size: 0.7rem;
+    padding: 4px 10px;
+  }
+  .cinechat-banner-overlay .trailer-features {
+    gap: 6px;
+  }
+  .cinechat-banner-overlay .trailer-icon {
+    font-size: 0.9rem;
+  }
 }
 
 /* ============ CINECHAT TRAILER ============ */
@@ -2838,6 +3068,72 @@
     flex-shrink: 0 !important;
   }
 
+  /* Fix ô nhập tin nhắn bị xuống dòng trên mobile */
+  .comm-chat-input-area {
+    padding: 8px 10px !important;
+    gap: 8px !important;
+  }
+  .comm-chat-input-area textarea {
+    padding: 10px 120px 10px 15px !important;
+    min-height: 42px !important;
+    font-size: 14px !important;
+  }
+  .comm-input-icon-group {
+    gap: 6px !important;
+    right: 6px !important;
+  }
+  .comm-input-icon-group .comm-action-btn {
+    font-size: 0.95rem !important;
+  }
+  .comm-btn-send {
+    width: 38px !important;
+    height: 38px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Fix header chat bị xấu trên mobile */
+  .comm-chat-box-header {
+    padding: 10px 12px !important;
+    gap: 8px;
+  }
+  .comm-chat-box-info img {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  .comm-chat-box-name {
+    font-size: 0.9rem !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+  }
+  .comm-chat-box-status {
+    font-size: 0.7rem !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+  }
+  .comm-chat-actions button {
+    font-size: 1rem !important;
+    padding: 6px !important;
+  }
+
+  /* Fix reply bar trên mobile */
+  .comm-chat-reply-bar {
+    padding: 6px 10px !important;
+  }
+  .comm-chat-reply-bar .reply-content {
+    gap: 8px !important;
+  }
+  .comm-chat-reply-bar .reply-preview {
+    max-width: 180px !important;
+    font-size: 0.7rem !important;
+  }
+  .comm-chat-reply-bar .reply-name {
+    font-size: 0.75rem !important;
+  }
+
   /* --- CONTENT (FEED/FRIENDS): cuộn tự nhiên --- */
   .comm-content-area {
     height: auto !important;
@@ -3376,7 +3672,7 @@
     width: 33% !important;
     min-width: 280px !important;
     height: 100% !important;
-    z-index: 500 !important;
+    z-index: 1100 !important;
     border-radius: 0 !important;
     overflow-y: auto !important;
     display: flex !important;
@@ -3403,7 +3699,7 @@
     bottom: 0 !important;
     left: auto !important;
     width: 40% !important;
-    min-width: 300px !important;
+    min-width: 320px !important;
     height: calc(100dvh - 60px) !important;
     z-index: 9500 !important;
     border-radius: 0 !important;
@@ -3415,6 +3711,8 @@
   }
   .absolute-chat-modal .comm-modal-content {
     border-radius: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
     height: 100% !important;
     display: flex !important;
     flex-direction: column !important;
@@ -3425,14 +3723,61 @@
     flex: 1 !important;
     min-height: 0 !important;
     overflow-y: auto !important;
+    padding: 12px !important;
   }
-  /* Controls + Footer: LUÔN hiện ở dưới cùng */
+  /* Tabs gọn hơn trên tablet */
+  .absolute-chat-modal .wallpaper-tabs {
+    gap: 4px !important;
+    margin-bottom: 10px !important;
+  }
+  .absolute-chat-modal .wp-tab {
+    padding: 6px 10px !important;
+    font-size: 0.78rem !important;
+    white-space: nowrap !important;
+  }
+  /* Grid ảnh nhỏ hơn */
+  .absolute-chat-modal .wallpaper-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) !important;
+    gap: 6px !important;
+  }
+  /* Upload link input không tràn */
+  .absolute-chat-modal .wp-link-input-group {
+    flex-wrap: nowrap !important;
+  }
+  .absolute-chat-modal .wp-link-input-group input {
+    min-width: 0 !important;
+    flex: 1 !important;
+  }
+  .absolute-chat-modal .wp-link-input-group button {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    font-size: 0.78rem !important;
+    padding: 6px 10px !important;
+  }
+  /* Controls gọn */
   .absolute-chat-modal .wp-controls-persistent {
     flex-shrink: 0 !important;
+    padding: 8px 12px !important;
   }
+  .absolute-chat-modal .wp-control-item label {
+    font-size: 0.8rem !important;
+  }
+  .absolute-chat-modal .wp-pos-btn {
+    width: 34px !important;
+    height: 34px !important;
+  }
+  /* Footer: nút không tràn */
   .absolute-chat-modal .comm-modal-footer,
   .absolute-chat-modal .premium-footer {
     flex-shrink: 0 !important;
+    padding: 8px 12px !important;
+    gap: 8px !important;
+  }
+  .absolute-chat-modal .premium-footer button {
+    padding: 7px 10px !important;
+    font-size: 0.8rem !important;
+    white-space: nowrap !important;
+    min-width: 0 !important;
   }
   /* Profile layout responsive cho tablet dọc */
   .comm-profile-content {
@@ -3539,6 +3884,239 @@
   .comm-profile-content {
       grid-template-columns: 1fr;
   }
+
+  /* Info sidebar mobile: overlay toàn màn hình, nằm trên phần ghim */
+  .comm-chat-info-sidebar {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 1100 !important;
+    border-radius: 0 !important;
+    overflow-y: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: var(--bg-secondary) !important;
+    box-shadow: -4px 0 15px rgba(0, 0, 0, 0.2) !important;
+    padding-top: 0 !important;
+  }
+  /* Hiện thanh đóng info sidebar trên mobile */
+  .comm-info-close-bar {
+    display: flex !important;
+  }
+  /* Khi info-hidden thì ẩn overlay */
+  .comm-chat-layout.info-hidden .comm-chat-info-sidebar {
+    display: none !important;
+  }
+
+  /* === THU GỌN CÁC THÀNH PHẦN TRONG SIDEBAR INFO === */
+  /* Thanh đóng gọn hơn */
+  .comm-info-close-bar {
+    padding: 14px 14px 10px 14px !important;
+    min-height: 48px !important;
+  }
+  .comm-info-close-title {
+    font-size: 0.95rem !important;
+  }
+  .comm-info-close-btn {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 0.95rem !important;
+  }
+
+  /* Khu vực profile: giảm padding + avatar nhỏ hơn */
+  .comm-chat-info-profile {
+    padding: 14px 16px 12px !important;
+  }
+  .comm-info-avatar {
+    width: 64px !important;
+    height: 64px !important;
+    margin-bottom: 8px !important;
+  }
+  .comm-info-name {
+    font-size: 1rem !important;
+    margin-bottom: 2px !important;
+  }
+  .comm-info-status {
+    font-size: 0.75rem !important;
+  }
+
+  /* Nút hành động nhỏ hơn */
+  .comm-info-actions {
+    gap: 16px !important;
+    margin-top: 12px !important;
+  }
+  .comm-info-action-item {
+    gap: 4px !important;
+  }
+  .comm-info-btn {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 0.85rem !important;
+  }
+  .comm-info-btn i {
+    font-size: 0.85rem !important;
+  }
+  .comm-info-action-label {
+    font-size: 0.68rem !important;
+  }
+
+  /* Khu vực chi tiết (Username) */
+  .comm-info-details {
+    padding: 10px 16px !important;
+  }
+  .comm-profile-id {
+    font-size: 0.85rem !important;
+  }
+  .comm-profile-label {
+    font-size: 0.72rem !important;
+  }
+  .comm-info-icon-btn {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 0.85rem !important;
+  }
+
+  /* Khu vực media (Ảnh, Video, Liên kết) */
+  .comm-info-media {
+    padding: 4px 0 !important;
+  }
+  .comm-info-media-item {
+    padding: 8px 16px !important;
+    gap: 10px !important;
+  }
+  .comm-info-media-item i:first-child {
+    font-size: 0.85rem !important;
+  }
+  .comm-info-media-item span {
+    font-size: 0.82rem !important;
+  }
+
+  /* Nút đổi hình nền chat */
+  .comm-info-wallpaper-section {
+    padding: 10px 16px !important;
+  }
+  .comm-info-wallpaper-btn {
+    padding: 8px 14px !important;
+    font-size: 0.82rem !important;
+    border-radius: 10px !important;
+  }
+
+  /* Vùng nguy hiểm (Chặn) */
+  .comm-info-danger {
+    padding: 8px 16px !important;
+  }
+  .comm-info-danger-item {
+    font-size: 0.85rem !important;
+    padding: 8px 0 !important;
+  }
+
+  /* === THU GỌN MODAL HÌNH NỀN CHAT TRÊN MOBILE === */
+  /* Modal overlay toàn màn hình */
+  .absolute-chat-modal {
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100dvh !important;
+    z-index: 9500 !important;
+    border-radius: 0 !important;
+    overflow: hidden !important;
+    max-width: none !important;
+    max-height: none !important;
+    background: rgba(0, 0, 0, 0.95) !important;
+  }
+  .absolute-chat-modal .comm-modal-content {
+    border-radius: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+  /* Header gọn hơn */
+  .absolute-chat-modal .premium-header {
+    padding: 12px 14px !important;
+  }
+  .absolute-chat-modal .premium-header h3 {
+    font-size: 0.95rem !important;
+  }
+  /* Body wallpaper gọn hơn */
+  .absolute-chat-modal .wallpaper-body {
+    padding: 10px 12px !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+  }
+  /* Tabs gọn hơn */
+  .absolute-chat-modal .wallpaper-tabs {
+    margin-bottom: 8px !important;
+    padding: 3px !important;
+    gap: 4px !important;
+  }
+  .absolute-chat-modal .wp-tab {
+    padding: 5px 10px !important;
+    font-size: 0.78rem !important;
+  }
+  /* Grid ảnh nhỏ hơn */
+  .absolute-chat-modal .wallpaper-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) !important;
+    gap: 6px !important;
+    padding: 2px !important;
+  }
+  /* Tab content cuộn */
+  .absolute-chat-modal .wp-tab-content {
+    margin-bottom: 6px !important;
+  }
+  /* Upload area gọn */
+  .absolute-chat-modal .wp-upload-area {
+    padding: 10px !important;
+  }
+  .absolute-chat-modal .wp-upload-area i {
+    font-size: 1.2rem !important;
+  }
+  .absolute-chat-modal .wp-upload-area p {
+    font-size: 0.78rem !important;
+    margin: 4px 0 0 !important;
+  }
+  /* Controls khu vực vị trí + độ tối gọn hơn */
+  .absolute-chat-modal .wp-controls-persistent {
+    padding: 8px 12px !important;
+  }
+  .absolute-chat-modal .wp-control-item {
+    margin-bottom: 8px !important;
+  }
+  .absolute-chat-modal .wp-control-item label {
+    font-size: 0.78rem !important;
+  }
+  /* Position picker gọn */
+  .absolute-chat-modal .wp-position-picker {
+    gap: 6px !important;
+  }
+  .absolute-chat-modal .wp-pos-btn {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 0.75rem !important;
+  }
+  /* Slider */
+  .absolute-chat-modal .wp-slider-wrapper {
+    padding: 2px 0 !important;
+  }
+  /* Footer gọn */
+  .absolute-chat-modal .premium-footer {
+    padding: 8px 12px !important;
+    gap: 8px !important;
+  }
+  .absolute-chat-modal .premium-footer button {
+    padding: 7px !important;
+    font-size: 0.8rem !important;
+  }
 }
 
 
@@ -3547,7 +4125,9 @@
    ========================================== */
 body.comm-chat-active {
   overflow: hidden !important; /* Khóa cuộn toàn trang */
-  height: 100vh;
+  height: 100vh; /* Fallback cho trình duyệt cũ */
+  height: 100dvh; /* iOS Safari: dùng dynamic viewport height tránh thanh địa chỉ */
+  height: -webkit-fill-available; /* Fallback iOS cũ */
 }
 
 body.comm-chat-active footer {
@@ -3556,9 +4136,11 @@ body.comm-chat-active footer {
 
 /* Tối ưu layout cộng đồng khi chat active để chiếm trọn màn hình */
 body.comm-chat-active .community-wrapper {
-  height: calc(100vh - 108px); /* Tối ưu chiều cao khi ở Chat (navbar + margin) */
+  height: calc(100vh - 108px); /* Fallback */
+  height: calc(100dvh - 108px); /* iOS: dynamic viewport height */
   padding-bottom: 0;
   margin-top: 25px;
+  overflow: hidden;
 }
 
 @media screen and (max-width: 768px) {
@@ -3584,8 +4166,8 @@ body.comm-chat-active .community-wrapper {
   }
 }
 
-/* FIX: Chat messages tràn viewport trên mobile - ép min-height:0 cho flex chain */
-@media screen and (max-width: 768px) {
+/* FIX: Chat messages tràn viewport trên mobile/tablet - ép min-height:0 cho flex chain */
+@media screen and (max-width: 1024px) {
   body.comm-chat-active .comm-content-area,
   body.comm-chat-active #commChatView {
     min-height: 0 !important;
@@ -3609,6 +4191,7 @@ body.comm-chat-active .community-wrapper {
     flex: 1 !important;
     min-height: 0 !important;
     overflow-y: auto !important;
+    padding-bottom: 40px !important;
   }
   /* Header, Input, Pinned: không co lại */
   body.comm-chat-active .comm-chat-input-area,
@@ -4631,6 +5214,13 @@ body.comm-chat-active .community-wrapper {
   margin: 8px 0;
 }
 
+/* Ẩn thanh ghim + header chat khi modal hình nền đang mở để không bị đè lên */
+.comm-chat-layout.wallpaper-modal-open .comm-chat-pinned-msg,
+.comm-chat-layout.wallpaper-modal-open .comm-chat-box-header {
+  z-index: 0 !important;
+  position: relative;
+}
+
 .comm-dropdown-item.recall, .comm-dropdown-item.delete {
   color: #ff4d4d;
 }
@@ -4649,6 +5239,24 @@ body.comm-chat-active .community-wrapper {
     opacity: 1; /* Always show or handle via tap */
     pointer-events: auto;
   }
+  /* Thu gọn popup menu tin nhắn cho mobile */
+  .comm-msg-dropdown {
+    min-width: 160px !important;
+    padding: 6px !important;
+  }
+  .comm-dropdown-item {
+    padding: 8px 10px !important;
+    font-size: 0.82rem !important;
+    gap: 8px !important;
+    border-radius: 6px !important;
+  }
+  .comm-dropdown-item i {
+    width: 16px !important;
+    font-size: 0.85rem !important;
+  }
+  .comm-dropdown-divider {
+    margin: 4px 0 !important;
+  }
 }
 
 
@@ -4661,6 +5269,7 @@ body.comm-chat-active .community-wrapper {
   justify-content: space-between;
   align-items: center;
   animation: slideUp 0.3s ease;
+  flex-shrink: 0; /* Không bị bóp trong flex layout */
 }
 
 .comm-chat-reply-bar.active {
@@ -6036,15 +6645,15 @@ body.comm-chat-active .community-wrapper {
 
 .lightbox-close-absolute {
     position: absolute;
-    top: 25px;
-    right: 25px;
-    width: 50px;
-    height: 50px;
+    top: 20px;
+    right: 340px; /* Cách sidebar 320px + 20px margin */
+    width: 44px;
+    height: 44px;
     background: rgba(255, 255, 255, 0.15);
     color: #fff;
     border: 2px solid rgba(255, 255, 255, 0.3);
     border-radius: 50%;
-    font-size: 32px;
+    font-size: 26px;
     cursor: pointer;
     z-index: 10010;
     display: flex;
@@ -6062,13 +6671,13 @@ body.comm-chat-active .community-wrapper {
     box-shadow: 0 0 20px rgba(255, 51, 51, 0.5);
 }
 
-/* --- */
+/* Mobile/Tablet: không có sidebar bên phải → nút X ở góc phải */
 @media (max-width: 992px) {
     .lightbox-close-absolute {
-        right: 15px;
-        top: 15px;
-        width: 35px;
-        height: 35px;
+        right: 10px;
+        top: 10px;
+        width: 34px;
+        height: 34px;
         font-size: 20px;
     }
 }
@@ -6136,6 +6745,11 @@ body.comm-chat-active .community-wrapper {
     opacity: 1;
     color: var(--accent-primary);
     transform: translateY(-2px);
+}
+
+/* Ẩn nút X trong toolbar (đã có nút X riêng ở góc) */
+.lightbox-btn.close-btn {
+    display: none;
 }
 
 .lightbox-nav-btn {
@@ -6261,37 +6875,160 @@ body.comm-chat-active .community-wrapper {
     object-fit: cover;
 }
 
-/* Responsive cho Mobile */
 @media (max-width: 992px) {
     .lightbox-pro-container {
         grid-template-columns: 1fr;
-        grid-template-rows: 1fr 180px;
+        grid-template-rows: 1fr 140px;
         width: 100%;
         height: 100%;
         border-radius: 0;
     }
     
+    .lightbox-main-view {
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .lightbox-center-content {
+        gap: 5px;
+        padding: 5px;
+    }
+
+    /* Toolbar: to hơn, gọn lại, chừa chỗ cho nút X góc phải */
+    .lightbox-toolbar {
+        padding: 8px 14px;
+        border-radius: 12px;
+        max-width: calc(100% - 50px);
+        gap: 4px;
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(20, 20, 25, 0.95);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+        align-self: flex-start;
+    }
+
+    .lightbox-toolbar .lightbox-info {
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+
+    .lightbox-toolbar .lightbox-actions {
+        gap: 10px;
+    }
+
+    .lightbox-toolbar .lightbox-btn {
+        font-size: 1rem;
+        padding: 4px;
+    }
+
+    /* Ẩn nút X trong toolbar (đã có nút X riêng ở góc) */
+    .lightbox-toolbar .close-btn {
+        display: none;
+    }
+
+    /* Nút đóng ở góc phải */
+    .lightbox-close-absolute {
+        right: 10px;
+        top: 10px;
+        width: 34px;
+        height: 34px;
+        font-size: 20px;
+        background: rgba(0,0,0,0.6);
+        border: 1px solid rgba(255,255,255,0.25);
+        backdrop-filter: blur(8px);
+    }
+
+    /* Ảnh: nhỏ lại để 2 mũi tên nằm ngoài */
+    .lightbox-img-wrapper {
+        padding: 0 45px;
+        overflow: hidden;
+    }
+
+    .lightbox-img-wrapper img {
+        max-width: 100%;
+        max-height: 100%;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+
+    /* Nút điều hướng trái/phải - nằm ngoài ảnh */
+    .lightbox-nav-btn {
+        width: 38px;
+        height: 38px;
+        font-size: 1rem;
+        background: rgba(255,255,255,0.2);
+        border: 1px solid rgba(255,255,255,0.2);
+        backdrop-filter: blur(4px);
+    }
+    .lightbox-nav-btn.prev { left: 4px; }
+    .lightbox-nav-btn.next { right: 4px; }
+
+    /* Sidebar thumbnail - to hơn */
     .lightbox-sidebar {
         border-left: none;
-        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        overflow: hidden;
     }
     
+    .lightbox-sidebar-header {
+        padding: 6px 12px;
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+
     .lightbox-thumbnails {
         grid-template-columns: none;
         display: flex;
         overflow-x: auto;
         overflow-y: hidden;
         width: 100%;
+        padding: 6px 8px;
+        gap: 8px;
+        align-items: center;
     }
     
     .lightbox-thumb-item {
-        flex: 0 0 120px;
-        height: 120px;
+        flex: 0 0 80px;
+        height: 80px;
+    }
+}
+
+/* Mobile nhỏ */
+@media (max-width: 480px) {
+    .lightbox-pro-container {
+        grid-template-rows: 1fr 120px;
     }
 
-    .lightbox-nav-btn {
-        width: 40px;
-        height: 40px;
+    .lightbox-toolbar {
+        padding: 6px 10px;
+        max-width: calc(100% - 45px);
+    }
+
+    .lightbox-toolbar .lightbox-info {
+        font-size: 0.8rem;
+    }
+
+    .lightbox-toolbar .lightbox-btn {
+        font-size: 0.9rem;
+    }
+
+    .lightbox-toolbar .lightbox-actions {
+        gap: 8px;
+    }
+
+    .lightbox-img-wrapper {
+        padding: 0 42px;
+    }
+
+    .lightbox-thumb-item {
+        flex: 0 0 65px;
+        height: 65px;
+    }
+
+    .lightbox-sidebar-header {
+        padding: 4px 10px;
+        font-size: 0.8rem;
     }
 }
 
@@ -6812,7 +7549,7 @@ body.comm-chat-active .community-wrapper {
     left: auto !important;
     width: 380px !important;
     height: 100% !important;
-    z-index: 1000 !important;
+    z-index: 998 !important; /* Thấp hơn marquee (z-index: 999) */
     padding: 0 !important;
     margin: 0 !important;
     display: none !important;

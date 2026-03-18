@@ -3689,3 +3689,785 @@ body.modal-open .scroll-top-btn {
   background: var(--accent-primary) !important;
   color: #fff !important;
 }
+
+/* ============================================
+   TOP BÌNH LUẬN — CAROUSEL TRANG CHỦ
+   ============================================ */
+.top-comments-section {
+  margin-top: 20px;
+  padding-bottom: 10px;
+}
+
+/* Wrapper chung bọc carousel + grid — 1 khung viền duy nhất */
+.tc-main-wrapper {
+  border: 1.5px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  overflow: visible; /* Cho nút mũi tên thoát ra ngoài */
+  background: rgba(255,255,255,0.02);
+  margin: 0 30px; /* Chừa chỗ cho nút mũi tên bên ngoài */
+}
+
+/* Khu vực carousel */
+.tc-carousel-area {
+  position: relative;
+  padding: 16px 20px;
+}
+
+/* Đường ngăn cách carousel / grid */
+.tc-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.08);
+  margin: 0;
+}
+
+/* Track cuộn ngang */
+.tc-carousel-track {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: 4px 0 8px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.tc-carousel-track::-webkit-scrollbar {
+  display: none;
+}
+
+/* Nút prev/next — nằm NGOÀI khung */
+.tc-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.15);
+  background: rgba(20,20,40,0.85);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+}
+.tc-nav-btn:hover {
+  background: rgba(77,184,255,0.5);
+  border-color: rgba(77,184,255,0.5);
+  transform: translateY(-50%) scale(1.1);
+}
+.tc-prev { left: -22px; }
+.tc-next { right: -22px; }
+
+/* ---- CARD ---- */
+.tc-card {
+  flex: 0 0 280px;
+  min-height: 200px;
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  background: var(--card-bg, rgba(20,20,40,0.9));
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.tc-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+}
+
+/* Nền poster mờ */
+.tc-card-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.15;
+  filter: blur(4px);
+  transition: opacity 0.3s;
+}
+.tc-card:hover .tc-card-bg {
+  opacity: 0.25;
+}
+
+/* Nội dung card */
+.tc-card-content {
+  position: relative;
+  z-index: 2;
+  padding: 18px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+}
+
+/* User info */
+.tc-user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tc-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid rgba(251,191,36,0.5);
+  flex-shrink: 0;
+}
+/* Row trên cùng: avatar bên trái, poster bên phải */
+.tc-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+/* Poster phim thumbnail */
+.tc-poster {
+  width: 65px;
+  height: 90px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.tc-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tc-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tc-avatar-letter {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+}
+.tc-user-detail {
+  display: flex;
+  flex-direction: column;
+}
+.tc-user-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+.tc-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* Nội dung comment */
+.tc-comment-text {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text-secondary, rgba(255,255,255,0.8));
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+  flex: 1;
+}
+
+/* Tag phim */
+.tc-movie-tag {
+  font-size: 0.75rem;
+  color: var(--accent-primary, #4db8ff);
+  padding: 4px 8px;
+  background: rgba(77,184,255,0.1);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tc-movie-tag i {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+/* Footer: stars + reactions */
+.tc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.tc-stars {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: #fbbf24;
+  font-size: 0.72rem;
+}
+.tc-stars i { font-size: 0.68rem; }
+.tc-stars span {
+  margin-left: 4px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+.tc-reactions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.78rem;
+}
+.tc-reactions span {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+
+/* ---- LIGHT MODE ---- */
+[data-theme="light"] .tc-card {
+  background: rgba(255,255,255,0.95);
+  border-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] .tc-card-bg {
+  opacity: 0.08;
+}
+[data-theme="light"] .tc-card:hover .tc-card-bg {
+  opacity: 0.12;
+}
+[data-theme="light"] .tc-comment-text {
+  color: var(--text-primary);
+}
+[data-theme="light"] .tc-nav-btn {
+  background: rgba(255,255,255,0.95);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  border-color: rgba(0,0,0,0.1);
+}
+[data-theme="light"] .tc-main-wrapper {
+  border-color: rgba(0,0,0,0.1);
+  background: rgba(0,0,0,0.02);
+}
+[data-theme="light"] .tc-divider {
+  background: rgba(0,0,0,0.08);
+}
+
+/* ---- RESPONSIVE ---- */
+@media (max-width: 768px) {
+  .tc-main-wrapper {
+    margin: 0 20px;
+  }
+  .tc-carousel-area {
+    padding: 12px 14px;
+  }
+  .tc-prev { left: -16px; }
+  .tc-next { right: -16px; }
+  .tc-card {
+    flex: 0 0 240px;
+    min-height: 180px;
+  }
+  .tc-card-content {
+    padding: 14px 12px 10px;
+    gap: 8px;
+  }
+  .tc-avatar {
+    width: 34px;
+    height: 34px;
+  }
+  .tc-user-name { font-size: 0.82rem; }
+  .tc-comment-text { font-size: 0.8rem; }
+  .tc-nav-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+}
+
+/* Highlight comment khi cuộn đến từ Top Bình Luận */
+.tc-highlight {
+  animation: tcHighlightPulse 0.8s ease-in-out 2;
+  border-radius: 8px;
+}
+@keyframes tcHighlightPulse {
+  0%, 100% { background: transparent; }
+  50% { background: rgba(251,191,36,0.15); box-shadow: 0 0 0 3px rgba(251,191,36,0.3); }
+}
+
+/* ============================================
+   HOME STATS GRID — 5 CỘT THỐNG KÊ
+   ============================================ */
+.home-stats-section {
+  margin-top: 10px;
+  padding-bottom: 20px;
+}
+.home-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0;
+  overflow: hidden;
+}
+
+/* Cột */
+.hs-column {
+  padding: 18px 16px 14px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+}
+.hs-column:last-child {
+  border-right: none;
+}
+
+/* Tiêu đề cột */
+.hs-column-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hs-column-title i {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+.hs-column-title .fa-fire { color: #ef4444; }
+.hs-column-title .fa-heart { color: #ec4899; }
+.hs-column-title .fa-tags { color: #10b981; }
+.hs-column-title .fa-comment-dots { color: #3b82f6; }
+.hs-column-title .fa-star { color: #fbbf24; }
+
+/* Danh sách numbered */
+.hs-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+}
+.hs-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 0.82rem;
+  color: var(--text-secondary, rgba(255,255,255,0.75));
+}
+.hs-list li:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+/* Số thứ tự */
+.hs-rank {
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 18px;
+  font-size: 0.78rem;
+}
+
+/* Icon trend tăng/giảm */
+.hs-trend {
+  min-width: 14px;
+  font-size: 0.7rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Poster nhỏ */
+.hs-thumb {
+  width: 28px;
+  height: 38px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.hs-no-thumb {
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Tên phim */
+.hs-movie-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Tên thể loại */
+.hs-cat-name {
+  flex: 1;
+}
+
+/* Nút xem thêm */
+.hs-more-btn {
+  margin-top: 8px;
+  padding: 5px 0;
+  background: none;
+  border: none;
+  color: var(--accent-primary, #4db8ff);
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-align: left;
+  transition: opacity 0.2s;
+}
+.hs-more-btn:hover {
+  opacity: 0.7;
+}
+
+/* Loading / Empty */
+.hs-loading, .hs-empty {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 8px 0;
+  font-style: italic;
+}
+
+/* ---- BÌNH LUẬN MỚI (cột 4) ---- */
+.hs-comments-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hs-comment-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.hs-comment-item:hover {
+  background: rgba(255,255,255,0.05);
+}
+.hs-comment-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.1);
+}
+.hs-comment-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.hs-avatar-letter {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+}
+.hs-comment-body {
+  flex: 1;
+  min-width: 0;
+}
+.hs-comment-user {
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--accent-primary, #4db8ff);
+}
+.hs-comment-text {
+  font-size: 0.76rem;
+  color: var(--text-secondary, rgba(255,255,255,0.7));
+}
+.hs-comment-movie {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- REVIEW PHIM (cột 5) ---- */
+.hs-reviews-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hs-review-item {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 5px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--text-secondary, rgba(255,255,255,0.75));
+  transition: background 0.15s;
+}
+.hs-review-item:hover {
+  background: rgba(255,255,255,0.05);
+}
+.hs-review-icon {
+  color: var(--accent-primary, #4db8ff);
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  margin-top: 2px;
+}
+.hs-review-text {
+  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ---- LIGHT MODE ---- */
+[data-theme="light"] .home-stats-grid {
+  border-color: rgba(0,0,0,0.1);
+  background: rgba(0,0,0,0.02);
+}
+[data-theme="light"] .hs-column {
+  border-right-color: rgba(0,0,0,0.06);
+}
+[data-theme="light"] .hs-column-title {
+  border-bottom-color: rgba(0,0,0,0.06);
+}
+[data-theme="light"] .hs-list li:hover,
+[data-theme="light"] .hs-comment-item:hover,
+[data-theme="light"] .hs-review-item:hover {
+  background: rgba(0,0,0,0.04);
+}
+
+/* ---- RESPONSIVE ---- */
+@media (max-width: 1024px) {
+  .home-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .hs-column:nth-child(3) {
+    border-right: none;
+  }
+  .hs-column:nth-child(4),
+  .hs-column:nth-child(5) {
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+}
+@media (max-width: 768px) {
+  .home-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .hs-column {
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 14px 12px;
+  }
+  .hs-column:nth-child(odd) {
+    border-right: 1px solid rgba(255,255,255,0.06);
+  }
+  .hs-column:last-child {
+    border-bottom: none;
+    border-right: none;
+  }
+}
+@media (max-width: 480px) {
+  .home-stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .hs-column {
+    border-right: none !important;
+  }
+}
+
+/* ============================================
+   POPUP TOP 10 — MODAL
+   ============================================ */
+.hs-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  z-index: 8000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.25s ease;
+}
+.hs-popup-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+.hs-popup {
+  width: 90%;
+  max-width: 520px;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--card-bg, #1e1e3a);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 28px 24px 20px;
+  position: relative;
+  transform: scale(0.9) translateY(20px);
+  transition: transform 0.25s ease;
+}
+.hs-popup-overlay.active .hs-popup {
+  transform: scale(1) translateY(0);
+}
+
+/* Nút đóng */
+.hs-popup-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-secondary);
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.hs-popup-close:hover {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+}
+
+/* Tiêu đề popup */
+.hs-popup-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  margin: 0 0 20px;
+}
+
+/* Danh sách popup */
+.hs-popup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Mỗi item */
+.hs-popup-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+.hs-popup-item:hover {
+  background: rgba(255,255,255,0.05);
+}
+.hs-popup-item:last-child {
+  border-bottom: none;
+}
+
+/* Số thứ tự */
+.hs-popup-rank {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--text-muted);
+  min-width: 30px;
+  text-align: center;
+}
+
+/* Trend icon */
+.hs-popup-trend {
+  font-size: 0.85rem;
+  min-width: 20px;
+  text-align: center;
+}
+
+/* Poster thumbnail */
+.hs-popup-poster {
+  width: 45px;
+  height: 62px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+/* Tên phim */
+.hs-popup-name {
+  flex: 1;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Tag thể loại có màu */
+.hs-popup-tag {
+  padding: 5px 14px;
+  border-radius: 20px;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* ---- LIGHT MODE ---- */
+[data-theme="light"] .hs-popup {
+  background: #fff;
+  border-color: rgba(0,0,0,0.1);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+[data-theme="light"] .hs-popup-close {
+  background: rgba(0,0,0,0.05);
+}
+[data-theme="light"] .hs-popup-item:hover {
+  background: rgba(0,0,0,0.03);
+}
+[data-theme="light"] .hs-popup-item {
+  border-bottom-color: rgba(0,0,0,0.06);
+}
+
+/* ---- RESPONSIVE ---- */
+@media (max-width: 768px) {
+  .hs-popup {
+    width: 95%;
+    padding: 20px 16px 16px;
+    max-height: 80vh;
+  }
+  .hs-popup-title {
+    font-size: 1rem;
+  }
+  .hs-popup-poster {
+    width: 38px;
+    height: 52px;
+  }
+  .hs-popup-name {
+    font-size: 0.85rem;
+  }
+}
+

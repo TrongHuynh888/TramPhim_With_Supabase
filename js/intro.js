@@ -444,7 +444,7 @@ async function loadCommentsToContainer(movieId, targetId) {
         let comments = [];
         const { data, error } = await supabase
             .from("comments")
-            .select("*")
+            .select("*, profiles(display_name, avatar)")
             .eq("movie_id", movieId)
             .order("created_at", { ascending: false })
             .limit(50);
@@ -460,11 +460,12 @@ async function loadCommentsToContainer(movieId, targetId) {
             id: item.id,
             movieId: item.movie_id,
             userId: item.user_id,
-            userName: item.user_name,
-            userAvatar: item.user_avatar,
+            userName: item.profiles?.display_name || "Người dùng",
+            userAvatar: item.profiles?.avatar || "",
             content: item.content,
             rating: item.rating,
             parentId: item.parent_id,
+            reactions: item.reactions || {},
             createdAt: item.created_at ? { toDate: () => new Date(item.created_at) } : null,
             reactionSummary: item.reaction_summary || {}
         }));
@@ -633,9 +634,7 @@ async function submitIntroComment() {
         
         const { error } = await supabase.from("comments").insert([{
             movie_id: currentIntroMovieId,
-            user_id: currentUser.uid,
-            user_name: currentUser.displayName || currentUser.email.split("@")[0],
-            user_avatar: currentUser.photoURL || "",
+            user_id: currentUser.id,
             content: content,
             rating: rating
         }]);
@@ -690,9 +689,7 @@ async function submitIntroReply(parentId) {
         const { error } = await supabase.from("comments").insert([{
             movie_id: currentIntroMovieId,
             parent_id: parentId,
-            user_id: currentUser.uid,
-            user_name: currentUser.displayName || currentUser.email.split("@")[0],
-            user_avatar: currentUser.photoURL || "",
+            user_id: currentUser.id,
             content: content,
             rating: 0
         }]);

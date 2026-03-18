@@ -2005,10 +2005,10 @@ function openMovieModal(movieId = null) {
   const categoryContainer = document.getElementById("movieCategoryContainer");
   categoryContainer.innerHTML = allCategories
       .map((c) => `
-        <div class="checkbox-item" style="margin-bottom: 5px;">
-            <label style="cursor: pointer; display: flex; align-items: center;">
-                <input type="checkbox" name="movieCategoryCheckbox" value="${c.id}" style="margin-right: 8px;">
-                ${c.name}
+        <div class="checkbox-item">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.9rem; white-space: nowrap; padding: 3px 0;">
+                <input type="checkbox" name="movieCategoryCheckbox" value="${c.id}" style="width: 16px; height: 16px; flex-shrink: 0; accent-color: var(--accent-primary, #9b59b6); cursor: pointer;">
+                <span>${c.name}</span>
             </label>
         </div>
       `)
@@ -2246,6 +2246,18 @@ async function handleMovieSubmit(event) {
       if (!uploadSuccess) return; 
   }
 
+  // Nếu thêm phim mới (chưa có movieId), tạo ID sớm để R2 upload dùng đúng folder
+  // Lưu vào biến tạm, KHÔNG gán vào hidden input (để tránh nhầm sang nhánh UPDATE)
+  const existingMovieId = document.getElementById("movieId").value;
+  if (!existingMovieId) {
+      const title = document.getElementById("movieTitle").value;
+      if (title) {
+          window._preGeneratedMovieId = generateSeriesIdFromTitle(title) + '-' + Date.now().toString().slice(-8);
+      }
+  } else {
+      window._preGeneratedMovieId = null; // Reset nếu đang edit
+  }
+
   // Chờ tải ảnh lên Cloudflare R2 nếu có (Thực sự upload khi bấm Lưu)
   if (typeof window.uploadPendingR2Images === "function") {
       const r2Success = await window.uploadPendingR2Images();
@@ -2368,12 +2380,13 @@ async function handleMovieSubmit(event) {
             }
             showNotification("Đã cập nhật phim!", "success");
         } else {
-            // Thêm mới - Cần tạo ID nếu chưa có
-            finalMovieData.id = generateSeriesIdFromTitle(movieData.title) + '-' + Math.floor(Math.random() * 1000);
+            // Thêm mới - Dùng ID đã sinh sớm (trước upload R2) hoặc tạo mới nếu chưa có
+            finalMovieData.id = window._preGeneratedMovieId || (generateSeriesIdFromTitle(movieData.title) + '-' + Date.now().toString().slice(-8));
+            window._preGeneratedMovieId = null; // Reset sau khi dùng
             finalMovieData.view_count = 0;
             finalMovieData.rating = 0;
             
-            console.log("DEBUG: Đang tạo phim mới với ID:", finalMovieData.id, finalMovieData);
+
             const { error } = await supabase.from('movies').insert(finalMovieData);
             if (error) {
                 console.error("Lỗi thêm phim mới:", error);
@@ -2466,10 +2479,11 @@ function closeSeriesIdSuggestions() {
 function generateSeriesIdFromTitle(title) {
     if (!title) return "";
     
-    // Tách lấy phần tên gốc trước dấu : hoặc -
-    let baseTitle = title.split(":")[0].split("-")[0].trim();
+    // Giữ toàn bộ tên phim (không cắt tại dấu : hoặc - như trước)
+    let baseTitle = title.trim();
     
-    // Loại bỏ các chữ số La Mã và số thường ở cuối (Phần 1, Season II, ...)
+    // Loại bỏ các chữ số La Mã và số thường ở cuối (Phần 1, Season II, Mùa 3, ...)
+    baseTitle = baseTitle.replace(/(\s+)(Phần|Season|Mùa|Part)\s*(\d+|I{1,3}V?)/i, "").trim();
     baseTitle = baseTitle.replace(/(\s+)(\d+|I|II|III|IV|V)+$/i, "").trim();
 
     return baseTitle
@@ -2618,10 +2632,13 @@ function renderMovieSelectionGrid(movies) {
         const currentEps = m._episodeCount || (m.episodes ? m.episodes.length : 0);
         const totalEps = parseInt(m.totalEpisodes || m.total_episodes) || 0;
         
-        // Badge hiển thị giống trang chủ (dùng class episode-badge)
+        // Badge hiển thị tình trạng tập phim (dữ liệu thật từ DB)
         let statusHtml = "";
 
-        if (m.type === 'series') {
+        if (currentEps === 0) {
+            // Phim chưa có tập nào → cảnh báo đỏ
+            statusHtml = `<span class="episode-badge episode-badge-warning" style="background: linear-gradient(135deg, #e74c3c, #c0392b); font-size: 0.75rem;">⚠ Chưa có tập</span>`;
+        } else if (m.type === 'series') {
             if (totalEps > 0 && currentEps >= totalEps) {
                 // Hoàn tất - xanh lá
                 statusHtml = `<span class="episode-badge episode-badge-full">Hoàn Tất (${currentEps}/${totalEps})</span>`;
@@ -2632,6 +2649,9 @@ function renderMovieSelectionGrid(movies) {
                 // Chưa set tổng - xanh dương, chỉ hiện số tập hiện tại
                 statusHtml = `<span class="episode-badge">Tập ${currentEps}</span>`;
             }
+        } else {
+            // Phim lẻ đã có tập → badge Full
+            statusHtml = `<span class="episode-badge episode-badge-full" style="background: linear-gradient(135deg, #2ecc71, #27ae60);">Full</span>`;
         }
 
         return `
@@ -2718,7 +2738,7 @@ async function loadEpisodesForMovie(movieIdFromGrid, resetPage = true) {
       }
       
       const titleEl = document.getElementById("currentMovieEpisodesTitle");
-      if (titleEl) titleEl.innerHTML = `Danh sách tập: <span style="color: #f1c40f; font-weight: bold;">${freshMovie.title}</span>`;
+      if (titleEl) titleEl.innerHTML = `Danh sách tập:<br><span style="color: var(--accent-primary); font-weight: bold; font-size: 1.1em;">${freshMovie.title}</span>`;
 
       const totalEpisodesInput = document.getElementById("totalEpisodesInput");
       const totalEpisodesContainer = document.getElementById("totalEpisodesContainer");
@@ -3130,7 +3150,72 @@ function openBulkAddDubbedModal() {
     
     document.getElementById("bulkDubbedInput").value = "";
     document.getElementById("bulkDubbedStatus").innerText = "";
+    // Reset preview
+    const previewContainer = document.getElementById("dubbedPreviewContainer");
+    if (previewContainer) previewContainer.style.display = "none";
     openModal("bulkAddDubbedModal");
+}
+
+/**
+ * Preview trực quan phân loại link khi dán vào textarea
+ * Tự động nhận diện embed vs m3u8 và hiển thị badge màu
+ */
+function previewDubbedLinks() {
+    const input = document.getElementById("bulkDubbedInput")?.value.trim();
+    const container = document.getElementById("dubbedPreviewContainer");
+    const list = document.getElementById("dubbedPreviewList");
+    const countEl = document.getElementById("dubbedPreviewCount");
+
+    if (!input || !container || !list) {
+        if (container) container.style.display = "none";
+        return;
+    }
+
+    const lines = input.split('\n').filter(l => l.trim());
+    if (lines.length === 0) {
+        container.style.display = "none";
+        return;
+    }
+
+    let embedCount = 0, hlsCount = 0;
+    let html = '';
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        const parts = trimmed.split('|');
+        if (parts.length < 2) {
+            // Dòng không hợp lệ
+            html += `<div style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: rgba(231,76,60,0.1); border-radius: 6px; border-left: 3px solid #e74c3c;">
+                <span style="background: #e74c3c; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">⚠ LỖI</span>
+                <span style="font-size: 0.8rem; color: #e74c3c; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${trimmed.substring(0, 80)}...</span>
+            </div>`;
+            continue;
+        }
+
+        const epText = parts[0].trim();
+        const url = parts.slice(1).join('|').trim(); // Ghép lại URL nếu chứa ký tự |
+        const isEmbed = url.includes('/player/') || url.includes('/embed/') || url.includes('player.') || url.includes('?url=');
+
+        if (isEmbed) embedCount++;
+        else hlsCount++;
+
+        const typeLabel = isEmbed ? 'EMBED' : 'M3U8';
+        const typeColor = isEmbed ? '#e67e22' : '#2ecc71';
+        const typeIcon = isEmbed ? 'fas fa-code' : 'fas fa-play-circle';
+        const shortUrl = url.length > 60 ? url.substring(0, 57) + '...' : url;
+
+        html += `<div style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: rgba(255,255,255,0.03); border-radius: 6px; border-left: 3px solid ${typeColor};">
+            <span style="background: rgba(155,89,182,0.2); color: #9b59b6; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; white-space: nowrap;">${epText}</span>
+            <span style="background: ${typeColor}; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; white-space: nowrap;"><i class="${typeIcon}" style="margin-right: 4px;"></i>${typeLabel}</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${url}">${shortUrl}</span>
+        </div>`;
+    }
+
+    list.innerHTML = html;
+    countEl.textContent = `${lines.length} link (${hlsCount} M3U8, ${embedCount} Embed)`;
+    container.style.display = "block";
 }
 
 /**
@@ -3163,6 +3248,7 @@ async function processBulkDubbedLinks() {
     let notFoundCount = 0;
     const notFoundEps = [];
     const updatePromises = [];
+    const episodeUpdates = new Map(); // Gom sources theo episodeId, tránh race condition
 
     showLoading(true, "Đang xử lý dữ liệu...");
 
@@ -3178,44 +3264,92 @@ async function processBulkDubbedLinks() {
             let epText = parts[0].trim();
             const dubbedLink = parts[1].trim();
 
-            // Chuẩn hóa epText: Lấy số tập
+            // Chuẩn hóa epText: Lấy số tập hoặc tên đặc biệt (Full, HD, ...)
             const epNumMatch = epText.match(/\d+/);
             const searchNum = epNumMatch ? parseInt(epNumMatch[0]) : null;
-
-            if (searchNum === null) continue;
+            const epTextLower = epText.toLowerCase().trim();
 
             // Tìm tập tương ứng trong database
-            const targetEpisode = episodes.find(e => {
-                const dbEpNumStr = String(e.episode_number || e.episodeNumber || "");
-                const dbNumMatch = dbEpNumStr.match(/\d+/);
-                return dbNumMatch && parseInt(dbNumMatch[0]) === searchNum;
-            });
+            let targetEpisode = episodes.find(e => {
+                const dbEpNumStr = String(e.episode_number || e.episodeNumber || e.name || "");
+                const dbEpLower = dbEpNumStr.toLowerCase().trim();
+                const dbSlug = String(e.slug || "").toLowerCase().trim();
 
-            if (targetEpisode) {
-                const sources = [...(targetEpisode.sources || [])];
-                const label = "Lồng tiếng";
-                
-                // Kiểm tra xem đã có label này chưa
-                const existingIdx = sources.findIndex(s => s.label === label);
-                if (existingIdx !== -1) {
-                    sources[existingIdx].url = dubbedLink;
-                } else {
-                    sources.push({ type: "hls", url: dubbedLink, label: label });
+                // 1. Match theo số tập (Tập 01 → 1)
+                if (searchNum !== null) {
+                    const dbNumMatch = dbEpNumStr.match(/\d+/);
+                    if (dbNumMatch && parseInt(dbNumMatch[0]) === searchNum) return true;
                 }
 
-                updatePromises.push(
-                    supabase
-                        .from('episodes')
-                        .update({ sources: sources, updated_at: new Date().toISOString() })
-                        .eq('id', targetEpisode.id)
-                );
+                // 2. Match theo tên text chính xác (Full, HD, ...)
+                if (dbEpLower === epTextLower) return true;
+
+                // 3. Match text chứa từ khóa (Full, Vietsub, ...)
+                if (epTextLower.includes("full") && (dbEpLower.includes("full") || dbSlug.includes("full"))) return true;
+
+                return false;
+            });
+
+            // 4. Fallback: nếu input là "Full" hoặc text không số → gán vào tập đầu tiên chưa được xử lý
+            if (!targetEpisode && searchNum === null) {
+                // Nếu phim chỉ có 1 tập → gán luôn
+                if (episodes.length === 1) {
+                    targetEpisode = episodes[0];
+                } else {
+                    // Phim nhiều tập: gán theo thứ tự dòng input có cùng tên
+                    const sameNameLines = lines.filter(l => {
+                        const p = l.trim().split('|');
+                        return p.length >= 2 && p[0].trim().toLowerCase() === epTextLower;
+                    });
+                    const lineIndex = sameNameLines.indexOf(line);
+                    if (lineIndex >= 0 && lineIndex < episodes.length) {
+                        targetEpisode = episodes[lineIndex];
+                    }
+                }
+            }
+
+            if (targetEpisode) {
+                // Gom sources theo episode ID (tránh race condition khi 2 dòng cùng match 1 tập)
+                if (!episodeUpdates.has(targetEpisode.id)) {
+                    episodeUpdates.set(targetEpisode.id, {
+                        episode: targetEpisode,
+                        sources: [...(targetEpisode.sources || [])]
+                    });
+                }
+                const epUpdate = episodeUpdates.get(targetEpisode.id);
                 
-                targetEpisode.sources = sources; // Cập nhật local
+                // Nhận diện loại link: embed hay m3u8
+                const isEmbed = dubbedLink.includes('/player/') || dubbedLink.includes('/embed/') || dubbedLink.includes('player.') || dubbedLink.includes('?url=');
+                const label = isEmbed ? "Lồng tiếng dự phòng" : "Lồng tiếng";
+                const sourceType = isEmbed ? "embed" : "hls";
+                
+                // Xóa nhãn cũ "Lồng tiếng (Embed)" nếu tồn tại (migration sang nhãn mới)
+                epUpdate.sources = epUpdate.sources.filter(s => s.label !== "Lồng tiếng (Embed)");
+
+                // Kiểm tra xem đã có label này chưa
+                const existingIdx = epUpdate.sources.findIndex(s => s.label === label);
+                if (existingIdx !== -1) {
+                    epUpdate.sources[existingIdx].url = dubbedLink;
+                } else {
+                    epUpdate.sources.push({ type: sourceType, url: dubbedLink, label: label });
+                }
+                
                 updatedCount++;
             } else {
                 notFoundCount++;
                 notFoundEps.push(epText);
             }
+        }
+
+        // Gửi 1 update duy nhất cho mỗi tập (đã gom đủ sources)
+        for (const [epId, { episode, sources }] of episodeUpdates) {
+            updatePromises.push(
+                supabase
+                    .from('episodes')
+                    .update({ sources: sources, updated_at: new Date().toISOString() })
+                    .eq('id', epId)
+            );
+            episode.sources = sources; // Cập nhật local
         }
 
         if (updatedCount > 0) {
@@ -3261,7 +3395,8 @@ function addSourceInput(type = "hls", source = "", label = "") {
       { value: "Vietsub", emoji: "🔵", color: "#3498db" },
       { value: "Thuyết minh", emoji: "🟠", color: "#e67e22" },
       { value: "Lồng tiếng", emoji: "🟣", color: "#9b59b6" },
-      { value: "Dự phòng", emoji: "🔴", color: "#e74c3c" }
+      { value: "Dự phòng", emoji: "🔴", color: "#e74c3c" },
+      { value: "Lồng tiếng dự phòng", emoji: "🩷", color: "#e91e8c" }
   ];
   let defaultLabel = label || "Bản gốc";
   
@@ -3272,10 +3407,16 @@ function addSourceInput(type = "hls", source = "", label = "") {
       labelOptions += `<option value="${defaultLabel}" selected>⚪ ${defaultLabel}</option>`;
   }
 
+  // Xác định emoji/màu cho label hiện tại
+  const currentLabelObj = standardLabels.find(l => l.value === defaultLabel);
+  const dotColor = currentLabelObj ? currentLabelObj.color : '#aaa';
+  const dotEmoji = currentLabelObj ? currentLabelObj.emoji : '⚪';
+
   const html = `
-    <div class="source-item" id="source-${id}" style="display: grid; grid-template-columns: 180px 100px 1fr auto; gap: 10px; align-items: center; background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px solid #ddd;">
-        <div>
-            <select class="form-select source-label">
+    <div class="source-item" id="source-${id}" style="display: grid; grid-template-columns: 180px 100px 1fr auto; gap: 10px; align-items: center; background: rgba(255,255,255,0.06); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-color, #444);">
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <span class="source-dot" style="width: 10px; height: 10px; border-radius: 50%; background: ${dotColor}; display: inline-block; flex-shrink: 0;"></span>
+            <select class="form-select source-label" style="flex: 1;">
                 ${labelOptions}
             </select>
         </div>
@@ -3292,7 +3433,7 @@ function addSourceInput(type = "hls", source = "", label = "") {
                 oninput="autoDetectSourceType('${id}')"
                 onpaste="setTimeout(() => autoDetectSourceType('${id}'), 50)">
         </div>
-        <button type="button" class="btn btn-danger btn-sm" onclick="removeSourceInput('${id}')">
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeSourceInput('${id}')" style="border-radius: 50%; width: 34px; height: 34px; padding: 0; display: flex; align-items: center; justify-content: center;">
             <i class="fas fa-trash"></i>
         </button>
     </div>
@@ -3431,9 +3572,9 @@ function openEpisodeModal(index = null) {
 
       // Load Sources
       if (episode.sources && Array.isArray(episode.sources) && episode.sources.length > 0) {
-        // Dữ liệu mới (Multi-source)
+        // Dữ liệu mới (Multi-source) - hỗ trợ cả key 'source' và 'url'
         episode.sources.forEach(src => {
-            addSourceInput(src.type, src.source, src.label);
+            addSourceInput(src.type, src.source || src.url || '', src.label);
         });
       } else {
         // Dữ liệu cũ (Single source) -> Convert sang 1 dòng source
@@ -3479,7 +3620,11 @@ function openEpisodeModal(index = null) {
     document.getElementById("episodeDurationHour").value = "";
     document.getElementById("episodeDurationMinute").value = "";
 
-    // Reset Intro
+    // Reset Intro Begin
+    document.getElementById("introBeginMinute").value = "";
+    document.getElementById("introBeginSecond").value = "";
+    
+    // Reset Intro End
     document.getElementById("introEndMinute").value = "";
     document.getElementById("introEndSecond").value = "";
     
@@ -3504,11 +3649,18 @@ function openEpisodeModal(index = null) {
           const movie = allMovies.find((m) => m.id === movieId);
           const episode = movie?.episodes?.[index];
           if (episode) {
-              const introTime = Number((episode.extra_info && episode.extra_info.intro_end) || episode.intro_end || episode.introEndTime) || 0;
+              // Đọc intro_begin (thời điểm intro bắt đầu)
+              const introBeginTime = Number(episode.intro_begin) || 0;
+              document.getElementById("introBeginMinute").value = introBeginTime > 0 ? Math.floor(introBeginTime / 60) : "";
+              document.getElementById("introBeginSecond").value = introBeginTime > 0 ? (introBeginTime % 60) : "";
+
+              // Đọc intro_end (thời điểm intro kết thúc)
+              const introTime = Number(episode.intro_end || (episode.extra_info && episode.extra_info.intro_end) || episode.introEndTime) || 0;
               document.getElementById("introEndMinute").value = introTime > 0 ? Math.floor(introTime / 60) : "";
               document.getElementById("introEndSecond").value = introTime > 0 ? (introTime % 60) : "";
 
-              const outroTime = Number((episode.extra_info && episode.extra_info.outro_start) || episode.outro_start || episode.outroStartTime) || 0;
+              // Đọc outro (intro_start trong schema cũ)
+              const outroTime = Number(episode.intro_start || (episode.extra_info && episode.extra_info.outro_start) || episode.outroStartTime) || 0;
               document.getElementById("outroStartMinute").value = outroTime > 0 ? Math.floor(outroTime / 60) : "";
               document.getElementById("outroStartSecond").value = outroTime > 0 ? (outroTime % 60) : "";
           }
@@ -3545,6 +3697,12 @@ async function handleEpisodeSubmit(event) {
       return;
   }
 
+  const introBegin = (() => {
+      const m = parseInt(document.getElementById("introBeginMinute").value) || 0;
+      const s = parseInt(document.getElementById("introBeginSecond").value) || 0;
+      return (m * 60) + s;
+  })();
+
   const introEnd = (() => {
       const m = parseInt(document.getElementById("introEndMinute").value) || 0;
       const s = parseInt(document.getElementById("introEndSecond").value) || 0;
@@ -3557,6 +3715,7 @@ async function handleEpisodeSubmit(event) {
       return (m * 60) + s;
   })();
 
+  // Lưu intro_end & intro_start dạng cột riêng (khớp schema bảng episodes Supabase)
   const episodeData = {
     title: document.getElementById("episodeNumber").value, // Đổi từ episode_name -> title
     duration: (() => {
@@ -3566,10 +3725,9 @@ async function handleEpisodeSubmit(event) {
     })(),
     quality: document.getElementById("episodeQuality").value,
     sources: sources,
-    extra_info: {
-        intro_end: introEnd,
-        outro_start: outroStart
-    },
+    intro_begin: introBegin,
+    intro_end: introEnd,
+    intro_start: outroStart,
     updated_at: new Date().toISOString()
   };
 
@@ -3616,16 +3774,13 @@ async function handleEpisodeSubmit(event) {
     const applyIntroToAll = document.getElementById("applyIntroToAll")?.checked;
     if (applyIntroToAll && episodes.length > 0) {
         const { data: currentEpisodes, error: fetchErr } = await supabase.from('episodes')
-            .select('id, extra_info')
+            .select('id')
             .eq('movie_id', selectedMovieForEpisodes);
             
         if (!fetchErr && currentEpisodes) {
             for (const ep of currentEpisodes) {
-                const newExtraInfo = ep.extra_info || {};
-                newExtraInfo.intro_end = introEnd;
-                newExtraInfo.outro_start = outroStart;
                 await supabase.from('episodes')
-                    .update({ extra_info: newExtraInfo })
+                    .update({ intro_begin: introBegin, intro_end: introEnd, intro_start: outroStart })
                     .eq('id', ep.id);
             }
             console.log("✅ Đã áp dụng Intro/Outro cho tất cả tập");
@@ -3839,25 +3994,36 @@ function initAdminIntroPlayer(type, source) {
     const wrapper = document.getElementById("adminIntroPlayerWrapper");
     if (!wrapper) return;
 
-    // Cleanup cũ
-    wrapper.innerHTML = "";
+    // Cleanup cũ (chỉ xóa video/iframe, giữ lại overlay + controls)
+    const oldVideo = wrapper.querySelector("video");
+    const oldIframe = wrapper.querySelector("iframe");
+    const oldPlaceholder = wrapper.querySelector("#adminIntroPlayerPlaceholder");
+    if (oldVideo) oldVideo.remove();
+    if (oldIframe) oldIframe.remove();
+    if (oldPlaceholder) oldPlaceholder.remove();
     adminPreviewPlayer = null;
 
+    // Ẩn overlay + controls khi chưa có source
+    const overlay = document.getElementById("adminPreviewOverlay");
+    const controls = document.getElementById("adminPreviewControls");
+    
     if (!source) {
-        wrapper.innerHTML = `
-            <div id="adminIntroPlayerPlaceholder" style="text-align: center; color: #666;">
-                <i class="fas fa-video-slash fa-2x mb-2"></i>
-                <p style="font-size: 0.9rem;">Chưa có video. Hãy nhập link video bên trên.</p>
-            </div>
-        `;
+        const placeholder = document.createElement("div");
+        placeholder.id = "adminIntroPlayerPlaceholder";
+        placeholder.style.cssText = "text-align: center; color: #666;";
+        placeholder.innerHTML = `<i class="fas fa-video-slash fa-2x mb-2"></i><p style="font-size: 0.9rem;">Chưa có video. Hãy nhập link video bên trên.</p>`;
+        wrapper.insertBefore(placeholder, overlay);
+        if (overlay) overlay.style.display = "none";
+        if (controls) controls.style.display = "none";
         return;
     }
 
     if (type === "youtube") {
         const videoId = extractYouTubeId(source) || source;
-        wrapper.innerHTML = `<div id="adminYoutubePreview"></div>`;
+        const ytDiv = document.createElement("div");
+        ytDiv.id = "adminYoutubePreview";
+        wrapper.insertBefore(ytDiv, overlay);
         
-        // Cần đảm bảo YT API đã load (Thường đã load ở detail.js hoặc trang chủ)
         if (window.YT && window.YT.Player) {
             adminPreviewPlayer = new YT.Player('adminYoutubePreview', {
                 height: '100%',
@@ -3866,26 +4032,143 @@ function initAdminIntroPlayer(type, source) {
                 playerVars: { 'autoplay': 0, 'controls': 1 }
             });
         } else {
-            wrapper.innerHTML = `<iframe width="100%" height="100%" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
+            const iframe = document.createElement("iframe");
+            iframe.src = `https://www.youtube.com/embed/${videoId}`;
+            iframe.style.cssText = "width:100%;height:100%;border:0;";
+            iframe.allowFullscreen = true;
+            wrapper.insertBefore(iframe, overlay);
         }
-    } else if (type === "hls") {
+        // YouTube dùng controls riêng, ẩn custom
+        if (overlay) overlay.style.display = "none";
+        if (controls) controls.style.display = "none";
+    } else if (type === "hls" || type === "mp4") {
         const video = document.createElement("video");
-        video.style.width = "100%";
-        video.style.height = "100%";
-        video.controls = true;
-        wrapper.appendChild(video);
+        video.style.cssText = "width: 100%; height: 100%; position: absolute; top: 0; left: 0;";
+        video.controls = false; // Tắt native controls, dùng custom
+        wrapper.insertBefore(video, overlay);
         adminPreviewPlayer = video;
 
-        if (Hls.isSupported()) {
-            const hls = new Hls();
-            hls.loadSource(source);
-            hls.attachMedia(video);
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        if (type === "hls") {
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(source);
+                hls.attachMedia(video);
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = source;
+            }
+        } else {
             video.src = source;
         }
+
+        // Hiện overlay + custom controls
+        if (overlay) overlay.style.display = "";
+        if (controls) controls.style.display = "";
+
+        // Gắn event listener cho custom controls
+        setupAdminPreviewControls(video);
     } else if (type === "embed") {
-        wrapper.innerHTML = `<iframe src="${source}" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
-        // Với Iframe thường không lấy được currentTime trừ khi cùng origin hoặc hỗ trợ API
+        const iframe = document.createElement("iframe");
+        iframe.src = source;
+        iframe.style.cssText = "width:100%;height:100%;border:0;";
+        iframe.allowFullscreen = true;
+        wrapper.insertBefore(iframe, overlay);
+        // Embed dùng controls riêng
+        if (overlay) overlay.style.display = "none";
+        if (controls) controls.style.display = "none";
+    }
+}
+
+/** Gắn event listener cho custom controls (seekbar, timeupdate) */
+function setupAdminPreviewControls(video) {
+    const seekbar = document.getElementById("adminPreviewSeekbar");
+    const timeDisplay = document.getElementById("adminPreviewTimeDisplay");
+    const secondDisplay = document.getElementById("adminPreviewSecondDisplay");
+    if (!seekbar || !video) return;
+
+    // Format thời gian mm:ss
+    function fmt(s) {
+        const m = Math.floor(s / 60);
+        const sec = Math.floor(s % 60);
+        return `${m < 10 ? '0' + m : m}:${sec < 10 ? '0' + sec : sec}`;
+    }
+
+    // Cập nhật seekbar khi video đang phát (throttle: chỉ khi giây thay đổi)
+    let _lastSec = -1;
+    video.addEventListener("timeupdate", function() {
+        if (video.duration && !seekbar._dragging) {
+            const curSec = Math.floor(video.currentTime);
+            if (curSec === _lastSec) return; // Bỏ qua nếu chưa đổi giây
+            _lastSec = curSec;
+            seekbar.max = Math.floor(video.duration);
+            seekbar.value = curSec;
+            if (timeDisplay) timeDisplay.textContent = `${fmt(video.currentTime)} / ${fmt(video.duration)}`;
+            if (secondDisplay) secondDisplay.textContent = `${curSec}s`;
+        }
+    });
+
+    // Khi video load xong metadata → set max
+    video.addEventListener("loadedmetadata", function() {
+        seekbar.max = Math.floor(video.duration);
+    });
+
+    // Kéo thanh seekbar → tua video
+    seekbar.addEventListener("mousedown", () => { seekbar._dragging = true; });
+    seekbar.addEventListener("touchstart", () => { seekbar._dragging = true; }, { passive: true });
+    seekbar.addEventListener("input", function() {
+        video.currentTime = Number(seekbar.value);
+        if (timeDisplay) timeDisplay.textContent = `${fmt(video.currentTime)} / ${fmt(video.duration || 0)}`;
+        if (secondDisplay) secondDisplay.textContent = `${Math.floor(video.currentTime)}s`;
+    });
+    seekbar.addEventListener("mouseup", () => { seekbar._dragging = false; });
+    seekbar.addEventListener("touchend", () => { seekbar._dragging = false; });
+    seekbar.addEventListener("change", function() {
+        seekbar._dragging = false;
+        video.currentTime = Number(seekbar.value);
+    });
+
+    // Click vào vùng video (ngoài nút) cũng toggle play
+    video.addEventListener("click", function() {
+        adminPreviewTogglePlay();
+    });
+
+    // Update icon play/pause
+    video.addEventListener("play", () => {
+        const icon = document.querySelector("#adminPreviewPlayBtn i");
+        if (icon) icon.className = "fas fa-pause";
+    });
+    video.addEventListener("pause", () => {
+        const icon = document.querySelector("#adminPreviewPlayBtn i");
+        if (icon) icon.className = "fas fa-play";
+    });
+}
+
+/** Tua ±N giây cho admin preview */
+window.adminPreviewSkip = function(seconds) {
+    if (adminPreviewPlayer instanceof HTMLVideoElement) {
+        adminPreviewPlayer.currentTime = Math.max(0, Math.min(adminPreviewPlayer.duration || 0, adminPreviewPlayer.currentTime + seconds));
+    }
+}
+
+/** Toggle Play/Pause cho admin preview */
+window.adminPreviewTogglePlay = function() {
+    if (adminPreviewPlayer instanceof HTMLVideoElement) {
+        if (adminPreviewPlayer.paused) {
+            adminPreviewPlayer.play().catch(() => {});
+        } else {
+            adminPreviewPlayer.pause();
+        }
+    }
+}
+
+/** Bật/Tắt toàn màn hình cho admin preview */
+window.adminPreviewFullscreen = function() {
+    const wrapper = document.getElementById("adminIntroPlayerWrapper");
+    if (!wrapper) return;
+    
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+        (wrapper.requestFullscreen || wrapper.webkitRequestFullscreen).call(wrapper);
     }
 }
 
@@ -3916,10 +4199,14 @@ function getCurrentTimeFromPreview() {
     // [NEW] Xác định mục tiêu đang chọn (Intro hay Outro)
     const target = document.querySelector('input[name="timeCaptureTarget"]:checked')?.value || 'intro';
     
-    if (target === 'intro') {
+    if (target === 'introStart') {
+        document.getElementById("introBeginMinute").value = mins;
+        document.getElementById("introBeginSecond").value = secs;
+        showNotification(`Đã lấy thời gian Intro bắt đầu: ${mins}p ${secs}s`, "success");
+    } else if (target === 'intro') {
         document.getElementById("introEndMinute").value = mins;
         document.getElementById("introEndSecond").value = secs;
-        showNotification(`Đã lấy thời gian Intro: ${mins}p ${secs}s`, "success");
+        showNotification(`Đã lấy thời gian Intro kết thúc: ${mins}p ${secs}s`, "success");
     } else {
         document.getElementById("outroStartMinute").value = mins;
         document.getElementById("outroStartSecond").value = secs;
@@ -3935,7 +4222,10 @@ function previewSkipIntro() {
     const target = document.querySelector('input[name="timeCaptureTarget"]:checked')?.value || 'intro';
     let mins, secs;
 
-    if (target === 'intro') {
+    if (target === 'introStart') {
+        mins = parseInt(document.getElementById("introBeginMinute").value) || 0;
+        secs = parseInt(document.getElementById("introBeginSecond").value) || 0;
+    } else if (target === 'intro') {
         mins = parseInt(document.getElementById("introEndMinute").value) || 0;
         secs = parseInt(document.getElementById("introEndSecond").value) || 0;
     } else {
@@ -3946,7 +4236,8 @@ function previewSkipIntro() {
     const totalSeconds = (mins * 60) + secs;
 
     if (totalSeconds <= 0) {
-        showNotification(`Vui lòng nhập thời gian ${target === 'intro' ? 'kết thúc intro' : 'bắt đầu outro'} trước!`, "warning");
+        const labels = { introStart: 'bắt đầu intro', intro: 'kết thúc intro', outro: 'bắt đầu outro' };
+        showNotification(`Vui lòng nhập thời gian ${labels[target] || 'mốc thời gian'} trước!`, "warning");
         return;
     }
 
@@ -4821,16 +5112,25 @@ function renderAdminMoviesList(movies) {
       }
       const countryInfo = getCountryInfo(countryDisplayName);
       
-      // Tính toán số tập cho cột Tình trạng
+      // Tính toán số tập cho cột Tình trạng (dữ liệu thật từ DB)
       const currentEps = movie._episodeCount || (movie.episodes ? movie.episodes.length : 0);
-      const totalEps = movie.totalEpisodes || movie.total_episodes || "??";
+      const totalEps = movie.totalEpisodes || movie.total_episodes || null;
       let episodeStatus = "";
       
-      if (movie.type === "series") {
-        const isFull = totalEps !== "??" && currentEps >= parseInt(totalEps);
-        episodeStatus = `<span style="color: ${isFull ? '#2ecc71' : '#f1c40f'}; font-weight: 600;">${currentEps}/${totalEps} tập</span>`;
+      if (currentEps === 0) {
+        // Phim chưa có tập nào → cảnh báo đỏ
+        episodeStatus = '<span style="color: #e74c3c; font-weight: 600; font-size: 0.85rem;"><i class="fas fa-exclamation-triangle" style="margin-right: 4px;"></i>Chưa có tập</span>';
+      } else if (movie.type === "series") {
+        if (totalEps && currentEps >= parseInt(totalEps)) {
+          // Phim bộ đã hoàn tất
+          episodeStatus = `<span style="color: #2ecc71; font-weight: 600;">${currentEps}/${totalEps} tập ✓</span>`;
+        } else {
+          // Phim bộ đang chiếu
+          episodeStatus = `<span style="color: #f1c40f; font-weight: 600;">${currentEps}/${totalEps || '??'} tập</span>`;
+        }
       } else {
-        episodeStatus = '<span style="color: #e67e22; font-weight: 600;">Full</span>';
+        // Phim lẻ đã có tập
+        episodeStatus = '<span style="color: #2ecc71; font-weight: 600;">Full</span>';
       }
 
       const typeBadge =
@@ -4865,10 +5165,10 @@ function renderAdminMoviesList(movies) {
         <tr>
           <td><img src="${poster}" class="admin-table-poster" style="width: 50px; height: 75px; object-fit: cover; border-radius: 4px;" onerror="this.onerror=null; this.src='https://placehold.co/50x75/2a2a3a/FFFFFF?text=NO'"></td>
           <td>
-            <div style="display: flex; flex-direction: column;">
-                <strong style="font-size: 1.05rem;">${movie.title}</strong>
-                <small class="text-muted" style="font-size: 0.85rem; margin-top: 2px;">${movie.originTitle || movie.origin_title || movie.originalTitle || ""}</small>
-                <small class="text-muted" style="font-size: 0.75rem; opacity: 0.6;">ID: ${movie.id}</small>
+            <div style="display: flex; flex-direction: column; max-width: 220px;">
+                <strong style="font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${movie.title}">${movie.title}</strong>
+                <small class="text-muted" style="font-size: 0.85rem; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${movie.originTitle || movie.origin_title || movie.originalTitle || ""}</small>
+                <small class="text-muted" style="font-size: 0.75rem; opacity: 0.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${movie.id}">ID: ${movie.id}</small>
             </div>
           </td>
           <td>
@@ -6215,6 +6515,28 @@ window.updateImagePreview = function(url, previewId) {
 }
 
 /**
+ * Hoán đổi link Poster ↔ Background (khi API trả ảnh sai vị trí)
+ */
+window.swapPosterBackground = function() {
+    const posterInput = document.getElementById("moviePoster");
+    const bgInput = document.getElementById("movieBackground");
+    if (!posterInput || !bgInput) return;
+
+    // Hoán đổi giá trị
+    const temp = posterInput.value;
+    posterInput.value = bgInput.value;
+    bgInput.value = temp;
+
+    // Cập nhật preview 2 ảnh
+    if (typeof window.updateImagePreview === 'function') {
+        window.updateImagePreview(posterInput.value, 'posterPreview');
+        window.updateImagePreview(bgInput.value, 'bgPreview');
+    }
+
+    showNotification("Đã hoán đổi Poster ↔ Background!", "success");
+}
+
+/**
  * Tải ảnh lên Cloudinary và cập nhật URL vào input tương ứng
  * @param {HTMLInputElement} input - Input file vừa chọn
  * @param {string} targetUrlId - ID của ô input nhận URL ảnh
@@ -6341,6 +6663,51 @@ window.uploadImageToR2 = function(input, targetUrlId, previewId, folderMode = 'p
 };
 
 /**
+ * Queue ảnh từ URL để upload lên Cloudflare R2 khi bấm Lưu
+ * Chỉ xếp hàng đợi + preview, KHÔNG upload ngay
+ * @param {string} targetUrlId - ID input chứa URL ảnh (moviePoster / movieBackground)
+ * @param {string} previewId - ID container preview ảnh
+ * @param {string} folderMode - Loại ảnh: 'poster' hoặc 'background'
+ */
+window.reuploadFromUrlToR2 = function(targetUrlId, previewId, folderMode) {
+    const targetInput = document.getElementById(targetUrlId);
+    if (!targetInput) return;
+
+    const imageUrl = targetInput.value.trim();
+    if (!imageUrl || imageUrl.startsWith("[File")) {
+        showNotification("Chưa có link ảnh để tải lên!", "warning");
+        return;
+    }
+
+    // Nếu ảnh đã trên Cloudflare R2 thì không cần re-upload
+    if (imageUrl.includes("workers.dev") || imageUrl.includes(".r2.dev")) {
+        showNotification("Ảnh này đã nằm trên Cloudflare R2 rồi!", "info");
+        return;
+    }
+
+    // Đưa URL vào hàng đợi R2 (flag fromUrl để phân biệt với file upload)
+    window.pendingR2Uploads = window.pendingR2Uploads || {};
+    window.pendingR2Uploads[targetUrlId] = { fromUrl: true, url: imageUrl, folderMode, previewId };
+
+    // Đánh dấu input đang chờ upload
+    targetInput.value = `[File R2 chờ tải lên] ${imageUrl.split('/').pop().split('?')[0]}`;
+    targetInput.type = "text";
+
+    // Cập nhật badge preview
+    window.updateSourceIndicator("[File R2 chờ tải lên]", previewId);
+
+    // Nếu admin sửa tay URL thì hủy hàng đợi
+    targetInput.oninput = () => {
+        if (!targetInput.value.startsWith("[File R2 chờ tải lên]")) {
+            delete window.pendingR2Uploads[targetUrlId];
+            targetInput.oninput = null;
+        }
+    };
+
+    showNotification("Ảnh đã sẵn sàng! Bấm Lưu để tải lên Cloudflare R2. 🟠", "info");
+};
+
+/**
  * Thực sự upload tất cả ảnh đang chờ trong hàng đợi R2 lên Cloudflare Worker.
  * Gọi khi admin bấm nút Lưu trong form phim.
  * @returns {Promise<boolean>} true nếu upload hết thành công, false nếu có lỗi
@@ -6350,42 +6717,63 @@ window.uploadPendingR2Images = async function() {
     return true; // Không có gì cần upload R2
   }
 
-  const WORKER_URL = "https://r2-uploader.thinhnd-2003.workers.dev/upload";
+  const WORKER_BASE = "https://r2-uploader.thinhnd-2003.workers.dev";
   showLoading(true, "Đang tải ảnh lên Cloudflare R2...");
 
   try {
     // Lấy thông tin phim từ form để xây dựng folder + filename
-    const movieId = document.getElementById('movieId')?.value || '';
+    const movieId = document.getElementById('movieId')?.value || window._preGeneratedMovieId || '';
     const movieTitle = document.getElementById('movieTitle')?.value || '';
     const titleSlug = removeVietnameseDiacritics(movieTitle);
 
-    for (const [targetUrlId, { file, folderMode, previewId }] of Object.entries(window.pendingR2Uploads)) {
-      // Xây dựng folder và filename theo cấu trúc: movies/{id}_{ten_khong_dau}/{ten_khong_dau}_{poster|background}.ext
+    for (const [targetUrlId, entry] of Object.entries(window.pendingR2Uploads)) {
+      const { folderMode, previewId } = entry;
+      
+      // Xây dựng folder và filename theo cấu trúc: movies/{ten_khong_dau}/{ten_khong_dau}_{poster|background}.ext
       let folder = folderMode; // Fallback nếu không có thông tin phim
       let customFilename = null;
 
-      if (movieId && titleSlug) {
-        // Trích xuất chỉ phần số từ movieId (VD: "chuyennhacha-567" → "567")
-        const numericId = movieId.replace(/[^0-9]/g, '') || movieId;
-        folder = `movies/${numericId}_${titleSlug}`;
-        // Lấy extension từ file gốc
+      if (titleSlug) {
+        // Dùng movieId + titleSlug nếu có ID, hoặc chỉ titleSlug nếu phim mới
+        const numericId = movieId ? (movieId.replace(/[^0-9]/g, '') || movieId) : '';
+        folder = numericId ? `movies/${numericId}_${titleSlug}` : `movies/${titleSlug}`;
+      }
+
+      let response;
+
+      if (entry.fromUrl) {
+        // === Upload từ URL: gọi Worker endpoint /upload-from-url ===
+        const urlFilename = entry.url.split('/').pop().split('?')[0];
+        const ext = urlFilename.match(/\.(jpg|jpeg|png|gif|webp|avif)$/i)?.[1] || 'jpg';
+        customFilename = titleSlug ? `${titleSlug}_${folderMode}.${ext}` : null;
+
+        response = await fetch(WORKER_BASE + "/upload-from-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: entry.url,
+            folder: folder,
+            customFilename: customFilename
+          })
+        });
+      } else {
+        // === Upload file từ máy: gọi Worker endpoint /upload (flow cũ) ===
+        const file = entry.file;
         const ext = file.name.split('.').pop() || 'jpg';
-        customFilename = `${titleSlug}_${folderMode}.${ext}`;
-      }
+        customFilename = titleSlug ? `${titleSlug}_${folderMode}.${ext}` : null;
 
-      const formData = new FormData();
-      // Nếu có tên file tùy chỉnh, dùng nó làm tên file upload
-      formData.append("file", file, customFilename || file.name);
-      formData.append("folder", folder);
-      // Gửi tên file tùy chỉnh để Worker dùng thay vì sinh random
-      if (customFilename) {
-        formData.append("customFilename", customFilename);
-      }
+        const formData = new FormData();
+        formData.append("file", file, customFilename || file.name);
+        formData.append("folder", folder);
+        if (customFilename) {
+          formData.append("customFilename", customFilename);
+        }
 
-      const response = await fetch(WORKER_URL, {
-        method: "POST",
-        body: formData
-      });
+        response = await fetch(WORKER_BASE + "/upload", {
+          method: "POST",
+          body: formData
+        });
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -6406,7 +6794,7 @@ window.uploadPendingR2Images = async function() {
       // Cập nhật preview và badge thành Cloudflare chính thức
       window.updateSourceIndicator(downloadURL, previewId);
 
-      console.log(`✅ R2 Upload OK [${folder}/${customFilename || file.name}]: ${downloadURL}`);
+      console.log(`✅ R2 Upload OK [${folder}/${customFilename || 'auto'}]: ${downloadURL}`);
     }
 
     // Xóa hàng đợi sau khi upload xong
@@ -7229,7 +7617,7 @@ window.initSmartActorsFromCastString = function(castString, castData = []) {
                 });
             } else {
                 window.selectedMovieActors.push({
-                    id: 'fallback-' + Date.now() + Math.random(),
+                    id: 'fallback-' + Date.now().toString().slice(-8) + Math.random(),
                     name: name,
                     avatar: null,
                     isFallback: true
@@ -7309,7 +7697,7 @@ async function autoCreateNewActors(castString) {
         } catch (err) {
             console.error(`Lỗi tạo diễn viên mới "${name}":`, err);
             // Fallback nếu lỗi tạo
-            finalCastData.push({ id: 'fallback-' + Date.now(), name: name });
+            finalCastData.push({ id: 'fallback-' + Date.now().toString().slice(-8), name: name });
         }
     }
     
@@ -7518,7 +7906,7 @@ window.addFallbackActorToMovie = function(name) {
     if (window.selectedMovieActors.some(a => a.name.toLowerCase() === trimmed.toLowerCase())) return;
     
     window.selectedMovieActors.push({
-        id: 'fallback-' + Date.now() + Math.random(),
+        id: 'fallback-' + Date.now().toString().slice(-8) + Math.random(),
         name: trimmed,
         avatar: null,
         isFallback: true
@@ -7626,7 +8014,7 @@ window.fetchActorsFromRapChieuPhim = async function() {
             
             // Tạo ID từ slug
             const baseId = act.slug || createActorIdFromName(name);
-            const newId = `${baseId}-${Math.floor(Math.random() * 1000)}`;
+            const newId = `${baseId}-${Date.now()}`;
             
             const actorData = {
                 id: newId,
@@ -8866,7 +9254,7 @@ async function saveBulkEpisodeChanges() {
             if (newQuality) up.quality = newQuality;
             if (newDuration) up.duration = newDuration;
             if (newIntroEndTime !== null) up.intro_end = newIntroEndTime;
-            if (newOutroStartTime !== null) up.outro_start = newOutroStartTime;
+            if (newOutroStartTime !== null) up.intro_start = newOutroStartTime;
             up.updated_at = new Date().toISOString();
             return up;
         });

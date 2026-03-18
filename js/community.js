@@ -128,7 +128,23 @@ const WALLPAPER_GALLERY = [
     "images/backgroundChat/bg3.png",
     "images/backgroundChat/bg4.png",
     "images/backgroundChat/bg5.png",
-    "images/backgroundChat/bg6.png"
+    "images/backgroundChat/bg6.png",
+    "images/backgroundChat/bg7.png",
+    "images/backgroundChat/bg8.png",
+    "images/backgroundChat/bg9.png",
+    "images/backgroundChat/bg10.png",
+    "images/backgroundChat/bg11.png",
+    "images/backgroundChat/bg12.png",
+    "images/backgroundChat/bg13.png",
+    "images/backgroundChat/bg14.png",
+    "images/backgroundChat/bg15.png",
+    "images/backgroundChat/bg16.png",
+    "images/backgroundChat/bg17.png",
+    "images/backgroundChat/bg18.png",
+    "images/backgroundChat/bg19.png",
+    "images/backgroundChat/bg20.png",
+    "images/backgroundChat/bg21.png",
+    "images/backgroundChat/bg22.png"
 ];
 
 // Biến lưu trạng thái tạm thời cho Wallpaper Preview
@@ -348,7 +364,7 @@ async function initCommunity() {
     // Khởi tạo tính năng kéo cho Lightbox
     initLightBoxDrag();
 
-    // [MỚI] Tải danh sách chat ngay từ đầu để sẵn sàng dữ liệu chặn cho Sidebar/Real-time
+    // [MỚI] Tải danh sách chat ngay từ đầu để sẵn sàng dữ liệu
     if (currentUser) {
         loadChatList().catch(err => console.error("Lỗi loadChatList ban đầu:", err));
     }
@@ -450,7 +466,12 @@ function switchCommView(viewName, skipRender = false) {
                 if (welcomeEl) welcomeEl.style.display = "flex";
                 if (contentEl) contentEl.style.display = "none";
             }
-            loadChatList(); // Luôn load danh sách chat khi vào tab Chat
+            // Mobile/Tablet: lần đầu vào CineChat → hiện banner. PC: load chat list bình thường
+            if (window.innerWidth <= 1024 && !window._cinechatBannerDismissed) {
+                showCineChatBanner();
+            } else {
+                loadChatList();
+            }
         } else if (viewName === 'friends') {
             const el = document.getElementById("commFeedView");
             if (el) {
@@ -491,6 +512,70 @@ function closeChatConversation() {
     const layoutEl = document.getElementById("commChatView");
     if (layoutEl) {
         layoutEl.classList.remove('chat-conversation-open');
+    }
+}
+
+/**
+ * Bấm vào CineChat → hiện welcome banner (có animation) trong vùng danh sách chat (sidebar)
+ */
+function showCineChatBanner() {
+    // Chỉ hiện banner trên mobile/tablet
+    if (window.innerWidth > 1024) return;
+    
+    const chatList = document.getElementById("commChatList");
+    if (!chatList) return;
+    
+    // Nếu banner đang hiện → đóng lại
+    if (chatList.querySelector('.cinechat-sidebar-banner')) {
+        closeCineChatBanner();
+        return;
+    }
+    
+    // Lưu nội dung chat list hiện tại (nếu có) để khôi phục nhanh
+    const currentHTML = chatList.innerHTML.trim();
+    if (currentHTML && !currentHTML.includes('cinechat-sidebar-banner')) {
+        chatList._savedHTML = currentHTML;
+    }
+    
+    // Clone nội dung trailer gốc (có animation)
+    const trailerSrc = document.querySelector('#commChatWelcome .cinechat-trailer');
+    const trailerClone = trailerSrc ? trailerSrc.cloneNode(true) : null;
+    
+    // Tạo wrapper cho banner trong sidebar
+    chatList.innerHTML = '';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'cinechat-sidebar-banner';
+    
+    // Nút đóng đẹp góc phải trên
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'cinechat-banner-close';
+    closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+    closeBtn.title = 'Quay lại danh sách';
+    closeBtn.onclick = closeCineChatBanner;
+    
+    wrapper.appendChild(closeBtn);
+    if (trailerClone) {
+        wrapper.appendChild(trailerClone);
+    }
+    chatList.appendChild(wrapper);
+}
+
+/**
+ * Đóng banner → khôi phục danh sách chat
+ * Nếu có HTML đã lưu → khôi phục ngay (nhanh). Nếu không → gọi loadChatList (lần đầu)
+ */
+function closeCineChatBanner() {
+    window._cinechatBannerDismissed = true;
+    const chatList = document.getElementById("commChatList");
+    if (!chatList) return;
+    
+    if (chatList._savedHTML) {
+        // Có HTML lưu sẵn → khôi phục ngay, không lag
+        chatList.innerHTML = chatList._savedHTML;
+    } else {
+        // Lần đầu (chưa có HTML) → cần load từ DB
+        chatList.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;padding:40px;"><i class="fas fa-spinner fa-spin" style="font-size:1.5rem;color:var(--accent-primary,#4fb8ff);"></i></div>';
+        loadChatList();
     }
 }
 
@@ -644,6 +729,27 @@ function openPostImageViewer(postId, startIndex = 0) {
     };
 
     renderViewer();
+
+    // Hỗ trợ vuốt (swipe) để chuyển ảnh trên mobile
+    let touchStartX = 0;
+    let touchEndX = 0;
+    viewer.addEventListener('touchstart', (e) => {
+        touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+    viewer.addEventListener('touchend', (e) => {
+        touchEndX = e.changedTouches[0].screenX;
+        const diff = touchStartX - touchEndX;
+        // Ngưỡng vuốt tối thiểu 50px
+        if (Math.abs(diff) > 50) {
+            if (diff > 0) {
+                // Vuốt sang trái → ảnh tiếp theo
+                window.navigatePostViewer(1);
+            } else {
+                // Vuốt sang phải → ảnh trước đó
+                window.navigatePostViewer(-1);
+            }
+        }
+    }, { passive: true });
 }
 
 /**
@@ -1938,6 +2044,9 @@ function scrollToMsg(msgId) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         el.classList.add('comm-msg-highlight');
         setTimeout(() => el.classList.remove('comm-msg-highlight'), 1500);
+    } else {
+        // Tin nhắn cũ chưa được tải (ngoài 50 tin nhắn gần nhất)
+        showNotification('Tin nhắn này đã quá cũ, không thể cuộn đến', 'info');
     }
 }
 
@@ -3727,6 +3836,7 @@ function renderMessages(messages) {
             </div>
         `;
     }).join("");
+
 }
 
 function scrollToBottomChat() {
@@ -4373,6 +4483,11 @@ function subscribeToChat(targetUserId) {
                         }
                     }
                 }
+                
+                // Realtime sync ghim: khi người kia ghim/bỏ ghim → reload banner
+                if (isOurChat && msg.is_pinned !== undefined) {
+                    loadPinnedMessages();
+                }
                 return;
             }
 
@@ -4420,7 +4535,7 @@ function subscribeToChat(targetUserId) {
                             // Xử lý nội dung đã tập trung vào parseMessageContent
                             let displayContent = msg.content || "";
 
-                            container.insertAdjacentHTML('beforeend', `
+                            const rtMsgHtml = `
                                 <div class="comm-msg received ${msg.status === 'recalled' ? 'recalled-style' : ''}" id="msg-${msg.id}">
                                     <div class="comm-msg-body-wrapper">
                                         <div class="comm-msg-bubble">
@@ -4442,7 +4557,8 @@ function subscribeToChat(targetUserId) {
                                     </div>
                                     <div class="comm-msg-time">${time}</div>
                                 </div>
-                            `);
+                            `;
+                            container.insertAdjacentHTML('beforeend', rtMsgHtml);
                             scrollToBottomChat();
                         }
                     }
@@ -4880,7 +4996,8 @@ function showReplyBar() {
         bar = document.createElement("div");
         bar.id = "commChatReplyBar";
         bar.className = "comm-chat-reply-bar";
-        inputArea.parentNode.insertBefore(bar, inputArea);
+        // Đặt reply bar BÊN TRONG input area (đầu tiên) để không bị clip bởi overflow
+        inputArea.insertBefore(bar, inputArea.firstChild);
     }
 
     bar.innerHTML = `
@@ -4894,6 +5011,13 @@ function showReplyBar() {
         <button class="reply-cancel" onclick="cancelReply()"><i class="fas fa-times"></i></button>
     `;
     bar.classList.add('active');
+    // Cuộn xuống cuối khi reply bar hiện
+    const msgContainer = document.getElementById("commChatMessages");
+    if (msgContainer) {
+        setTimeout(() => {
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }, 50);
+    }
 }
 
 function cancelReply() {
@@ -6434,7 +6558,21 @@ function endCallLogic() {
     document.getElementById("remoteVideo").srcObject = null;
 }
 
-// --- PINNED MESSAGES LOGIC ---
+// --- PINNED MESSAGES LOGIC (Shared Pinning - 2 bên cùng thấy) ---
+
+/**
+ * Escape HTML để chống XSS khi render nội dung ghim
+ */
+function escapePinHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+/**
+ * Load danh sách tin nhắn ghim từ DB (shared giữa 2 user)
+ */
 async function loadPinnedMessages() {
     if (!currentChatUserId || !currentUser) return;
     
@@ -6444,52 +6582,64 @@ async function loadPinnedMessages() {
             .select('id, content, sender_id')
             .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${currentChatUserId}),and(sender_id.eq.${currentChatUserId},receiver_id.eq.${currentUser.id})`)
             .eq('is_pinned', true)
-            .order('created_at', { ascending: false })
+            .order('created_at', { ascending: true })
             .limit(5);
 
         if (error) throw error;
         
-        currentPinnedMessages = data.map(msg => ({
+        currentPinnedMessages = (data || []).map(msg => ({
             id: msg.id,
-            content: msg.content,
+            fullContent: msg.content || '', // Nội dung gốc đầy đủ (dùng cho copy)
+            content: (msg.content || '').substring(0, 50) + ((msg.content || '').length > 50 ? '...' : ''), // Cắt ngắn cho hiển thị
             senderName: msg.sender_id === currentUser.id ? (currentUser.display_name || 'Tôi') : (currentChatTarget ? currentChatTarget.display_name : 'Bạn')
         }));
     } catch (e) {
-        console.warn('is_pinned column might not exist. Fallback to LocalStorage.', e.message);
-        const stored = localStorage.getItem(`pinned_${currentUser.id}_${currentChatUserId}`);
-        currentPinnedMessages = stored ? JSON.parse(stored) : [];
+        console.warn('❌ Lỗi load ghim:', e.message);
+        currentPinnedMessages = [];
     }
     renderPinnedBanner();
 }
 
+/**
+ * Ghim hoặc bỏ ghim tin nhắn (lưu vào DB, 2 bên cùng thấy qua realtime)
+ */
 async function togglePinMsg(msgId) {
+    // Đóng dropdown menu tin nhắn
     document.querySelectorAll('.comm-msg-dropdown.active').forEach(d => d.classList.remove('active'));
+    // Đóng menu ghim
+    document.querySelectorAll('.comm-pinned-item-menu.active').forEach(m => m.classList.remove('active'));
 
     const isPinned = currentPinnedMessages.some(m => m.id === msgId);
     
     if (!isPinned) {
+        // Kiểm tra giới hạn
         if (currentPinnedMessages.length >= 5) {
             showNotification('Chỉ được ghim tối đa 5 tin nhắn!', 'warning');
             return;
         }
         
+        // Lấy nội dung tin nhắn từ DOM
         const msgEl = document.getElementById(`msg-${msgId}`);
-        if (!msgEl) return;
+        if (!msgEl) {
+            showNotification('Không tìm thấy tin nhắn để ghim', 'error');
+            return;
+        }
 
         const isMe = msgEl.classList.contains('sent');
         const senderName = isMe ? (currentUser.display_name || 'Tôi') : (currentChatTarget ? currentChatTarget.display_name : 'Bạn');
         
         const bubble = msgEl.querySelector('.comm-msg-bubble');
         let text = '';
-        const replyBody = bubble.querySelector('.comm-msg-reply-body');
+        const replyBody = bubble ? bubble.querySelector('.comm-msg-reply-body') : null;
         if (replyBody) text = replyBody.innerText;
         else {
-            const sticker = bubble.querySelector('img.comm-msg-sticker');
-            text = sticker ? '[Sticker]' : bubble.innerText;
+            const sticker = bubble ? bubble.querySelector('img.comm-msg-sticker') : null;
+            text = sticker ? '[Sticker]' : (bubble ? bubble.innerText : '');
         }
 
         currentPinnedMessages.push({
             id: msgId,
+            fullContent: text, // Nội dung đầy đủ
             content: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
             senderName: senderName
         });
@@ -6499,15 +6649,24 @@ async function togglePinMsg(msgId) {
         showNotification('Đã bỏ ghim', 'info');
     }
     
-    // Save state
+    // Lưu vào DB (shared cho cả 2 user)
     try {
-        await supabase.from('community_messages').update({ is_pinned: !isPinned }).eq('id', msgId);
-    } catch (e) {} // Ignore if column doesn't exist
-    localStorage.setItem(`pinned_${currentUser.id}_${currentChatUserId}`, JSON.stringify(currentPinnedMessages));
+        const { error } = await supabase
+            .from('community_messages')
+            .update({ is_pinned: !isPinned })
+            .eq('id', msgId);
+        if (error) throw error;
+    } catch (e) {
+        console.error('❌ Lỗi cập nhật ghim:', e.message);
+        showNotification('Lỗi khi ghim tin nhắn', 'error');
+    }
     
     renderPinnedBanner();
 }
 
+/**
+ * Render banner ghim tin nhắn (escape HTML chống XSS)
+ */
 function renderPinnedBanner() {
     const banner = document.getElementById('commChatPinnedBanner');
     if (!banner) return;
@@ -6518,7 +6677,7 @@ function renderPinnedBanner() {
         return;
     }
 
-    banner.style.display = 'block'; // Đổi sang block để bao quát list
+    banner.style.display = 'block';
     banner.classList.toggle('expanded', isPinnedListExpanded);
     
     const latestPin = currentPinnedMessages[currentPinnedMessages.length - 1];
@@ -6532,7 +6691,7 @@ function renderPinnedBanner() {
                 </div>
                 <div class="comm-pinned-item-info">
                     <div class="comm-pinned-item-label">Tin nhắn</div>
-                    <div class="comm-pinned-item-content">${msg.senderName}: ${msg.content}</div>
+                    <div class="comm-pinned-item-content">${escapePinHtml(msg.senderName)}: ${escapePinHtml(msg.content)}</div>
                 </div>
                 <button class="comm-btn-unpin" onclick="event.stopPropagation(); togglePinnedItemMenu(event, '${msg.id}')" title="Tùy chọn">
                     <i class="fas fa-ellipsis-h"></i>
@@ -6567,7 +6726,7 @@ function renderPinnedBanner() {
                 </div>
                 <div class="comm-chat-pinned-content" onclick="scrollToMsg('${latestPin.id}')">
                     <div class="comm-chat-pinned-title">Tin nhắn</div>
-                    <div class="comm-chat-pinned-text">${latestPin.senderName}: ${latestPin.content}</div>
+                    <div class="comm-chat-pinned-text">${escapePinHtml(latestPin.senderName)}: ${escapePinHtml(latestPin.content)}</div>
                 </div>
                 <div class="comm-chat-pinned-actions">
                     ${moreBtnHtml}
@@ -6582,6 +6741,9 @@ function renderPinnedBanner() {
     }
 }
 
+/**
+ * Toggle menu tùy chọn trên mỗi tin nhắn ghim
+ */
 function togglePinnedItemMenu(event, msgId) {
     if (event) event.stopPropagation();
     // Đóng tất cả menu ghim khác
@@ -6593,52 +6755,98 @@ function togglePinnedItemMenu(event, msgId) {
     if (menu) menu.classList.toggle('active');
 }
 
+/**
+ * Copy nội dung tin nhắn ghim (fullContent đầy đủ, không bị cắt)
+ */
 function copyPinnedText(msgId) {
     const pin = currentPinnedMessages.find(m => m.id === msgId);
     if (!pin) return;
     
-    navigator.clipboard.writeText(pin.content).then(() => {
+    // Dùng fullContent (đầy đủ) thay vì content (đã cắt 50 ký tự)
+    const textToCopy = pin.fullContent || pin.content;
+    navigator.clipboard.writeText(textToCopy).then(() => {
         showNotification("Đã copy nội dung ghim", "success");
         // Đóng menu
         document.querySelectorAll('.comm-pinned-item-menu.active').forEach(m => m.classList.remove('active'));
+    }).catch(() => {
+        showNotification("Không thể copy", "error");
     });
 }
 
+/**
+ * Mở rộng/thu gọn danh sách ghim (giữ scroll position tin nhắn)
+ */
 function togglePinnedDropdown(event) {
     if (event) event.stopPropagation();
+    
+    // Lưu scroll position trước khi thay đổi layout
+    const msgContainer = document.getElementById("commChatMessages");
+    const prevScrollTop = msgContainer ? msgContainer.scrollTop : 0;
+    const prevScrollHeight = msgContainer ? msgContainer.scrollHeight : 0;
+    
     isPinnedListExpanded = !isPinnedListExpanded;
     renderPinnedBanner();
+    
+    // Khôi phục scroll position sau khi layout thay đổi
+    if (msgContainer) {
+        requestAnimationFrame(() => {
+            const newScrollHeight = msgContainer.scrollHeight;
+            const heightDiff = newScrollHeight - prevScrollHeight;
+            msgContainer.scrollTop = prevScrollTop + heightDiff;
+        });
+    }
 }
+
+// Auto-close menu ghim khi click ngoài
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.comm-pinned-item-menu') && !e.target.closest('.comm-btn-unpin') && !e.target.closest('.comm-chat-pinned-menu-btn')) {
+        document.querySelectorAll('.comm-pinned-item-menu.active').forEach(m => m.classList.remove('active'));
+    }
+});
 
 /**
  * --- LIGHTBOX PRO FUNCTIONS ---
  */
 
 /**
- * Mở trình xem ảnh và quét toàn bộ ảnh trong đoạn chat
+ * Mở trình xem ảnh - hỗ trợ cả từ chat và từ Media Gallery
+ * @param {string} clickedUrl - URL ảnh đã click
+ * @param {number} startIndex - (Tùy chọn) Vị trí bắt đầu trong mảng
+ * @param {Array} imageList - (Tùy chọn) Mảng URL ảnh truyền trực tiếp từ Gallery
  */
-function openImageViewer(clickedUrl) {
+function openImageViewer(clickedUrl, startIndex, imageList) {
     const modal = document.getElementById('commLightBoxModal');
     if (!modal) return;
 
-    // 1. Quét toàn bộ ảnh trong container chat hiện tại
-    const chatContainer = document.getElementById('commChatMessages');
-    if (!chatContainer) return;
+    // Nếu được truyền trực tiếp mảng URL (gọi từ Media Gallery)
+    if (imageList && Array.isArray(imageList) && imageList.length > 0) {
+        currentLightboxImages = imageList;
+        currentLightboxIndex = (typeof startIndex === 'number') ? startIndex : 0;
+        // Tự đóng popup thư viện ảnh khi mở lightbox
+        closeMediaGallery();
+    } else {
+        // Quét toàn bộ ảnh trong container chat hiện tại (gọi từ chat)
+        const chatContainer = document.getElementById('commChatMessages');
+        if (!chatContainer) return;
 
-    const imgElements = Array.from(chatContainer.querySelectorAll('img.comm-msg-image-content'));
-    
-    // 2. Chuyển thành mảng URL (giữ nguyên thứ tự để dễ quản lý, nhưng User muốn Sidebar từ mới đến cũ)
-    // Thứ tự DOM là từ cũ đến mới (trên xuống dưới), vậy mảng gốc là [cũ nhất -> mới nhất]
-    currentLightboxImages = imgElements.map(img => img.src);
-    
-    // 3. Tìm index của ảnh vừa click
-    currentLightboxIndex = currentLightboxImages.indexOf(clickedUrl);
-    if (currentLightboxIndex === -1) {
-        // Nếu không tìm thấy bằng index trực tiếp (có thể do URL absolute/relative), tìm bằng so sánh chuỗi
-        currentLightboxIndex = currentLightboxImages.findIndex(src => src.includes(clickedUrl) || clickedUrl.includes(src));
+        const imgElements = Array.from(chatContainer.querySelectorAll('img.comm-msg-image-content'));
+        
+        // Chuyển thành mảng URL (giữ nguyên thứ tự để dễ quản lý)
+        // Thứ tự DOM là từ cũ đến mới (trên xuống dưới)
+        currentLightboxImages = imgElements.map(img => img.src);
+        
+        // Tìm index của ảnh vừa click
+        currentLightboxIndex = currentLightboxImages.indexOf(clickedUrl);
+        if (currentLightboxIndex === -1) {
+            // Nếu không tìm thấy bằng index trực tiếp, tìm bằng so sánh chuỗi
+            currentLightboxIndex = currentLightboxImages.findIndex(src => src.includes(clickedUrl) || clickedUrl.includes(src));
+        }
     }
 
-    // 4. Hiển thị UI
+    if (currentLightboxImages.length === 0) return;
+    if (currentLightboxIndex < 0) currentLightboxIndex = 0;
+
+    // Hiển thị UI
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
     
@@ -6666,7 +6874,33 @@ function updateLightboxUI() {
     // Reset transform khi chuyển ảnh
     resetLightboxTransform();
 
-    renderLightboxSidebar();
+    // Chỉ cập nhật active thumbnail thay vì render lại toàn bộ sidebar
+    updateLightboxActiveThumbnail();
+}
+
+/**
+ * Cập nhật active thumbnail trong sidebar (không render lại HTML)
+ */
+function updateLightboxActiveThumbnail() {
+    const sidebar = document.getElementById('lightboxThumbnails');
+    if (!sidebar) return;
+
+    // Nếu sidebar chưa có thumbnail nào → render lần đầu
+    if (sidebar.children.length === 0) {
+        renderLightboxSidebar();
+        return;
+    }
+
+    // Bỏ active cũ, thêm active mới
+    const items = sidebar.querySelectorAll('.lightbox-thumb-item');
+    items.forEach(item => item.classList.remove('active'));
+
+    // Tính index trong sidebar (sidebar đảo ngược: mới nhất lên đầu)
+    const reversedIndex = currentLightboxImages.length - 1 - currentLightboxIndex;
+    if (items[reversedIndex]) {
+        items[reversedIndex].classList.add('active');
+        items[reversedIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
 }
 
 /**
@@ -6929,8 +7163,9 @@ async function showChatMediaGallery() {
             return;
         }
 
-        // Tạo danh sách URL để dùng cho lightbox
+        // Lưu danh sách URL vào biến global để lightbox lấy (tránh lỗi encoding inline JSON)
         const imageUrls = data.map(m => m.content.replace('[IMAGE]', '').trim());
+        window._galleryImageUrls = imageUrls;
 
         grid.innerHTML = data.map((msg, idx) => {
             const url = msg.content.replace('[IMAGE]', '').trim();
@@ -6939,7 +7174,7 @@ async function showChatMediaGallery() {
             const timeStr = dateObj.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
             return `
-                <div class="gallery-item" onclick="openImageViewer('${url}', ${idx}, ${JSON.stringify(imageUrls).replace(/"/g, '&quot;')})">
+                <div class="gallery-item" onclick="openImageViewer('${url}', ${idx}, window._galleryImageUrls)">
                     <img src="${url}" loading="lazy">
                     <div class="gallery-item-info">
                         <span class="gallery-item-date">${dateStr}</span>
@@ -7248,9 +7483,11 @@ async function processForward(targetUserId, btn) {
 function openWallpaperModal() {
     const modal = document.getElementById("commWallpaperModal");
     const sidebar = document.getElementById("commChatInfoSidebar");
+    const chatLayout = document.querySelector('.comm-chat-layout');
     
     if (modal) modal.classList.add("active");
     if (sidebar) sidebar.style.visibility = "hidden"; // Ẩn sidebar để modal đè lên hoàn hảo
+    if (chatLayout) chatLayout.classList.add('wallpaper-modal-open'); // Ẩn thanh ghim
     
     // Lưu lại trạng thái hiện tại để có thể Hủy
     const storageKey = currentChatTarget ? `chat_wallpaper_${currentChatTarget.id}` : 'chat_wallpaper_global';
@@ -7287,9 +7524,11 @@ function openWallpaperModal() {
 function closeWallpaperModal() {
     const modal = document.getElementById("commWallpaperModal");
     const sidebar = document.getElementById("commChatInfoSidebar");
+    const chatLayout = document.querySelector('.comm-chat-layout');
     
     if (modal) modal.classList.remove("active");
     if (sidebar) sidebar.style.visibility = "visible";
+    if (chatLayout) chatLayout.classList.remove('wallpaper-modal-open'); // Hiện lại thanh ghim
 }
 
 function switchWallpaperTab(tabName) {

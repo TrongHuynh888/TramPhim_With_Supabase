@@ -1878,7 +1878,7 @@ function initCustomControls(video) {
                 progressBar.style.width = percent + "%";
             }
             if (currentTimeEl) currentTimeEl.textContent = formatTime(current);
-            if (durationEl) durationEl.textContent = formatTime(total);
+            if (durationEl) durationEl.textContent = formatTime(total - current);
 
             // Cập nhật Progress Bar và Thời gian cho Mini Player
             const miniProgressBar = document.getElementById("miniPlayerProgressBar");
@@ -1890,7 +1890,7 @@ function initCustomControls(video) {
                 miniProgressBar.style.width = percent + "%";
             }
             if (miniCurrentTimeEl) miniCurrentTimeEl.textContent = formatTime(current);
-            if (miniDurationEl) miniDurationEl.textContent = formatTime(total);
+            if (miniDurationEl) miniDurationEl.textContent = formatTime(total - current);
 
             // Buffer bar (Chỉ cho HTML5)
             if (currentVideoType !== 'youtube' && video.buffered && video.buffered.length > 0) {
@@ -2251,10 +2251,15 @@ function resetHideTimer() {
     }, 5000); // Giữ nguyên 5 giây theo yêu cầu
 }
 
+// Định dạng thời gian: nếu >= 60 phút thì hiển thị dạng "Xh MM:SS", còn lại hiển thị "MM:SS"
 function formatTime(seconds) {
     if (!seconds || isNaN(seconds)) return "00:00";
-    const m = Math.floor(seconds / 60);
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
+    if (h > 0) {
+        return `${h}:${m < 10 ? "0" + m : m}:${s < 10 ? "0" + s : s}`;
+    }
     return `${m < 10 ? "0" + m : m}:${s < 10 ? "0" + s : s}`;
 }
 
@@ -2632,10 +2637,11 @@ function checkSkipIntro(currentTime) {
 
     // 1. Xử lý Bỏ qua Intro
     if (btnSkip) {
-        const introEnd = Number(episode.introEndTime) || 0;
+        const introEnd = Number(episode.intro_end || episode.introEndTime) || 0;
+        const introBegin = Number(episode.intro_begin) || 0;
         if (introEnd > 0) {
-            // Hiển thị nút từ bắt đầu video (0s) cho đến khi đạt mốc introEnd
-            if (currentTime < introEnd) {
+            // Hiển thị nút từ intro_begin cho đến khi đạt mốc introEnd
+            if (currentTime >= introBegin && currentTime < introEnd) {
                 btnSkip.classList.remove("hidden");
             } else {
                 btnSkip.classList.add("hidden");
@@ -2648,12 +2654,10 @@ function checkSkipIntro(currentTime) {
     // 2. Xử lý Chuyển tập tiếp theo (Outro)
     if (btnNext) {
         const hasNextEpisode = currentEpisode < currentMovie.episodes.length - 1;
-        const outroStart = Number(episode.outroStartTime) || 0;
+        const outroStart = Number(episode.intro_start || episode.outroStartTime) || 0;
         
         if (outroStart > 0 && hasNextEpisode) {
-            // Hiển thị nút nếu currentTime đã đến mốc outro
-            // Thêm điều kiện outroStart > introEnd để tránh hiện nhầm ở đầu phim nếu Admin nhập sai
-            const introEnd = Number(episode.introEndTime) || 0;
+            const introEnd = Number(episode.intro_end || episode.introEndTime) || 0;
             if (currentTime >= outroStart && currentTime > introEnd) { 
                 btnNext.classList.remove("hidden");
             } else {
@@ -2696,7 +2700,7 @@ window.handleSkipIntro = function() {
     if (!currentMovie || !currentMovie.episodes) return;
     
     const episode = currentMovie.episodes[currentEpisode];
-    const introEnd = Number(episode?.introEndTime) || 0;
+    const introEnd = Number(episode?.intro_end || episode?.introEndTime) || 0;
     if (!episode || introEnd === 0) return;
     
     // Thực hiện nhảy tới thời gian kết thúc intro

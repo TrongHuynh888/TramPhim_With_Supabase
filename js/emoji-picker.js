@@ -41,9 +41,28 @@ const EMOJI_DATA = [
     }
 ];
 
-// Kho Sticker v11.0
+// Kho Sticker v12.0 - 5 bộ sticker với ảnh AI
 const STICKER_DATA = [
-    { id: "local_movies", name: "Phim ảnh", icon: "fa-film", stickers: ["images/stickers/movies/example_sticker.png"] }
+    {
+        id: "cat", name: "Mèo dễ thương", icon: "fa-cat",
+        stickers: ["images/stickers/cat/1.png", "images/stickers/cat/2.png", "images/stickers/cat/3.png", "images/stickers/cat/4.png"]
+    },
+    {
+        id: "funny", name: "Vui nhộn", icon: "fa-laugh-squint",
+        stickers: ["images/stickers/funny/1.png", "images/stickers/funny/2.png", "images/stickers/funny/3.png", "images/stickers/funny/4.png"]
+    },
+    {
+        id: "love", name: "Tình yêu", icon: "fa-heart",
+        stickers: ["images/stickers/love/1.png", "images/stickers/love/2.png", "images/stickers/love/3.png", "images/stickers/love/4.png"]
+    },
+    {
+        id: "movies", name: "Phim ảnh", icon: "fa-film",
+        stickers: ["images/stickers/movies/1.png", "images/stickers/movies/2.png", "images/stickers/movies/3.png", "images/stickers/movies/4.png"]
+    },
+    {
+        id: "pepe", name: "Pepe", icon: "fa-frog",
+        stickers: ["images/stickers/pepe/1.png", "images/stickers/pepe/2.png", "images/stickers/pepe/3.png", "images/stickers/pepe/4.png"]
+    }
 ];
 
 let isEmojiPickerOpen = false;
@@ -59,17 +78,36 @@ function initEmojiPicker() {
         </button>
     `).join('');
 
-    // Render Content (Làm sạch 100% dữ liệu văn bản bằng filter chặt chẽ hơn)
+    // Render Content (Làm sạch 100% dữ liệu)
     const emojiContentHtml = EMOJI_DATA.map((cat, index) => `
         <div class="emoji-category-content ${index === 0 ? 'active' : ''}" id="emoji-cat-${index}">
             <div class="emoji-grid">
                 ${cat.emojis.filter(e => {
                     const clean = e.trim();
-                    // Regex này loại bỏ các chuỗi chỉ chứa chữ cái và khoảng trắng (Tiếng Anh/Việt)
-                    // Chỉ giữ lại những chuỗi KHÔNG PHẢI là text thuần túy
                     return clean.length > 0 && !/^[a-zA-Z\s\u00C0-\u024F\u1E00-\u1EFF]+$/.test(clean);
                 }).map(emoji => `
                     <span class="emoji-item" onclick="insertEmoji('${emoji}')">${emoji}</span>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+
+    // Render Sticker Tabs Sidebar + Grid
+    const stickerTabsHtml = STICKER_DATA.map((pack, index) => `
+        <button class="sticker-nav-tab ${index === 0 ? 'active' : ''}" 
+                onclick="switchStickerCategory(${index})" title="${pack.name}">
+            <i class="fas ${pack.icon}"></i>
+        </button>
+    `).join('');
+
+    const stickerContentHtml = STICKER_DATA.map((pack, index) => `
+        <div class="sticker-category-content ${index === 0 ? 'active' : ''}" id="sticker-cat-${index}">
+            <div class="sticker-pack-info">${pack.name}</div>
+            <div class="sticker-items-grid">
+                ${pack.stickers.map(url => `
+                    <div class="sticker-item-wrapper" onclick="sendStickerFromPicker('${url}')">
+                        <img src="${url}" class="sticker-item loaded" alt="sticker" loading="lazy">
+                    </div>
                 `).join('')}
             </div>
         </div>
@@ -88,9 +126,8 @@ function initEmojiPicker() {
         </div>
         <div id="stickerPickerView" class="picker-mode-view" style="display: none;">
             <div class="sticker-picker-container">
-                <div class="sticker-picker-body">
-                    <div class="sticker-items-grid"></div>
-                </div>
+                <div class="sticker-tabs-sidebar">${stickerTabsHtml}</div>
+                <div class="sticker-picker-body">${stickerContentHtml}</div>
             </div>
         </div>
     `;
@@ -182,4 +219,36 @@ function searchEmoji(query) {
         });
         cat.style.display = hasMatch ? 'block' : 'none';
     });
+}
+
+/**
+ * Chuyển tab bộ sticker
+ */
+function switchStickerCategory(index) {
+    document.querySelectorAll('.sticker-nav-tab').forEach((tab, i) => tab.classList.toggle('active', i === index));
+    document.querySelectorAll('.sticker-category-content').forEach((content, i) => {
+        content.classList.toggle('active', i === index);
+        if (i === index) {
+            const body = document.querySelector('.sticker-picker-body');
+            if (body) body.scrollTop = 0;
+        }
+    });
+}
+
+/**
+ * Gửi sticker từ picker (đặt nội dung [STICKER]url rồi gọi sendMessage)
+ */
+function sendStickerFromPicker(stickerUrl) {
+    if (!stickerUrl) return;
+    
+    const input = document.getElementById('commChatInputMessage');
+    if (input) {
+        input.value = `[STICKER]${stickerUrl}`;
+        // Đóng picker trước khi gửi
+        toggleEmojiPicker(false);
+        // Gọi hàm gửi tin nhắn
+        if (typeof sendMessage === 'function') {
+            sendMessage();
+        }
+    }
 }
