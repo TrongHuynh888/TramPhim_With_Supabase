@@ -5073,10 +5073,24 @@ window.enableMiniPlayer = function() {
     const miniTitle = document.getElementById("miniPlayerTitle");
     if (miniTitle && typeof currentMovie !== 'undefined' && currentMovie) {
         let displayTitle = currentMovie.title || "Đang phát...";
+        // Chỉ hiển thị tên tập nếu có episode hợp lệ
         if (typeof currentEpisode !== 'undefined' && currentMovie.episodes && currentMovie.episodes[currentEpisode]) {
-            let epNum = currentMovie.episodes[currentEpisode].episode_number || (currentEpisode + 1);
-            let epLabel = String(epNum).includes("Tập") ? epNum : `Tập ${epNum}`;
-            displayTitle += ` | ${epLabel}`;
+            const ep = currentMovie.episodes[currentEpisode];
+            // Ưu tiên đọc title (nơi admin lưu tên tập/FULL), sau đó episode_name, rồi episodeNumber
+            let epNum = ep.title || ep.episode_name || ep.episodeNumber || ep.episode_number;
+            // Nếu vẫn không có hoặc là "0" (index), fallback sang currentEpisode + 1
+            if (epNum === undefined || epNum === null || String(epNum).trim() === "" || String(epNum) === "0") {
+                epNum = currentEpisode + 1;
+            }
+            const epStr = String(epNum).toLowerCase();
+            // Phim lẻ hoặc tập có nhãn FULL: chỉ hiện "Full" thay vì "Tập Full"
+            if (epStr === "full" || epStr.includes("full")) {
+                displayTitle += ` | Full`;
+            } else {
+                // Nếu đã chứa chữ "Tập" thì không thêm prefix
+                let epLabel = epStr.includes("tập") ? epNum : `Tập ${epNum}`;
+                displayTitle += ` | ${epLabel}`;
+            }
         }
         miniTitle.textContent = displayTitle;
     }

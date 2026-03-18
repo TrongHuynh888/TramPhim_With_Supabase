@@ -1897,17 +1897,28 @@ async function fetchMovieFromAPI() {
 
         // --- 4. MAP THỂ LOẠI (CATEGORIES) ---
         // Tick chọn tự động các thể loại giống OPhim
+        // cb.value là ID (UUID), cần tra cứu tên từ allCategories để so sánh với tên API
         if (movieData.category && Array.isArray(movieData.category)) {
-            const opCategories = movieData.category.map(c => c.name.toLowerCase());
+            const opCategories = movieData.category.map(c => c.name.toLowerCase().trim());
             const checkboxes = document.querySelectorAll('input[name="movieCategoryCheckbox"]');
             
             checkboxes.forEach(cb => {
                 cb.checked = false; // Reset
-                const catName = cb.value.toLowerCase();
-                // Check nếu tên thể loại OPhim chứa tên thể loại Web (VD: Tình Cảm Lãng Mạn -> "Tình Cảm")
+                // Tra cứu tên thể loại trong hệ thống dựa trên ID của checkbox
+                const catObj = (typeof allCategories !== 'undefined' && allCategories)
+                    ? allCategories.find(c => c.id === cb.value)
+                    : null;
+                if (!catObj) return; // Không tìm thấy thể loại trong hệ thống
+                
+                const catName = catObj.name.toLowerCase().trim();
+                // So sánh tên thể loại hệ thống với tên từ OPhim API (hỗ trợ khớp một phần)
                 const isMatch = opCategories.some(opCat => opCat.includes(catName) || catName.includes(opCat));
                 if (isMatch) cb.checked = true;
             });
+            
+            // Log kết quả để debug
+            const checkedCount = document.querySelectorAll('input[name="movieCategoryCheckbox"]:checked').length;
+            console.log(`🎬 [API] Đã auto-check ${checkedCount} thể loại từ API:`, opCategories);
         }
 
         // --- 5. MAP QUỐC GIA ---
@@ -3139,14 +3150,46 @@ async function saveBatchImportedEpisodes() {
 }
 
 /**
- * [NEW] Mở modal Bổ sung Link Lồng tiếng Hàng loạt
+ * Lưu loại nhãn hiện tại: "dubbed" (Lồng tiếng) hoặc "voiceover" (Thuyết minh)
  */
-function openBulkAddDubbedModal() {
+let _bulkDubbedLabelMode = "dubbed";
+
+/**
+ * [NEW] Mở modal Bổ sung Link hàng loạt (Lồng tiếng hoặc Thuyết minh)
+ * @param {string} mode - "dubbed" (Lồng tiếng) | "voiceover" (Thuyết minh)
+ */
+function openBulkAddDubbedModal(mode = "dubbed") {
     const movieId = selectedMovieForEpisodes || document.getElementById("selectMovieForEpisodes").value;
     if (!movieId) {
         showNotification("Vui lòng chọn phim trước khi thao tác!", "error");
         return;
     }
+    
+    _bulkDubbedLabelMode = mode;
+    
+    // Cập nhật tiêu đề modal theo mode
+    const modalTitle = document.querySelector("#bulkAddDubbedModal .modal-title");
+    const icon = mode === "voiceover" ? "fa-headset" : "fa-microphone-alt";
+    const title = mode === "voiceover" ? "Bổ sung Link Thuyết minh Hàng loạt" : "Bổ sung Link Lồng tiếng Hàng loạt";
+    if (modalTitle) modalTitle.innerHTML = `<i class="fas ${icon}"></i> ${title}`;
+    
+    // Cập nhật hướng dẫn trong modal
+    const labelText = mode === "voiceover" ? "Thuyết minh" : "Lồng tiếng";
+    const instrNote = document.querySelector("#bulkAddDubbedModal .alert-info p:last-child");
+    if (instrNote) instrNote.innerHTML = `* Hệ thống sẽ tự động tìm Tập tương ứng và thêm/cập nhật nguồn "${labelText}".`;
+    
+    // Cập nhật label textarea
+    const textareaLabel = document.querySelector("#bulkAddDubbedModal .form-label[for], #bulkAddDubbedModal label.form-label");
+    const allLabels = document.querySelectorAll("#bulkAddDubbedModal .form-group .form-label");
+    allLabels.forEach(l => {
+        if (l.textContent.includes("Link")) {
+            l.textContent = `Danh sách Link ${labelText}:`;
+        }
+    });
+    
+    // Cập nhật nút xử lý
+    const processBtn = document.querySelector("#bulkAddDubbedModal .modal-footer .btn:not(.btn-secondary)");
+    if (processBtn) processBtn.innerHTML = `<i class="fas fa-magic"></i> Xử lý & Cập nhật`;
     
     document.getElementById("bulkDubbedInput").value = "";
     document.getElementById("bulkDubbedStatus").innerText = "";
@@ -3320,11 +3363,14 @@ async function processBulkDubbedLinks() {
                 
                 // Nhận diện loại link: embed hay m3u8
                 const isEmbed = dubbedLink.includes('/player/') || dubbedLink.includes('/embed/') || dubbedLink.includes('player.') || dubbedLink.includes('?url=');
-                const label = isEmbed ? "Lồng tiếng dự phòng" : "Lồng tiếng";
+                // Xác định nhãn dựa theo mode hiện tại
+                const baseLabel = _bulkDubbedLabelMode === "voiceover" ? "Thuyết minh" : "Lồng tiếng";
+                const label = isEmbed ? `${baseLabel} dự phòng` : baseLabel;
                 const sourceType = isEmbed ? "embed" : "hls";
                 
-                // Xóa nhãn cũ "Lồng tiếng (Embed)" nếu tồn tại (migration sang nhãn mới)
-                epUpdate.sources = epUpdate.sources.filter(s => s.label !== "Lồng tiếng (Embed)");
+                // Xóa nhãn cũ format (Embed) nếu tồn tại (migration sang nhãn mới)
+                const oldLabel = `${baseLabel} (Embed)`;
+                epUpdate.sources = epUpdate.sources.filter(s => s.label !== oldLabel && s.label !== "Lồng tiếng (Embed)");
 
                 // Kiểm tra xem đã có label này chưa
                 const existingIdx = epUpdate.sources.findIndex(s => s.label === label);
@@ -3357,7 +3403,8 @@ async function processBulkDubbedLinks() {
             const errors = results.filter(r => r.error);
             if (errors.length > 0) throw errors[0].error;
 
-            showNotification(`Đã cập nhật nguồn Lồng tiếng cho ${updatedCount} tập!`, "success");
+            const modeLabel = _bulkDubbedLabelMode === "voiceover" ? "Thuyết minh" : "Lồng tiếng";
+            showNotification(`Đã cập nhật nguồn ${modeLabel} cho ${updatedCount} tập!`, "success");
             loadEpisodesForMovie(movieId);
             
             if (notFoundCount === 0) {
@@ -3828,15 +3875,40 @@ window.closeEpisodeModal = function() {
         adminPreviewPlayer = null;
     }
 
-    // Xóa nội dung trong wrapper để chắc chắn video/iframe bị gỡ bỏ hoàn toàn
+    // Chỉ xóa video/iframe/placeholder, giữ nguyên overlay + controls (để mở lại modal vẫn hoạt động)
     const wrapper = document.getElementById("adminIntroPlayerWrapper");
     if (wrapper) {
-        wrapper.innerHTML = `
-            <div id="adminIntroPlayerPlaceholder" style="text-align: center; color: #666;">
-                <i class="fas fa-video-slash fa-2x mb-2"></i>
-                <p style="font-size: 0.9rem;">Chưa có video. Hãy nhập link video bên trên.</p>
-            </div>
-        `;
+        // Hủy HLS instance nếu đang tồn tại
+        if (window._adminHlsInstance) {
+            try { window._adminHlsInstance.destroy(); } catch(e) {}
+            window._adminHlsInstance = null;
+        }
+        
+        const oldVideo = wrapper.querySelector("video");
+        const oldIframe = wrapper.querySelector("iframe");
+        const oldYtDiv = wrapper.querySelector("#adminYoutubePreview");
+        if (oldVideo) oldVideo.remove();
+        if (oldIframe) oldIframe.remove();
+        if (oldYtDiv) oldYtDiv.remove();
+        
+        // Thêm lại placeholder
+        let placeholder = document.getElementById("adminIntroPlayerPlaceholder");
+        if (!placeholder) {
+            placeholder = document.createElement("div");
+            placeholder.id = "adminIntroPlayerPlaceholder";
+            placeholder.style.cssText = "text-align: center; color: #666;";
+            placeholder.innerHTML = `<i class="fas fa-video-slash fa-2x mb-2"></i><p style="font-size: 0.9rem;">Chưa có video. Hãy nhập link video bên trên.</p>`;
+            const overlay = document.getElementById("adminPreviewOverlay");
+            wrapper.insertBefore(placeholder, overlay);
+        } else {
+            placeholder.style.display = "";
+        }
+        
+        // Ẩn overlay + controls (không xóa)
+        const overlay = document.getElementById("adminPreviewOverlay");
+        const controls = document.getElementById("adminPreviewControls");
+        if (overlay) overlay.style.display = "none";
+        if (controls) controls.style.display = "none";
     }
 
     // Đóng modal giao diện
@@ -4048,11 +4120,61 @@ function initAdminIntroPlayer(type, source) {
         wrapper.insertBefore(video, overlay);
         adminPreviewPlayer = video;
 
+        // Tạo loading spinner cho buffering/lag
+        // Thay thế icon nút Play ở giữa thành spinner khi video đang buffer
+        const playBtn = document.getElementById("adminPreviewPlayBtn");
+        // Inject keyframe CSS cho spinner nếu chưa có
+        if (!document.getElementById("adminBufferSpinStyle")) {
+            const s = document.createElement("style");
+            s.id = "adminBufferSpinStyle";
+            s.textContent = `@keyframes adminBufferSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
+            document.head.appendChild(s);
+        }
+        const showBuffering = () => {
+            if (playBtn) {
+                const icon = playBtn.querySelector("i");
+                if (icon) {
+                    icon.className = "fas fa-spinner";
+                    icon.style.animation = "adminBufferSpin 1s linear infinite";
+                }
+            }
+        };
+        const hideBuffering = () => {
+            if (playBtn) {
+                const icon = playBtn.querySelector("i");
+                if (icon) {
+                    icon.className = video.paused ? "fas fa-play" : "fas fa-pause";
+                    icon.style.animation = "";
+                }
+            }
+        };
+
+        // Gắn event hiện/ẩn spinner khi video buffering (chỉ khi đang phát bị stall)
+        video.addEventListener("waiting", showBuffering);
+        video.addEventListener("playing", hideBuffering);
+        video.addEventListener("canplay", hideBuffering);
+        video.addEventListener("seeked", hideBuffering);
+        video.addEventListener("error", hideBuffering);
+        video.addEventListener("pause", () => {
+            if (playBtn) { const icon = playBtn.querySelector("i"); if (icon) icon.className = "fas fa-play"; }
+        });
+
+        // Xóa spinner cũ nếu tồn tại (từ code cũ)
+        const oldSpinner = wrapper.querySelector("#adminPreviewSpinner");
+        if (oldSpinner) oldSpinner.remove();
+
+        // Hủy HLS instance cũ trước khi tạo mới
+        if (window._adminHlsInstance) {
+            try { window._adminHlsInstance.destroy(); } catch(e) {}
+            window._adminHlsInstance = null;
+        }
+
         if (type === "hls") {
             if (Hls.isSupported()) {
                 const hls = new Hls();
                 hls.loadSource(source);
                 hls.attachMedia(video);
+                window._adminHlsInstance = hls; // Lưu lại để hủy khi đóng modal
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = source;
             }
@@ -4094,6 +4216,23 @@ function setupAdminPreviewControls(video) {
 
     // Cập nhật seekbar khi video đang phát (throttle: chỉ khi giây thay đổi)
     let _lastSec = -1;
+    
+    // Hiển thị tổng thời gian ngay khi video load xong metadata
+    video.addEventListener("loadedmetadata", function() {
+        if (video.duration && isFinite(video.duration)) {
+            seekbar.max = Math.floor(video.duration);
+            if (timeDisplay) timeDisplay.textContent = `00:00 / ${fmt(video.duration)}`;
+            if (secondDisplay) secondDisplay.textContent = `0s`;
+        }
+    });
+    // Fallback: HLS có thể cập nhật duration sau khi loadedmetadata
+    video.addEventListener("durationchange", function() {
+        if (video.duration && isFinite(video.duration)) {
+            seekbar.max = Math.floor(video.duration);
+            if (timeDisplay) timeDisplay.textContent = `${fmt(video.currentTime)} / ${fmt(video.duration)}`;
+        }
+    });
+
     video.addEventListener("timeupdate", function() {
         if (video.duration && !seekbar._dragging) {
             const curSec = Math.floor(video.currentTime);
@@ -4139,6 +4278,74 @@ function setupAdminPreviewControls(video) {
     video.addEventListener("pause", () => {
         const icon = document.querySelector("#adminPreviewPlayBtn i");
         if (icon) icon.className = "fas fa-play";
+    });
+
+    // Auto-hide overlay + controls sau 10s khi chuột rời vùng video
+    const wrapper = document.getElementById("adminIntroPlayerWrapper");
+    const overlayEl = document.getElementById("adminPreviewOverlay");
+    const controlsEl = document.getElementById("adminPreviewControls");
+    let _hideTimer = null;
+
+    // Thêm transition CSS cho overlay + controls
+    if (overlayEl) overlayEl.style.transition = "opacity 0.4s ease";
+    if (controlsEl) controlsEl.style.transition = "opacity 0.4s ease";
+
+    const showControls = () => {
+        if (overlayEl) { overlayEl.style.opacity = "1"; overlayEl.style.pointerEvents = ""; }
+        if (controlsEl) { controlsEl.style.opacity = "1"; controlsEl.style.pointerEvents = ""; }
+        // Hiện lại con trỏ chuột
+        if (wrapper) wrapper.style.cursor = "";
+    };
+    const hideControls = () => {
+        // Chỉ ẩn khi video đang phát (không ẩn khi đang pause)
+        if (video && !video.paused) {
+            if (overlayEl) { overlayEl.style.opacity = "0"; overlayEl.style.pointerEvents = "none"; }
+            if (controlsEl) { controlsEl.style.opacity = "0"; controlsEl.style.pointerEvents = "none"; }
+            // Ẩn con trỏ chuột khi fullscreen
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+                if (wrapper) wrapper.style.cursor = "none";
+            }
+        }
+    };
+    const isFullscreen = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+    const startHideTimer = () => {
+        clearTimeout(_hideTimer);
+        // Fullscreen: 5 giây, bình thường: 10 giây
+        const delay = isFullscreen() ? 5000 : 10000;
+        _hideTimer = setTimeout(hideControls, delay);
+    };
+
+    if (wrapper) {
+        // Chuột vào vùng video → hiện controls, reset timer
+        wrapper.addEventListener("mouseenter", () => {
+            showControls();
+            startHideTimer();
+        });
+        // Chuột di chuyển trong video → reset timer
+        wrapper.addEventListener("mousemove", () => {
+            showControls();
+            startHideTimer();
+        });
+        // Chuột rời vùng video → bắt đầu đếm ẩn
+        wrapper.addEventListener("mouseleave", () => {
+            startHideTimer();
+        });
+    }
+
+    // Khi video pause → luôn hiện controls
+    video.addEventListener("pause", () => {
+        clearTimeout(_hideTimer);
+        showControls();
+    });
+    // Khi video play → bắt đầu đếm ẩn
+    video.addEventListener("play", () => {
+        startHideTimer();
+    });
+
+    // Khi vào/thoát fullscreen → reset timer phù hợp
+    document.addEventListener("fullscreenchange", () => {
+        showControls();
+        if (video && !video.paused) startHideTimer();
     });
 }
 
@@ -11286,7 +11493,7 @@ function renderSitePopup(settings) {
             card.style.backgroundImage = `linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.1) 35%, rgba(0,0,0,0.1) 55%, rgba(0,0,0,0.65) 100%), url('${settings.image}')`;
             card.style.backgroundSize = 'cover';
             card.style.backgroundPosition = 'center';
-            card.style.minHeight = '380px';
+            card.style.minHeight = window.innerWidth <= 768 ? '240px' : '380px';
         } else {
             card.style.backgroundImage = 'none';
             card.style.minHeight = 'auto';
@@ -11307,6 +11514,7 @@ function renderSitePopup(settings) {
     // Áp dụng vị trí tùy chỉnh nếu admin đã kéo thả
     if (card && (settings.titlePos || settings.contentPos || settings.btnPos)) {
         card.style.position = 'relative';
+        const elPad = window.innerWidth <= 768 ? '24px' : '48px';
         const posMap = [
             { sel: '.site-popup-top', pos: settings.titlePos },
             { sel: '.site-popup-middle', pos: settings.contentPos },
@@ -11319,7 +11527,7 @@ function renderSitePopup(settings) {
                     el.style.position = 'absolute';
                     el.style.left = pos.leftPct + '%';
                     el.style.top = pos.topPct + '%';
-                    el.style.width = 'calc(100% - 48px)';
+                    el.style.width = `calc(100% - ${elPad})`;
                     el.style.textAlign = 'center';
                 }
             });
@@ -11366,8 +11574,14 @@ async function previewSitePopup() {
     const overlay = document.getElementById('sitePopupOverlay');
     if (overlay) overlay.style.display = 'flex';
 
-    // Sau khi layout ổn định → kích hoạt drag mode
-    setTimeout(() => setupPopupDragMode(), 500);
+    // Sau khi layout ổn định → kích hoạt drag mode + auto-center trên mobile
+    setTimeout(() => {
+        setupPopupDragMode();
+        // Trên mobile: auto-center ngang tất cả elements để tránh lệch
+        if (window.innerWidth <= 768) {
+            setTimeout(() => alignPopupCenter(), 100);
+        }
+    }, 500);
 }
 
 /**
@@ -11445,7 +11659,7 @@ function setupPopupDragMode() {
         el.style.position = 'absolute';
         el.style.left = left + 'px';
         el.style.top = top + 'px';
-        el.style.width = 'calc(100% - 48px)';
+        el.style.width = window.innerWidth <= 768 ? 'calc(100% - 24px)' : 'calc(100% - 48px)';
         el.style.cursor = 'grab';
         el.style.zIndex = '10';
         el.style.userSelect = 'none';
@@ -11504,16 +11718,19 @@ function setupPopupDragMode() {
     if (toolbar) toolbar.remove();
     toolbar = document.createElement('div');
     toolbar.className = 'popup-drag-toolbar';
-    toolbar.style.cssText = 'position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:8px; padding:12px 20px; background:rgba(20,20,40,0.95); backdrop-filter:blur(10px); z-index:100000; border-radius:14px; box-shadow:0 4px 24px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.15); max-width:90vw;';
+    const isMobile = window.innerWidth <= 768;
+    toolbar.style.cssText = `position:fixed; bottom:${isMobile ? '10px' : '20px'}; left:50%; transform:translateX(-50%); display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:${isMobile ? '4px' : '8px'}; padding:${isMobile ? '8px 10px' : '12px 20px'}; background:rgba(20,20,40,0.95); backdrop-filter:blur(10px); z-index:100000; border-radius:${isMobile ? '10px' : '14px'}; box-shadow:0 4px 24px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.15); max-width:${isMobile ? '95vw' : '90vw'};`;
+    const btnStyle = `padding:${isMobile ? '5px 8px' : '6px 12px'}; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.1); color:#fff; border-radius:8px; cursor:pointer; font-size:${isMobile ? '0.7rem' : '0.8rem'};`;
+    const actionBtnStyle = `padding:${isMobile ? '5px 10px' : '6px 16px'}; border-radius:8px; cursor:pointer; font-size:${isMobile ? '0.75rem' : '0.85rem'};`;
     toolbar.innerHTML = `
-        <span class="popup-drag-selected-name" style="font-size:0.8rem; color:#4db8ff; width:100%; text-align:center; margin-bottom:4px; font-weight:600;">👆 Bấm chọn phần tử để chỉnh</span>
-        <button onclick="alignPopupCenter()" title="Canh giữa ngang" style="padding:6px 12px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.1); color:#fff; border-radius:8px; cursor:pointer; font-size:0.8rem;">↔️ Giữa ngang</button>
-        <button onclick="alignPopupVertical()" title="Canh giữa dọc" style="padding:6px 12px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.1); color:#fff; border-radius:8px; cursor:pointer; font-size:0.8rem;">↕️ Giữa dọc</button>
-        <button onclick="alignPopupAll()" title="Canh giữa cả ngang lẫn dọc" style="padding:6px 12px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.1); color:#fff; border-radius:8px; cursor:pointer; font-size:0.8rem;">⊞ Giữa tất cả</button>
-        <button onclick="alignPopupSpreadVertical()" title="Dàn đều dọc tất cả" style="padding:6px 12px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.1); color:#fff; border-radius:8px; cursor:pointer; font-size:0.8rem;">☰ Đều dọc</button>
-        <span style="width:1px; height:24px; background:rgba(255,255,255,0.2); margin:0 4px;"></span>
-        <button onclick="cancelPopupDrag()" style="padding:6px 16px; border:1px solid rgba(255,255,255,0.3); background:transparent; color:#fff; border-radius:8px; cursor:pointer; font-size:0.85rem;">Hủy</button>
-        <button onclick="savePopupPositions()" style="padding:6px 16px; background:linear-gradient(135deg,#007aff,#4db8ff); border:none; color:#fff; border-radius:8px; cursor:pointer; font-size:0.85rem; font-weight:600;">✅ Cập nhật</button>
+        <span class="popup-drag-selected-name" style="font-size:${isMobile ? '0.7rem' : '0.8rem'}; color:#4db8ff; width:100%; text-align:center; margin-bottom:${isMobile ? '2px' : '4px'}; font-weight:600;">👆 Bấm chọn phần tử để chỉnh</span>
+        <button onclick="alignPopupCenter()" title="Canh giữa ngang" style="${btnStyle}">↔️ Giữa ngang</button>
+        <button onclick="alignPopupVertical()" title="Canh giữa dọc" style="${btnStyle}">↕️ Giữa dọc</button>
+        <button onclick="alignPopupAll()" title="Canh giữa cả ngang lẫn dọc" style="${btnStyle}">⊞ Giữa tất cả</button>
+        <button onclick="alignPopupSpreadVertical()" title="Dàn đều dọc tất cả" style="${btnStyle}">☰ Đều dọc</button>
+        ${isMobile ? '' : '<span style="width:1px; height:24px; background:rgba(255,255,255,0.2); margin:0 4px;"></span>'}
+        <button onclick="cancelPopupDrag()" style="${actionBtnStyle} border:1px solid rgba(255,255,255,0.3); background:transparent; color:#fff;">Hủy</button>
+        <button onclick="savePopupPositions()" style="${actionBtnStyle} background:linear-gradient(135deg,#007aff,#4db8ff); border:none; color:#fff; font-weight:600;">✅ Cập nhật</button>
     `;
     document.body.appendChild(toolbar);
 }

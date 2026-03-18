@@ -1288,6 +1288,60 @@
   display: block;
 }
 
+/* --- Đường phân cách "hoặc" trong form auth --- */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: var(--text-muted, #888);
+  font-size: 13px;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-color, rgba(255,255,255,0.15));
+}
+.auth-divider span {
+  white-space: nowrap;
+  text-transform: lowercase;
+}
+
+/* --- Nút đăng nhập bằng Google --- */
+.btn-google-login {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: #ffffff;
+  color: #3c4043;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: 'Roboto', 'Segoe UI', sans-serif;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.btn-google-login:hover {
+  background: #f8f9fa;
+  border-color: #c6c6c6;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transform: translateY(-1px);
+}
+.btn-google-login:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.btn-google-login svg {
+  flex-shrink: 0;
+}
+
 .nav-user-avatar {
   width: 40px;
   height: 40px;
@@ -1303,11 +1357,11 @@
   position: absolute;
   top: 60px;
   right: 0;
-  width: 300px;
-  background: var(--bg-card); /* Đổi từ màu cứng sang màu tùy chỉnh theo theme */
+  width: 280px;
+  background: #1a1a2e; /* Nền đặc, không trong suốt */
   border-radius: 12px;
-  box-shadow: var(--shadow-lg); /* Đổi từ màu cứng sang màu tùy chỉnh theo theme */
-  border: 1px solid var(--border-color); /* Đổi từ màu cứng sang màu tùy chỉnh theo theme */
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   overflow: hidden;
   opacity: 0;
   visibility: hidden;
@@ -1323,14 +1377,14 @@
 .dropdown-header {
   display: flex;
   align-items: center;
-  gap: 15px;
-  padding: 20px;
-  background: var(--bg-tertiary); /* Đổi từ màu cứng sang màu tùy chỉnh theo theme */
-  border-bottom: 1px solid var(--border-color); /* Đổi từ màu cứng sang màu tùy chỉnh theo theme */
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 #dropdownAvatar {
-  width: 50px;
-  height: 50px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -1354,29 +1408,34 @@
   letter-spacing: 1px;
 }
 .dropdown-upgrade {
-  background: var(--bg-tertiary); /* Đổi từ màu cứng sang màu tùy chỉnh theo theme */
-  padding: 15px;
-  margin: 15px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px 14px;
+  margin: 10px 12px;
   border-radius: 8px;
   text-align: center;
+}
+.dropdown-upgrade p {
+  font-size: 12px;
+  margin: 0;
+  line-height: 1.4;
 }
 .btn-upgrade {
   background: var(--accent-gradient);
   color: #fff;
   border: none;
   width: 100%;
-  padding: 10px 15px;
+  padding: 8px 12px;
   border-radius: var(--border-radius-sm);
-  margin-top: 12px;
+  margin-top: 8px;
   font-weight: 700;
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
   cursor: pointer;
   box-shadow: var(--shadow-red);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   transition: all 0.3s ease;
 }
 .btn-upgrade:hover {
@@ -1386,17 +1445,18 @@
 }
 .dropdown-list {
   list-style: none;
-  padding: 0 10px 10px;
+  padding: 4px 10px 8px;
 }
 .dropdown-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
-  color: var(--text-primary); /* Sử dụng biến thay vì màu trắng tĩnh */
+  gap: 10px;
+  padding: 9px 10px;
+  color: var(--text-primary);
   cursor: pointer;
   border-radius: 6px;
   transition: background 0.2s;
+  font-size: 14px;
 }
 .btn-deposit {
   background: var(--accent-primary); /* Màu nền xanh lam hiện đại */
@@ -1420,9 +1480,9 @@
   background: rgba(255, 255, 255, 0.05);
 }
 .dropdown-item.logout {
-  margin-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding-top: 15px;
+  margin-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
 }
 .dropdown-item.logout:hover {
   color: #ff4444;

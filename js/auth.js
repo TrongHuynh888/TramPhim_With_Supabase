@@ -1,4 +1,30 @@
 /**
+ * Đăng nhập bằng tài khoản Google (OAuth)
+ */
+async function signInWithGoogle() {
+    if (!supabase) {
+        showNotification("Supabase chưa được cấu hình!", "error");
+        return;
+    }
+
+    try {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: window.location.origin + (window.APP_BASE_PATH || '')
+            }
+        });
+
+        if (error) throw error;
+
+        // Supabase sẽ tự redirect sang Google, không cần xử lý thêm
+    } catch (err) {
+        console.error("Lỗi đăng nhập Google:", err);
+        showNotification("Đăng nhập Google thất bại: " + err.message, "error");
+    }
+}
+
+/**
  * Toggle hiện/ẩn mật khẩu
  */
 function togglePassword(inputId, iconElement) {
@@ -194,7 +220,32 @@ async function handleForgotPassword(event) {
  */
 function initAuthStateListener() {
     supabase.auth.onAuthStateChange((event, session) => {
+        console.log("🔑 Auth event:", event);
         const user = session ? session.user : null;
+
+        // Xử lý sự kiện đặt lại mật khẩu (khi user click link từ email)
+        if (event === 'PASSWORD_RECOVERY') {
+            console.log("🔐 PASSWORD_RECOVERY detected — Mở form đổi mật khẩu");
+            // Dọn URL sạch
+            history.replaceState(null, '', window.location.pathname);
+            // Mở modal đổi mật khẩu (ẩn trường mật khẩu cũ)
+            setTimeout(() => {
+                // Ẩn trường mật khẩu cũ vì user quên mật khẩu
+                const oldPwGroup = document.getElementById('oldPasswordGroup');
+                if (oldPwGroup) oldPwGroup.style.display = 'none';
+
+                // Đổi tiêu đề modal
+                const modalTitle = document.querySelector('#changePasswordModal .modal-title');
+                if (modalTitle) modalTitle.textContent = 'Đặt lại mật khẩu';
+
+                if (typeof openModal === 'function') {
+                    openModal('changePasswordModal');
+                    showNotification("Vui lòng nhập mật khẩu mới.", "info");
+                }
+            }, 500);
+            return;
+        }
+
         handleAuthStateChange(user);
     });
 }
@@ -416,12 +467,27 @@ async function handleChangePassword(event) {
 
     showNotification("Đổi mật khẩu thành công!", "success");
     closeModal("changePasswordModal");
+    resetChangePasswordModal();
   } catch (error) {
     console.error("Lỗi đổi mật khẩu:", error);
     showNotification("Thất bại: " + error.message, "error");
   } finally {
     showLoading(false);
   }
+}
+
+/**
+ * Khôi phục modal đổi mật khẩu về trạng thái ban đầu (hiện lại trường mật khẩu cũ)
+ */
+function resetChangePasswordModal() {
+    const oldPwGroup = document.getElementById('oldPasswordGroup');
+    if (oldPwGroup) oldPwGroup.style.display = '';
+
+    const modalTitle = document.querySelector('#changePasswordModal .modal-title');
+    if (modalTitle) modalTitle.textContent = 'Đổi mật khẩu';
+
+    const form = document.getElementById('changePasswordForm');
+    if (form) form.reset();
 }
 
 /**

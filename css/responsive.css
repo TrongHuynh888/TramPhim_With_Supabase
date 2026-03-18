@@ -1529,6 +1529,75 @@ body.watch-party-active #watchPartyPage {
     background-color: #1f1f2e !important;
     color: #ffffff !important;
   }
+
+  /* --- THU GỌN POPUP USER DROPDOWN TRÊN MOBILE/TABLET --- */
+  /* Giảm chiều rộng popup */
+  .user-dropdown {
+    width: 260px !important;
+    right: -10px !important;
+  }
+
+  /* Thu gọn header (Avatar + Tên) */
+  .user-dropdown .dropdown-header {
+    padding: 12px 14px !important;
+    gap: 10px !important;
+  }
+  .user-dropdown #dropdownAvatar {
+    width: 38px !important;
+    height: 38px !important;
+  }
+  .user-dropdown .dropdown-user-info strong {
+    font-size: 14px !important;
+  }
+  .user-dropdown .dropdown-role {
+    font-size: 9px !important;
+    padding: 1px 3px !important;
+  }
+
+  /* Thu gọn phần Nâng cấp */
+  .user-dropdown .dropdown-upgrade {
+    padding: 10px !important;
+    margin: 8px 10px !important;
+    border-radius: 6px !important;
+  }
+  .user-dropdown .dropdown-upgrade p {
+    font-size: 12px !important;
+    margin: 0 !important;
+    line-height: 1.3 !important;
+  }
+  .user-dropdown .btn-upgrade {
+    padding: 7px 12px !important;
+    font-size: 11px !important;
+    margin-top: 8px !important;
+  }
+
+  /* Thu gọn danh sách menu items */
+  .user-dropdown .dropdown-list {
+    padding: 0 8px 8px !important;
+  }
+  .user-dropdown .dropdown-item {
+    padding: 8px 10px !important;
+    gap: 10px !important;
+    font-size: 13px !important;
+  }
+  .user-dropdown .dropdown-item i {
+    font-size: 14px !important;
+    width: 18px !important;
+    text-align: center;
+  }
+  .user-dropdown .dropdown-item.logout {
+    margin-top: 6px !important;
+    padding-top: 10px !important;
+  }
+
+  /* Thu gọn nút Nạp và số dư */
+  .user-dropdown .balance-badge {
+    font-size: 12px !important;
+  }
+  .user-dropdown .btn-deposit {
+    padding: 3px 10px !important;
+    font-size: 10px !important;
+  }
 }
 
 /* Làm gọn hiển thị bình luận trên mobile */

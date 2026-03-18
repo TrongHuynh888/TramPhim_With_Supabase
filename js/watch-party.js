@@ -94,6 +94,24 @@ initWatchPartyModule();
 let roomsChannel = null;
 let roomRefreshInterval = null;
 
+// Chuẩn hóa dữ liệu phòng: Supabase trả snake_case, code dùng camelCase
+function normalizeRoomData(room) {
+    if (!room) return room;
+    room.movieTitle = room.movieTitle || room.movie_title || '';
+    room.moviePoster = room.moviePoster || room.movie_poster || '';
+    room.hostName = room.hostName || room.host_name || 'Host';
+    room.hostId = room.hostId || room.host_id || '';
+    room.memberCount = room.memberCount || room.member_count || 0;
+    room.videoType = room.videoType || room.video_type || 'youtube';
+    room.videoSource = room.videoSource || room.video_source || '';
+    room.videoId = room.videoId || room.video_id || '';
+    room.scheduledTime = room.scheduledTime || room.scheduled_at || null;
+    room.episodeIndex = room.episodeIndex ?? room.episode_index ?? 0;
+    room.currentTime = room.currentTime ?? room.current_time ?? 0;
+    room.endedAt = room.endedAt || room.ended_at || null;
+    return room;
+}
+
 async function loadRooms() {
   const container = document.getElementById("roomList");
   if (!container) return;
@@ -156,13 +174,13 @@ async function loadRooms() {
         const { data, error } = await supabase
             .from('watch_rooms')
             .select('*')
-            .eq('status', 'active') // Chỉ hiện phòng active? Hoặc tất cả?
             .order('created_at', { ascending: false })
             .limit(20);
         
         if (error) throw error;
 
-        allWatchRooms = data || [];
+        // Normalize snake_case → camelCase để tương thích code render
+        allWatchRooms = (data || []).map(normalizeRoomData);
         filterWatchRooms();
     };
 
@@ -764,11 +782,45 @@ async function handleCreateRoom(e) {
   }
 
   const movie = allMovies.find((m) => m.id === movieId);
-  const episode = movie.episodes[epIndex];
   
-  // Lấy thông tin video (Hỗ trợ Hybrid)
-  const videoType = episode.videoType || "youtube";
-  const videoSource = episode.videoSource || episode.youtubeId;
+  // allMovies.episodes chỉ chứa {id} → cần fetch full episode data từ Supabase
+  let episode = null;
+  try {
+      const { data: epData, error: epError } = await supabase
+          .from('episodes')
+          .select('*')
+          .eq('movie_id', movieId)
+          .order('episode_index', { ascending: true });
+      
+      if (epError) throw epError;
+      if (epData && epData.length > 0) {
+          episode = epData[parseInt(epIndex)] || epData[0];
+      }
+  } catch(e) {
+      console.error("Lỗi fetch episode data:", e);
+  }
+
+  if (!episode) {
+      showNotification("Không tìm thấy tập phim! Vui lòng thử lại.", "error");
+      return;
+  }
+
+  // Lấy thông tin video (Hỗ trợ Hybrid - cùng logic với detail.js)
+  let videoType = "youtube";
+  let videoSource = "";
+  if (episode.sources && Array.isArray(episode.sources) && episode.sources.length > 0) {
+      // Ưu tiên nguồn đã chọn trước đó, fallback sources[0]
+      const preferredLabel = localStorage.getItem("preferredSourceLabel");
+      let sourceObj = episode.sources.find(s => s.label === preferredLabel);
+      if (!sourceObj) sourceObj = episode.sources[0];
+      videoType = sourceObj.type || "youtube";
+      videoSource = sourceObj.source || "";
+  } else {
+      videoType = episode.videoType || episode.video_type || "youtube";
+      videoSource = episode.videoSource || episode.video_source || episode.youtubeId || "";
+  }
+  
+  console.log("🎬 WP Video Source:", videoType, videoSource);
 
   try {
     showLoading(true);
@@ -881,6 +933,8 @@ async function joinRoom(roomId, type, passwordInput = null) {
       await customAlert("Phòng không tồn tại!", { type: "warning" });
       return;
     }
+    // Chuẩn hóa snake_case → camelCase
+    normalizeRoomData(roomData);
 
     if (roomData.banned_users?.includes(currentUser.id)) {
       showLoading(false);
@@ -909,7 +963,7 @@ async function joinRoom(roomId, type, passwordInput = null) {
     roomUnsubscribe = supabase
       .channel(`room_state:${roomId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'watch_rooms', filter: `id=eq.${roomId}` }, (payload) => {
-        const updatedRoom = payload.new;
+        const updatedRoom = normalizeRoomData(payload.new);
         latestRoomData = updatedRoom;
 
         const { isActuallyEnded, endedAt } = checkIfRoomEnded(updatedRoom);

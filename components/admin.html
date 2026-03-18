@@ -642,8 +642,11 @@
               <button class="btn btn-danger" onclick="deleteAllEpisodes()">
                 <i class="fas fa-trash-alt"></i> Xóa tất cả tập
               </button>
-              <button class="btn" style="background: #9b59b6; color: #fff;" onclick="openBulkAddDubbedModal()">
+              <button class="btn" style="background: #9b59b6; color: #fff;" onclick="openBulkAddDubbedModal('dubbed')">
                 <i class="fas fa-microphone-alt"></i> Bổ sung Link Lồng tiếng
+              </button>
+              <button class="btn" style="background: #e67e22; color: #fff;" onclick="openBulkAddDubbedModal('voiceover')">
+                <i class="fas fa-headset"></i> Bổ sung Link Thuyết minh
               </button>
               <button class="btn btn-success" onclick="openImportEpisodesModal()">
                 <i class="fas fa-file-import"></i> Thêm nhiều tập (API)
