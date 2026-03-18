@@ -884,10 +884,24 @@ async function handleCreateRoom(e) {
         status: "paused",
         current_time: 0,
         duration: (() => {
-            let d = episode.duration || 0;
-            if (!d && movie.duration) {
-                const mins = parseInt(movie.duration.replace(/\D/g, ''));
-                if (mins) d = mins * 60;
+            // Parse duration từ text ("45 phút", "1 giờ 30 phút") hoặc số
+            let d = 0;
+            const rawDur = episode.duration || movie.duration || "0";
+            if (typeof rawDur === 'number') {
+                d = rawDur;
+            } else if (typeof rawDur === 'string') {
+                // Trích xuất giờ và phút từ text
+                const hourMatch = rawDur.match(/(\d+)\s*gi/i);
+                const minMatch = rawDur.match(/(\d+)\s*ph/i);
+                const hours = hourMatch ? parseInt(hourMatch[1]) : 0;
+                const mins = minMatch ? parseInt(minMatch[1]) : 0;
+                if (hours || mins) {
+                    d = (hours * 3600) + (mins * 60);
+                } else {
+                    // Fallback: lấy số đầu tiên, coi là phút
+                    const num = parseInt(rawDur.replace(/\D/g, ''));
+                    if (num) d = num * 60;
+                }
             }
             return d;
         })(),
