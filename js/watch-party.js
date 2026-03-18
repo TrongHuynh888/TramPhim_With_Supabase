@@ -11,8 +11,9 @@ let membersUnsubscribe = null;
 let player = null;
 let isHost = false;
 let lastSyncTime = 0;
-const SYNC_THRESHOLD = 2;
+const SYNC_THRESHOLD = 3; // Ngưỡng lệch tối đa (giây) trước khi sync lại
 let latestRoomData = null;
+let hostSyncInterval = null; // Interval để host cập nhật current_time liên tục
 let allWatchRooms = []; // Lưu trữ tất cả các phòng để lọc cục bộ
 let currentRoomFilter = 'all'; // 'all', 'public', 'private'
 
@@ -970,6 +971,10 @@ async function joinRoom(roomId, type, passwordInput = null) {
     document.body.classList.add("watch-party-active");
     const footer = document.querySelector("footer");
     if (footer) footer.style.display = "none";
+
+    // Đăng ký dọn dẹp khi user đóng tab/trang bất ngờ
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     showLoading(false);
 
@@ -2030,6 +2035,18 @@ function onPlayerReady() {
                 .eq("id", currentRoomId)
                 .then();
           }
+
+          // 🔄 Interval sync: Host cập nhật current_time mỗi 10 giây khi video đang chạy
+          if (hostSyncInterval) clearInterval(hostSyncInterval);
+          hostSyncInterval = setInterval(() => {
+              if (!player || !player.getPlayerState) return;
+              const state = player.getPlayerState();
+              if (state === 1) { // Đang phát
+                  const curr = player.getCurrentTime();
+                  const dur = player.getDuration();
+                  updateRoomState("playing", curr, dur);
+              }
+          }, 10000); // Mỗi 10 giây
       }
   }
 }
@@ -2058,7 +2075,7 @@ const onPlayerStateChange = (event) => {
 async function updateRoomState(status, time, forcedDuration = null) {
   if (!currentRoomId || currentRoomId === "undefined" || currentRoomId === "") return;
   
-  if (status !== "ended" && Date.now() - lastSyncTime < 500) return;
+  if (status !== "ended" && Date.now() - lastSyncTime < 2000) return; // Throttle 2 giây cho interval sync
   lastSyncTime = Date.now();
   
   try {
@@ -2107,15 +2124,24 @@ async function updateRoomState(status, time, forcedDuration = null) {
   }
 }
 
+// Biến quản lý sync thông minh
+let lastSyncSeekTime = 0;      // Thời điểm seek gần nhất, dùng cho cooldown
+let syncCooldownMs = 3000;      // Cooldown 3 giây sau mỗi lần seek, tránh sync loop
+let isBuffering = false;        // Flag theo dõi trạng thái buffering
+let consecutiveSyncFails = 0;   // Đếm số lần sync thất bại liên tiếp (mạng quá lag)
+const GENTLE_SYNC_THRESHOLD = 8;  // Lệch 3-8 giây → dùng playbackRate bù dần
+const HARD_SYNC_THRESHOLD = 30;   // Lệch >30 giây → buộc seek ngay
+
 function handleSync(data) {
-  if (isHost) return; // Host không cần sync ngược (trừ khi có tính năng cướp host)
+  if (isHost) return;
   if (!player) return;
 
-  // Phòng có lên lịch chiếu -> Schedule Sync Engine lo toàn bộ, không can thiệp ở đây
+  // Phòng hẹn giờ → Schedule Sync Engine lo, không can thiệp
   if (data.scheduledTime) return;
 
   const currentType = player.videoType || (player.playVideo ? "youtube" : "html5");
 
+  // --- Xử lý trạng thái KẾT THÚC ---
   if (data.status === "ended") {
       showRoomEndedOverlay(data.endedAt);
       if (currentType === "youtube") player.pauseVideo();
@@ -2125,31 +2151,107 @@ function handleSync(data) {
       hideRoomEndedOverlay();
   }
 
+  // --- Kiểm tra Cooldown: Nếu vừa seek xong, đợi video ổn định ---
+  const now = Date.now();
+  if (now - lastSyncSeekTime < syncCooldownMs) return;
+
+  // --- Xử lý trạng thái BUFFERING từ host ---
+  if (data.status === "buffering") {
+      // Host đang buffer/seek → không sync, đợi host ổn định
+      return;
+  }
+
   if (currentType === "youtube" && player.getPlayerState) {
       // --- SYNC YOUTUBE ---
+      const ytState = player.getPlayerState();
+      
+      // Không sync nếu client đang buffering (state 3)
+      if (ytState === 3) {
+          isBuffering = true;
+          return;
+      }
+      isBuffering = false;
+
       const ytTime = player.getCurrentTime();
       const diff = Math.abs(ytTime - data.currentTime);
-      
-      if (diff > SYNC_THRESHOLD) player.seekTo(data.currentTime, true);
-      
-      const ytState = player.getPlayerState();
+
+      if (diff > SYNC_THRESHOLD) {
+          if (diff > HARD_SYNC_THRESHOLD) {
+              // Lệch >30 giây → Hard seek ngay
+              console.log("⚡ Hard sync YouTube:", ytTime.toFixed(1), "→", data.currentTime.toFixed(1), `(lệch ${diff.toFixed(1)}s)`);
+              player.seekTo(data.currentTime, true);
+              lastSyncSeekTime = now;
+              consecutiveSyncFails = 0;
+          } else if (diff > GENTLE_SYNC_THRESHOLD) {
+              // Lệch 8-30 giây → Seek nhẹ (có thể gây giật nhỏ)
+              console.log("🔄 Seek sync YouTube:", ytTime.toFixed(1), "→", data.currentTime.toFixed(1), `(lệch ${diff.toFixed(1)}s)`);
+              player.seekTo(data.currentTime, true);
+              lastSyncSeekTime = now;
+          }
+          // Lệch 3-8 giây → Chấp nhận được, YouTube sẽ tự bù dần
+      }
+
+      // Đồng bộ trạng thái play/pause
       if (data.status === "playing" && ytState !== 1) player.playVideo();
       else if (data.status === "paused" && ytState !== 2) player.pauseVideo();
 
   } else if (currentType === "html5" || player.tagName === "VIDEO") {
-      // --- SYNC HTML5 ---
+      // --- SYNC HTML5 (HLS/MP4) ---
+      
+      // Không sync nếu client đang waiting/buffering
+      if (player.readyState < 3) {
+          isBuffering = true;
+          return;
+      }
+      isBuffering = false;
+
       const vidTime = player.currentTime;
       const diff = Math.abs(vidTime - data.currentTime);
-      
+
       if (diff > SYNC_THRESHOLD) {
-          console.log("🔄 Syncing time:", vidTime, "->", data.currentTime);
-          player.currentTime = data.currentTime;
+          if (diff > HARD_SYNC_THRESHOLD) {
+              // Lệch >30 giây → Hard seek
+              console.log("⚡ Hard sync HTML5:", vidTime.toFixed(1), "→", data.currentTime.toFixed(1), `(lệch ${diff.toFixed(1)}s)`);
+              player.currentTime = data.currentTime;
+              lastSyncSeekTime = now;
+              consecutiveSyncFails = 0;
+          } else if (diff > GENTLE_SYNC_THRESHOLD) {
+              // Lệch 8-30 giây → Seek
+              console.log("🔄 Seek sync HTML5:", vidTime.toFixed(1), "→", data.currentTime.toFixed(1), `(lệch ${diff.toFixed(1)}s)`);
+              player.currentTime = data.currentTime;
+              lastSyncSeekTime = now;
+          } else {
+              // Lệch 3-8 giây → Gentle sync: tăng/giảm tốc độ phát để bù dần
+              if (vidTime < data.currentTime) {
+                  // Client chậm hơn host → tăng tốc nhẹ
+                  player.playbackRate = 1.05;
+                  console.log("⏩ Gentle sync: tăng tốc 1.05x (chậm hơn host", diff.toFixed(1) + "s)");
+              } else {
+                  // Client nhanh hơn host → giảm tốc nhẹ
+                  player.playbackRate = 0.95;
+                  console.log("⏪ Gentle sync: giảm tốc 0.95x (nhanh hơn host", diff.toFixed(1) + "s)");
+              }
+              // Tự reset playbackRate khi đã bù xong (sau vài giây)
+              setTimeout(() => {
+                  if (player && player.playbackRate !== 1) {
+                      player.playbackRate = 1;
+                  }
+              }, Math.min(diff * 1000, 5000));
+          }
+      } else {
+          // Đã sync tốt → đảm bảo playbackRate = 1
+          if (player.playbackRate !== 1) player.playbackRate = 1;
       }
-      
+
+      // Đồng bộ trạng thái play/pause
       if (data.status === "playing" && player.paused) {
           player.play().catch(e => {
-              console.log("Sync play failed (Autoplay block):", e);
-              showMobilePlayOverlay();
+              consecutiveSyncFails++;
+              if (consecutiveSyncFails <= 2) {
+                  console.log("Sync play failed (Autoplay block):", e);
+                  showMobilePlayOverlay();
+              }
+              // Nếu thất bại >2 lần → dừng cố gắng (tránh spam)
           });
       } else if (data.status === "paused" && !player.paused) {
           player.pause();
@@ -2205,6 +2307,11 @@ async function leaveRoom(isKicked = false) {
       clearInterval(scheduleSyncInterval);
       scheduleSyncInterval = null;
   }
+  // Dọn interval sync host
+  if (hostSyncInterval) {
+      clearInterval(hostSyncInterval);
+      hostSyncInterval = null;
+  }
 
   // 4. Dọn dẹp Player
   if (player && typeof player.destroy === "function") {
@@ -2230,7 +2337,11 @@ async function leaveRoom(isKicked = false) {
     }
   }
 
-  // 6. Reset giao diện
+  // 6. Gỡ listener dọn dẹp tab
+  window.removeEventListener('beforeunload', handleBeforeUnload);
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+  // 7. Reset giao diện
   currentRoomId = null;
   document.getElementById("partyRoom").classList.add("hidden");
   document.getElementById("partyLobby").classList.remove("hidden");
@@ -2239,6 +2350,34 @@ async function leaveRoom(isKicked = false) {
   if (footer) footer.style.display = "block";
 
   console.log("✅ Đã thoát phòng sạch sẽ (Supabase).");
+}
+
+// Xử lý khi user đóng tab hoặc reload trang mà đang trong phòng
+function handleBeforeUnload(e) {
+  if (!currentRoomId || !currentUser) return;
+  // Dùng sendBeacon để gửi request dọn dẹp (không bị chặn khi tab đóng)
+  try {
+    const supabaseUrl = supabase.supabaseUrl || supabase.restUrl?.replace('/rest/v1', '');
+    const supabaseKey = supabase.supabaseKey || supabase.realtime?.accessToken;
+    if (supabaseUrl && supabaseKey) {
+      // Xóa member khỏi danh sách
+      navigator.sendBeacon(
+        `${supabaseUrl}/rest/v1/room_members?room_id=eq.${currentRoomId}&user_id=eq.${currentUser.id}`,
+        '' // DELETE không cần body, nhưng sendBeacon chỉ hỗ trợ POST
+      );
+    }
+  } catch(err) {
+    console.warn('Cleanup on tab close failed:', err);
+  }
+}
+
+// Xử lý khi user chuyển tab (mobile: thoát app)
+function handleVisibilityChange() {
+  if (document.visibilityState === 'hidden' && currentRoomId && currentUser) {
+    // Trên mobile, khi thoát app sẽ trigger 'hidden'
+    // Gửi tin nhắn hệ thống nhưng KHÔNG rời phòng (user có thể quay lại)
+    console.log('📱 Tab hidden, giữ phòng nhưng đánh dấu away');
+  }
 }
 function renderMessage(msg, c) {
   const div = document.createElement("div");

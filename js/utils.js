@@ -340,6 +340,10 @@ function showPage(pageName, addToHistory = true) {
   if (pageName === "actors" && typeof renderActorsPage === "function") {
     renderActorsPage();
   }
+  // 👉 THÊM TRIGGER CHO WATCH PARTY: Load danh sách phòng khi vào trang Xem Chung
+  if (pageName === "watchParty" && typeof loadRooms === "function") {
+    loadRooms();
+  }
   // 👉 Load hiệu ứng visual (tuyết, sao, pháo hoa) khi vào trang chủ
   if (pageName === "home" && typeof loadAndApplyHomeEffects === "function") {
     setTimeout(() => {
