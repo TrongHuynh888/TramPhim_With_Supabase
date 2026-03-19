@@ -22,6 +22,7 @@ let myPeer = null;
 let myStream = null;
 let peers = {};
 let isMicEnabled = false; // Mặc định tắt Mic
+let isMyMicBanned = false; // Cờ kiểm tra có bị Host cấm mic không
 let globalAudioContext = null;
 
 // QUẢN LÝ ÂM THANH
@@ -220,7 +221,7 @@ function renderWatchRooms(rooms) {
     const posterUrl = room.moviePoster || 'https://via.placeholder.com/400x600/1a1a2e/ffffff?text=No+Poster';
 
     let deleteBtn = "";
-    if (currentUser && (currentUser.uid === room.hostId || (typeof isAdmin !== 'undefined' && isAdmin))) {
+    if (currentUser && (currentUser.id === room.hostId || (typeof isAdmin !== 'undefined' && isAdmin))) {
       deleteBtn = `<button class="btn-delete-room" onclick="event.stopPropagation(); deleteRoom('${room.id}', '${room.hostId}')" title="Xóa phòng"><i class="fas fa-trash"></i></button>`;
     }
 
@@ -464,7 +465,7 @@ function hideRoomPopup(btn) {
 
 async function deleteRoom(roomId, hostId) {
   if (!currentUser) return;
-  const isOwner = currentUser.id === hostId || currentUser.uid === hostId;
+  const isOwner = currentUser.id === hostId || currentUser.id === hostId;
   
   // 👇 FIX: Admin có quyền xóa mọi phòng
   if (!isOwner && (typeof isAdmin === 'undefined' || !isAdmin)) {
@@ -1092,6 +1093,11 @@ async function joinRoom(roomId, type, passwordInput = null) {
     const footer = document.querySelector("footer");
     if (footer) footer.style.display = "none";
 
+    // Khởi tạo emoji picker cho khu vực chat Watch Party
+    if (typeof initWpEmojiPicker === 'function') {
+        initWpEmojiPicker();
+    }
+
     // Đăng ký dọn dẹp khi user đóng tab/trang bất ngờ
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -1145,6 +1151,11 @@ async function joinRoom(roomId, type, passwordInput = null) {
 // 👇 Tìm và thay thế toàn bộ hàm setupMemberAndChat cũ bằng hàm này
 async function setupMemberAndChat(roomId) {
   // 1. Thêm bản thân vào danh sách thành viên - Supabase
+  // Xác định role để phân biệt badge trong danh sách thành viên
+  const memberRole = (typeof isAdmin !== 'undefined' && isAdmin)
+    ? 'admin'
+    : (currentUser.is_vip || currentUser.isVip) ? 'vip' : 'user';
+
   await supabase
     .from('room_members')
     .upsert({
@@ -1152,106 +1163,181 @@ async function setupMemberAndChat(roomId) {
       user_id: currentUser.id,
       name: currentUser.display_name || currentUser.displayName || "User",
       avatar: currentUser.avatar || currentUser.photoURL || "",
+      user_role: memberRole,
       joined_at: new Date().toISOString(),
       is_chat_banned: false,
       is_mic_muted: false,
       is_mic_banned: false,
     });
 
-  // Tăng member_count trong watch_rooms
-  await supabase.rpc('increment_member_count', { room_id_param: roomId });
+  // Đồng bộ member_count bằng COUNT thực tế từ room_members (tránh lệch do crash/reload)
+  const { count: actualCount } = await supabase
+    .from('room_members')
+    .select('*', { count: 'exact', head: true })
+    .eq('room_id', roomId);
+  if (actualCount !== null) {
+    await supabase
+      .from('watch_rooms')
+      .update({ member_count: actualCount })
+      .eq('id', roomId);
+  }
 
-  let wasChatBanned = false;
+  // Lưu danh sách ID thành viên trước đó để phát hiện vào/rời
+  let previousMemberIds = new Set();
+  let previousMemberNames = {};  // uid → name để dùng khi báo rời phòng
+  let wasChatBanned = false;    // Cờ theo dõi trạng thái cấm chat
+  let isFirstRefresh = true;    // Lần đầu chỉ thiết lập baseline, không show notification
 
-  // 2. Lắng nghe thay đổi của thành viên qua Realtime
+  // Hàm fetch & cập nhật danh sách thành viên (dùng chung cho realtime + polling)
+  const refreshMembers = async () => {
+      if (!currentRoomId) return; // Đã rời phòng
+      const { data: members } = await supabase
+          .from('room_members')
+          .select('*')
+          .eq('room_id', roomId);
+      
+      const safeMembers = members || [];
+
+      // --- Phát hiện thành viên vào/rời ---
+      const newIds = new Set(safeMembers.map(m => m.user_id));
+      
+      if (isFirstRefresh) {
+          // Lần đầu: chỉ thiết lập baseline, KHÔNG show notification tránh ghost members
+          isFirstRefresh = false;
+      } else if (previousMemberIds.size > 0) {
+          // Người vừa vào: chỉ ghi vào chat, không hiện popup
+          safeMembers.forEach(m => {
+              if (!previousMemberIds.has(m.user_id) && m.user_id !== currentUser.id) {
+                  const name = m.name || 'Ai đó';
+                  sendSystemMessage(`${name} đã vào phòng 👋`);
+              }
+          });
+          // Người vừa rời: chỉ ghi vào chat, không hiện popup
+          previousMemberIds.forEach(uid => {
+              if (!newIds.has(uid) && uid !== currentUser.id) {
+                  const leftName = previousMemberNames[uid] || 'Ai đó';
+                  sendSystemMessage(`${leftName} đã rời phòng 🚪`);
+              }
+          });
+      }
+      safeMembers.forEach(m => { previousMemberNames[m.user_id] = m.name; });
+      previousMemberIds = newIds;
+
+      // Cập nhật cả header badge lẫn tab label
+      const countEl = document.getElementById("memberCount");
+      if (countEl) countEl.textContent = safeMembers.length;
+      const tabCountEl = document.getElementById("memberTabCount");
+      if (tabCountEl) tabCountEl.textContent = safeMembers.length;
+
+      renderMembersList(safeMembers);
+
+      const myData = safeMembers.find((m) => m.user_id === currentUser.id);
+
+      if (!myData && currentRoomId) {
+        console.warn("🚫 Phát hiện bị Kick khỏi phòng!");
+        leaveRoom(true);
+        customAlert("⚠️ BẠN ĐÃ BỊ MỜI RA KHỎI PHÒNG!", { type: "danger" });
+        return;
+      }
+
+      if (myData) {
+        const chatInput = document.getElementById("chatInput");
+        const chatBtn = document.querySelector("#chatForm button");
+
+        if (myData.is_chat_banned) {
+          if (!wasChatBanned) {
+            showNotification("⛔ QUẢN TRỊ VIÊN ĐÃ CẤM BẠN CHAT!", "error");
+            wasChatBanned = true;
+          }
+          if (chatInput) {
+            chatInput.disabled = true;
+            chatInput.value = "";
+            chatInput.placeholder = "⛔ Bạn đang bị cấm chat!";
+            chatInput.style.backgroundColor = "#2a0000";
+            chatInput.style.color = "#ff4444";
+            chatInput.style.cursor = "not-allowed";
+          }
+          if (chatBtn) { chatBtn.disabled = true; chatBtn.style.opacity = "0.5"; }
+        } else {
+          if (wasChatBanned) {
+            showNotification("✅ Bạn đã được mở Chat.", "success");
+            wasChatBanned = false;
+          }
+          if (chatInput) {
+            chatInput.disabled = false;
+            chatInput.placeholder = "Nhập tin nhắn...";
+            chatInput.style.backgroundColor = "";
+            chatInput.style.color = "";
+            chatInput.style.cursor = "text";
+          }
+          if (chatBtn) { chatBtn.disabled = false; chatBtn.style.opacity = "1"; }
+        }
+
+        if (myData.is_mic_banned) {
+          isMyMicBanned = true;
+          // Luôn hiện thông báo dù mic đang tắt hay bật
+          showNotification("⛔ QUẢN TRỊ VIÊN ĐÃ TẮT MIC CỦA BẠN!", "warning");
+          if (isMicEnabled) {
+              if (myStream && myStream.getAudioTracks()[0]) {
+                myStream.getAudioTracks()[0].enabled = false;
+              }
+              isMicEnabled = false;
+              updateMicUI(false);
+              await supabase
+                .from('room_members')
+                .update({ is_mic_muted: true })
+                .eq('user_id', currentUser.id)
+                .eq('room_id', roomId);
+          }
+        } else {
+          if (isMyMicBanned) showNotification("✅ Host đã mở khóa Mic cho bạn", "success");
+          isMyMicBanned = false;
+        }
+      }
+  };
+
+  // 2. Realtime: KHÔNG dùng filter (cần REPLICA IDENTITY FULL) → subscribe toàn bảng, lọc trong JS
   membersUnsubscribe = supabase
-    .channel(`room_members:${roomId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'room_members', filter: `room_id=eq.${roomId}` }, async () => {
-        const { data: members } = await supabase
-            .from('room_members')
-            .select('*')
-            .eq('room_id', roomId);
-        
-        const countEl = document.getElementById("memberCount");
-        if (countEl) countEl.textContent = members.length;
-
-        renderMembersList(members);
-
-        const myData = members.find((m) => m.user_id === currentUser.id);
-
-        if (!myData && currentRoomId) {
-          console.warn("🚫 Phát hiện bị Kick khỏi phòng!");
-          leaveRoom(true);
-          customAlert("⚠️ BẠN ĐÃ BỊ MỜI RA KHỎI PHÒNG!", { type: "danger" });
-          return;
-        }
-
-        if (myData) {
-          const chatInput = document.getElementById("chatInput");
-          const chatBtn = document.querySelector("#chatForm button");
-
-          if (myData.is_chat_banned) {
-            if (!wasChatBanned) {
-              showNotification("⛔ QUẢN TRỊ VIÊN ĐÃ CẤM BẠN CHAT!", "error");
-              wasChatBanned = true;
-            }
-            if (chatInput) {
-              chatInput.disabled = true;
-              chatInput.value = "";
-              chatInput.placeholder = "⛔ Bạn đang bị cấm chat!";
-              chatInput.style.backgroundColor = "#2a0000";
-              chatInput.style.color = "#ff4444";
-              chatInput.style.cursor = "not-allowed";
-            }
-            if (chatBtn) {
-              chatBtn.disabled = true;
-              chatBtn.style.opacity = "0.5";
-            }
-          } else {
-            if (wasChatBanned) {
-              showNotification("✅ Bạn đã được mở Chat.", "success");
-              wasChatBanned = false;
-            }
-            if (chatInput) {
-              chatInput.disabled = false;
-              chatInput.placeholder = "Nhập tin nhắn...";
-              chatInput.style.backgroundColor = "";
-              chatInput.style.color = "";
-              chatInput.style.cursor = "text";
-            }
-            if (chatBtn) {
-              chatBtn.disabled = false;
-              chatBtn.style.opacity = "1";
-            }
-          }
-
-          if (myData.is_mic_banned && isMicEnabled) {
-            if (myStream && myStream.getAudioTracks()[0]) {
-              myStream.getAudioTracks()[0].enabled = false;
-            }
-            isMicEnabled = false;
-            updateMicUI(false);
-            showNotification("⛔ QUẢN TRỊ VIÊN ĐÃ TẮT MIC CỦA BẠN!", "warning");
-            await supabase
-              .from('room_members')
-              .update({ is_mic_muted: true })
-              .eq('user_id', currentUser.id)
-              .eq('room_id', roomId);
-          }
-        }
+    .channel(`room_members_watch:${roomId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'room_members' }, async (payload) => {
+        console.log("⚡ Nhận Realtime room_members:", payload);
+        // Lọc trong JS: chỉ xử lý nếu thuộc phòng này (Dùng != do ID từ DB là số, roomId từ URL là chuỗi)
+        const rowRoomId = payload.new?.room_id || payload.old?.room_id;
+        if (rowRoomId != roomId) return;
+        await refreshMembers();
     })
-    .subscribe();
+    .subscribe((status) => {
+        console.log('🔴 room_members realtime status:', status);
+    });
 
   // Load initial members list
-  const { data: initialMembers } = await supabase
+  const { data: initialMembers, error: membersError } = await supabase
     .from('room_members')
     .select('*')
     .eq('room_id', roomId);
-  renderMembersList(initialMembers);
-  if (document.getElementById("memberCount")) document.getElementById("memberCount").textContent = initialMembers.length;
+  console.log("🔍 Initial members:", initialMembers, "Error:", membersError);
+  const safeMembers = initialMembers || [];
+  renderMembersList(safeMembers);
+  // Cập nhật cả header badge lẫn tab label
+  const countEl = document.getElementById("memberCount");
+  if (countEl) countEl.textContent = safeMembers.length;
+  const tabCountEl = document.getElementById("memberTabCount");
+  if (tabCountEl) tabCountEl.textContent = safeMembers.length;
 
+  // Khởi tạo danh sách ban đầu để tránh thông báo nhầm lần đầu
+  previousMemberIds = new Set(safeMembers.map(m => m.user_id));
+  safeMembers.forEach(m => { previousMemberNames[m.user_id] = m.name; });
+
+  // Polling fallback 8 giây: đảm bảo count đúng dù realtime có vấn đề
+  if (window._memberPollInterval) clearInterval(window._memberPollInterval);
+  window._memberPollInterval = setInterval(() => {
+    if (!currentRoomId) { clearInterval(window._memberPollInterval); return; }
+    refreshMembers();
+  }, 8000);
+
+  // Đợi gửi tin nhắn hệ thống TRƯỚC, rồi mới load chat để hiển thị
+  await sendSystemMessage(`${currentUser.display_name || currentUser.displayName} đã vào phòng 👋`);
   loadChat(roomId);
-  sendSystemMessage(`${currentUser.display_name || currentUser.displayName} đã vào phòng 👋`);
 }
 
 function updateRoomUI(data) {
@@ -1335,7 +1421,7 @@ function updateRoomUI(data) {
   }
 
   // 👇 FIX: Admin cũng có quyền điều khiển như chủ phòng
-  isHost = (currentUser.uid === data.hostId) || (typeof isAdmin !== 'undefined' && isAdmin);
+  isHost = (currentUser.id === data.hostId) || (typeof isAdmin !== 'undefined' && isAdmin);
   
   // Khởi tạo Hybrid Player (YouTube hoặc HTML5)
   // Chỉ init nếu chưa có player HOẶC loại video thay đổi
@@ -1424,17 +1510,34 @@ function renderMembersList(members) {
             </div>`;
     }
 
+    const role = m.user_role || 'user'; // Đọc role từ DB (admin/vip/user)
+
+    // Class viền avatar theo role
+    const avatarBorderClass = role === 'admin'
+      ? 'avatar-border-admin'
+      : role === 'vip'
+        ? 'avatar-border-vip'
+        : '';
+
+    // Badge role nhỏ hiện dưới tên thành viên
+    let roleBadgeInner = '';
+    if (role === 'admin') {
+      roleBadgeInner = `<span class="member-role-badge badge-admin">🛡️ Admin</span>`;
+    } else if (role === 'vip') {
+      roleBadgeInner = `<span class="member-role-badge badge-vip">👑 VIP</span>`;
+    }
+
     const roleHtml =
       uid === latestRoomData?.host_id
-        ? '<span class="role-host">👑 Chủ phòng</span>'
-        : '<span class="role-member">Thành viên</span>';
+        ? `<span class="role-host">👑 Chủ phòng</span>${roleBadgeInner}`
+        : `<span class="role-member">Thành viên</span>${roleBadgeInner}`;
 
     list.innerHTML += `
             <div class="member-item" id="member-row-${uid}">
                 <div class="member-main-row">
                     <div class="member-identity">
                         <div class="member-avatar-wrap">
-                            <img src="${m.avatar || defaultAvatar}" class="member-avatar avatar-img">
+                            <img src="${m.avatar || defaultAvatar}" class="member-avatar avatar-img ${avatarBorderClass}">
                             ${m.isSpeaking ? '<div class="speaking-indicator"></div>' : ""}
                         </div>
                         <div class="member-info">
@@ -1624,7 +1727,7 @@ async function startPeerConnection() {
     const iceServers = await getTurnCredentials();
 
     // Khởi tạo Peer Connection
-    myPeer = new Peer(currentUser.uid, {
+    myPeer = new Peer(currentUser.id, {
       config: {
         iceServers: iceServers,
         iceTransportPolicy: "all",
@@ -1679,7 +1782,7 @@ function connectToAllPeers() {
     .then(({ data }) => {
       if (!data) return;
       data.forEach((member) => {
-        if (member.user_id !== currentUser.uid) {
+        if (member.user_id !== currentUser.id) {
           const call = myPeer.call(member.user_id, myStream);
           if (call) {
             call.on("stream", (remoteStream) => {
@@ -1851,6 +1954,11 @@ function addMicButtonToUI() {
 }
 
 async function toggleMyMic() {
+  if (isMyMicBanned) {
+      showNotification("⛔ BẠN ĐANG BỊ QUẢN TRỊ VIÊN CẤM MIC!", "error");
+      return;
+  }
+  
   if (globalAudioContext?.state === "suspended") globalAudioContext.resume().catch(()=>{});
   
   // NGUYÊN TẮC: Nếu chưa có luồng thực tế -> Yêu cầu xin quyền (getUserMedia)
@@ -1878,13 +1986,13 @@ async function toggleMyMic() {
           myStream.getAudioTracks()[0].enabled = true;
           
           updateMicUI(true);
-          monitorAudioLevel(myStream, currentUser.uid);
+          monitorAudioLevel(myStream, currentUser.id);
 
           // Cập nhật Database
           supabase.from("room_members")
             .update({ is_mic_muted: false })
             .eq("room_id", currentRoomId)
-            .eq("user_id", currentUser.uid)
+            .eq("user_id", currentUser.id)
             .then();
           
           // Gửi luồng âm thanh mới này cho tất cả những người trong phòng
@@ -1928,7 +2036,7 @@ async function toggleMyMic() {
   supabase.from("room_members")
     .update({ is_mic_muted: !isMicEnabled })
     .eq("room_id", currentRoomId)
-    .eq("user_id", currentUser.uid)
+    .eq("user_id", currentUser.id)
     .then();
 }
 
@@ -1949,8 +2057,10 @@ function updateMicUI(enabled) {
 // ==========================================
 function loadChat(roomId) {
   chatUnsubscribe = supabase
-    .channel(`room_chat:${roomId}`)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_chat', filter: `room_id=eq.${roomId}` }, (payload) => {
+    .channel(`room_chat_watch:${roomId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_chat' }, (payload) => {
+      // Lọc trong JS: chỉ hiện tin nhắn của phòng này (Dùng != để cho phép ID chữ/số)
+      if (payload.new?.room_id != roomId) return;
       const container = document.getElementById("chatMessages");
       renderMessage(payload.new, container);
       
@@ -1961,7 +2071,9 @@ function loadChat(roomId) {
         });
       }, 100);
     })
-    .subscribe();
+    .subscribe((status) => {
+        console.log('🔵 room_chat realtime status:', status);
+    });
 
   // Load initial chat
   supabase
@@ -2011,18 +2123,42 @@ async function sendChatMessage(e) {
   }
 
   try {
+    // Xác định role để hiển thị màu khác nhau trong chat
+    const userRole = (typeof isAdmin !== 'undefined' && isAdmin)
+      ? 'admin'
+      : (currentUser.is_vip || currentUser.isVip)
+        ? 'vip'
+        : 'user';
+
     const { error } = await supabase
       .from('room_chat')
       .insert({
         room_id: currentRoomId,
         user_id: currentUser.id,
         user_name: currentUser.display_name || currentUser.displayName,
+        user_role: userRole,
         content: text,
         type: "text",
         created_at: new Date().toISOString(),
       });
     
-    if (error) throw error;
+    if (error) {
+      // Fallback: Nếu column user_role chưa tồn tại, gửi lại không có role
+      if (error.message?.includes('user_role') || error.code === '42703') {
+        console.warn('[WP Chat] Column user_role chưa có trong DB, gửi không có role');
+        const { error: err2 } = await supabase.from('room_chat').insert({
+          room_id: currentRoomId,
+          user_id: currentUser.id,
+          user_name: currentUser.display_name || currentUser.displayName,
+          content: text,
+          type: "text",
+          created_at: new Date().toISOString(),
+        });
+        if (err2) throw err2;
+      } else {
+        throw error;
+      }
+    }
     
     input.value = "";
     const container = document.getElementById("chatMessages");
@@ -2088,6 +2224,58 @@ function initHTML5Player(type, source, initialData) {
     player.videoType = type; // Đánh dấu loại
     video.controls = false; // Tắt native controls, dùng custom
 
+    // --- Nhãn Buffering: hiện khi mạng chậm / lag ---
+    const bufLabel = document.createElement('div');
+    bufLabel.id = 'partyBufferingLabel';
+    bufLabel.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Đang tải...';
+    bufLabel.style.cssText = `
+        display:none; position:absolute; top:10px; right:10px; z-index:500;
+        background:rgba(0,0,0,0.72); color:#fff; font-size:12px; font-weight:600;
+        padding:5px 10px; border-radius:20px; line-height:1.4;
+        backdrop-filter:blur(4px); pointer-events:none;
+        border:1px solid rgba(255,255,255,0.15);
+    `;
+    // Wrapper cần position:relative để nhãn absolute hoạt động
+    const wrapper = container.closest('.room-player-wrapper') || container.parentElement;
+    if (wrapper) wrapper.style.position = 'relative';
+    (wrapper || container).appendChild(bufLabel);
+
+    const showBufLabel = (text = 'Đang tải...', icon = 'fa-circle-notch fa-spin') => {
+        bufLabel.innerHTML = `<i class="fas ${icon}"></i> ${text}`;
+        bufLabel.style.display = 'flex';
+        bufLabel.style.alignItems = 'center';
+        bufLabel.style.gap = '6px';
+    };
+    const hideBufLabel = () => { bufLabel.style.display = 'none'; };
+
+    // Bắt sự kiện native video
+    video.addEventListener('waiting', () => showBufLabel('Đang tải...'));
+    video.addEventListener('stalled', () => showBufLabel('Mạng chậm...', 'fa-wifi'));
+    video.addEventListener('playing', hideBufLabel);
+    video.addEventListener('canplay', hideBufLabel);
+
+    // Watchdog: phát hiện video bị stall âm thầm (currentTime không tiến dù đang play)
+    let _lastTime = -1;
+    let _stallCount = 0;
+    const _stallWatcher = setInterval(() => {
+        if (!video || video.paused || video.ended || !document.getElementById('partyBufferingLabel')) {
+            clearInterval(_stallWatcher);
+            return;
+        }
+        const ct = video.currentTime;
+        if (ct === _lastTime && !video.paused) {
+            _stallCount++;
+            if (_stallCount >= 2) { // Kẹt liên tục ≥ 4 giây
+                showBufLabel('Video bị lag...', 'fa-circle-notch fa-spin');
+            }
+        } else {
+            _stallCount = 0;
+            hideBufLabel();
+        }
+        _lastTime = ct;
+    }, 2000);
+
+
     // Xác định phòng có lên lịch chiếu hay không
     const isScheduledRoom = !!(initialData.scheduledTime);
 
@@ -2111,14 +2299,29 @@ function initHTML5Player(type, source, initialData) {
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
             if (isScheduledRoom) {
-                video.play().catch(e => {
-                    console.log("Auto-play blocked (Scheduled HLS)", e);
-                    showMobilePlayOverlay();
-                });
-            } else if (initialData.status === "playing") {
+                if (hlsStartPosition > 5) {
+                    // Đã qua giờ chiếu: seek đúng vị trí và play ngay
+                    video.currentTime = hlsStartPosition;
+                    video.play().catch(e => {
+                        console.log('Auto-play blocked (Scheduled HLS - past time)', e);
+                        showMobilePlayOverlay();
+                    });
+                } else {
+                    // Chưa tới giờ chiếu: PRELOAD - load segment đầu rồi pause ngay
+                    // Browser sẽ tự buffer trong nền, khi tới giờ play sẽ mượt
+                    console.log('⏳ Preloading HLS trước giờ chiếu...');
+                    video.currentTime = 0;
+                    video.play()
+                        .then(() => { video.pause(); }) // pause ngay sau khi browser cho phép
+                        .catch(() => {
+                            // Nếu autoplay bị chặn (mobile), video đã preload manifest rồi là đủ
+                            video.load();
+                        });
+                }
+            } else if (initialData.status === 'playing') {
                 video.currentTime = initialData.currentTime || 0;
                 video.play().catch(e => {
-                    console.log("Auto-play blocked (Playing HLS)", e);
+                    console.log('Auto-play blocked (Playing HLS)', e);
                     showMobilePlayOverlay();
                 });
             }
@@ -2130,30 +2333,43 @@ function initHTML5Player(type, source, initialData) {
         // Xử lý lỗi HLS: Hiện thông báo thay vì silent buffering
         hls.on(Hls.Events.ERROR, (event, errData) => {
             console.error("🔴 HLS Error:", errData.type, errData.details, errData.fatal);
+            // Lỗi nhẹ (non-fatal): hiện "Đỡ băm thông..." rồi tự ẩn
+            if (!errData.fatal) {
+                showBufLabel('Đang tải...', 'fa-circle-notch fa-spin');
+                setTimeout(() => { if (video.readyState >= 3) hideBufLabel(); }, 5000);
+            }
             if (errData.fatal) {
                 if (errData.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                    // Lỗi mạng: thử load lại
                     console.warn("⚡ HLS fatal network error, đang thử tải lại...");
+                    showBufLabel('Lỗi mạng, đang thử lại...', 'fa-wifi');
                     hls.startLoad();
                 } else if (errData.type === Hls.ErrorTypes.MEDIA_ERROR) {
                     console.warn("⚡ HLS fatal media error, recover...");
+                    showBufLabel('Lỗi video, đang khôi phục...', 'fa-exclamation-triangle');
                     hls.recoverMediaError();
                 } else {
-                    // Lỗi không thể recover
+                    hideBufLabel();
                     showNotification("❌ Không thể tải video. Nguồn phim có thể lỗi hoặc không còn hỗ trợ.", "error");
                     hls.destroy();
                 }
             }
         });
+
     } else {
         video.src = source;
-        if (isScheduledRoom && hlsStartPosition > 0) {
+        video.preload = 'auto'; // Preload sẵn để buffer trước
+        if (isScheduledRoom && hlsStartPosition > 5) {
+            // Đã qua giờ chiếu: seek đúng vị trí và play
             video.currentTime = hlsStartPosition;
             video.play().catch(e => {
-                console.log("Auto-play blocked (Scheduled MP4)", e);
+                console.log('Auto-play blocked (Scheduled MP4)', e);
                 showMobilePlayOverlay();
             });
-        } else if (initialData.status === "playing") {
+        } else if (isScheduledRoom) {
+            // Chưa tới giờ: load + pause để preload buffer
+            console.log('⏳ Preloading MP4 trước giờ chiếu...');
+            video.load();
+        } else if (initialData.status === 'playing') {
              video.currentTime = initialData.currentTime || 0;
              video.play().catch(e => {
                  console.log("Auto-play blocked (Playing MP4)", e);
@@ -2533,6 +2749,11 @@ async function leaveRoom(isKicked = false) {
       clearInterval(scheduleSyncInterval);
       scheduleSyncInterval = null;
   }
+  // Dọn polling members interval
+  if (window._memberPollInterval) {
+      clearInterval(window._memberPollInterval);
+      window._memberPollInterval = null;
+  }
   // Dọn interval sync host
   if (hostSyncInterval) {
       clearInterval(hostSyncInterval);
@@ -2548,16 +2769,30 @@ async function leaveRoom(isKicked = false) {
   player = null;
   document.getElementById("partyPlayer").innerHTML = "";
 
-  // 5. Xóa tên khỏi danh sách thành viên (Nếu không phải bị kick)
-  if (!isKicked && currentRoomId) {
+  // 5. Xóa tên khỏi danh sách thành viên
+  if (currentRoomId) {
     try {
-      await supabase
-        .from('room_members')
-        .delete()
-        .eq('room_id', currentRoomId)
-        .eq('user_id', currentUser.id);
+      if (!isKicked) {
+        // Tự rời: xóa DB + giảm count
+        await supabase
+          .from('room_members')
+          .delete()
+          .eq('room_id', currentRoomId)
+          .eq('user_id', currentUser.id);
+      }
 
-      await supabase.rpc('decrement_member_count', { room_id_param: currentRoomId });
+      // Sau khi xóa: đếm COUNT thực tế và cập nhật (luôn chính xác)
+      const roomIdSnapshot = currentRoomId; // snapshot trước khi reset
+      const { count: remaining } = await supabase
+        .from('room_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('room_id', roomIdSnapshot);
+      if (remaining !== null) {
+        await supabase
+          .from('watch_rooms')
+          .update({ member_count: remaining })
+          .eq('id', roomIdSnapshot);
+      }
     } catch (e) {
       console.log("Lỗi xóa user Supabase:", e);
     }
@@ -2581,15 +2816,23 @@ async function leaveRoom(isKicked = false) {
 // Xử lý khi user đóng tab hoặc reload trang mà đang trong phòng
 function handleBeforeUnload(e) {
   if (!currentRoomId || !currentUser) return;
-  // Dùng sendBeacon để gửi request dọn dẹp (không bị chặn khi tab đóng)
+  // fetch + keepalive: request tiếp tục dù tab đã đóng (sendBeacon chỉ hỗ trợ POST)
   try {
-    const supabaseUrl = supabase.supabaseUrl || supabase.restUrl?.replace('/rest/v1', '');
-    const supabaseKey = supabase.supabaseKey || supabase.realtime?.accessToken;
-    if (supabaseUrl && supabaseKey) {
-      // Xóa member khỏi danh sách
-      navigator.sendBeacon(
-        `${supabaseUrl}/rest/v1/room_members?room_id=eq.${currentRoomId}&user_id=eq.${currentUser.id}`,
-        '' // DELETE không cần body, nhưng sendBeacon chỉ hỗ trợ POST
+    if (typeof SUPABASE_URL !== 'undefined' && typeof SUPABASE_ANON_KEY !== 'undefined') {
+      const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+      };
+      // Xóa member
+      fetch(
+        `${SUPABASE_URL}/rest/v1/room_members?room_id=eq.${currentRoomId}&user_id=eq.${currentUser.id}`,
+        { method: 'DELETE', keepalive: true, headers }
+      );
+      // Giảm member_count
+      fetch(
+        `${SUPABASE_URL}/rest/v1/rpc/decrement_member_count`,
+        { method: 'POST', keepalive: true, headers, body: JSON.stringify({ room_id_param: currentRoomId }) }
       );
     }
   } catch(err) {
@@ -2607,27 +2850,56 @@ function handleVisibilityChange() {
 }
 function renderMessage(msg, c) {
   const div = document.createElement("div");
+  // Hỗ trợ cả camelCase (realtime payload) và snake_case (Supabase select)
+  const uid = msg.userId || msg.user_id;
+  const uname = msg.userName || msg.user_name || 'Ẩn danh';
+  const role = msg.userRole || msg.user_role || 'user'; // Admin/VIP role
+
   if (msg.type === "system") {
     div.className = "chat-msg system";
     div.textContent = msg.content;
   } else {
-    div.className = `chat-msg ${msg.userId === currentUser.uid ? "me" : ""}`;
-    div.innerHTML = `<span class="author">${msg.userId === currentUser.uid ? "" : msg.userName + ":"}</span> <span class="text">${msg.content}</span>`;
+    const isMe = uid === currentUser?.id;
+    div.className = `chat-msg ${isMe ? "me" : ""}`;
+
+    // Tạo badge role (admin/vip)
+    let roleBadgeHtml = '';
+    let authorClass = 'author';
+    if (role === 'admin') {
+      roleBadgeHtml = `<span class="wp-role-badge wp-badge-admin">🛡️ Admin</span>`;
+      authorClass = 'author author-admin';
+    } else if (role === 'vip') {
+      roleBadgeHtml = `<span class="wp-role-badge wp-badge-vip">👑 VIP</span>`;
+      authorClass = 'author author-vip';
+    }
+
+    if (isMe) {
+      // Tin nhắn của mình: không hiện tên, chỉ hiện nội dung
+      div.innerHTML = `<span class="text">${msg.content}</span>`;
+    } else {
+      div.innerHTML = `${roleBadgeHtml}<span class="${authorClass}">${uname}:</span> <span class="text">${msg.content}</span>`;
+    }
   }
   c.appendChild(div);
 }
-function sendSystemMessage(t) {
-  supabase.from('room_chat').insert({
+async function sendSystemMessage(t) {
+  if (!currentUser) return;
+  return await supabase.from('room_chat').insert({
     room_id: currentRoomId,
     content: t,
     type: "system",
+    user_id: currentUser.id, // Bắt buộc truyền user_id để KHÔNG bị RLS chặn
     created_at: new Date().toISOString(),
   });
 }
 function kickUser(uid, name) {
   customConfirm("KICK " + name + "?", { title: "Kick thành viên", type: "warning", confirmText: "Kick" }).then(async (ok) => { 
     if (!ok) return;
+    // Xóa khỏi room_members
     await supabase.from('room_members').delete().eq('room_id', currentRoomId).eq('user_id', uid);
+    // Giảm member_count sau khi kick
+    await supabase.rpc('decrement_member_count', { room_id_param: currentRoomId });
+    sendSystemMessage(`${name} đã bị mời ra khỏi phòng`);
   });
 }
 
@@ -2788,7 +3060,12 @@ window.toggleMicBan = async function (uid, shouldBan) {
   if (!currentRoomId) return;
   try {
     const updateData = { is_mic_banned: shouldBan };
-    if (shouldBan) updateData.is_mic_muted = true;
+    // Cấm mic: tắt mic luôn. Bỏ cấm: reset cả is_mic_muted để icon hiện đúng
+    if (shouldBan) {
+        updateData.is_mic_muted = true;
+    } else {
+        updateData.is_mic_muted = false;
+    }
 
     await supabase
       .from('room_members')
@@ -3417,13 +3694,16 @@ function startScheduleSync(roomData) {
 
     let hasInitialSeeked = false;  // Cờ: Đã tua lần đầu chưa
     let lastHardSeekTime = 0;      // Thời điểm hard-seek gần nhất (ms)
+    let syncTickCount = 0;         // Đếm tick: mỗi 3 tick mới chạy sync nặng
     const HARD_SEEK_COOLDOWN = 15000; // 15 giây giữa 2 lần hard-seek
-    const DRIFT_TOLERANCE = 5;     // Dưới 5s lệch -> coi là OK, không làm gì
-    const RATE_ADJUST_RANGE = 15;  // 5-15s lệch -> Dùng playbackRate bù
-    const HARD_SEEK_THRESHOLD = 30; // >30s lệch -> Bắt buộc hard-seek
+    const DRIFT_TOLERANCE = 5;     // Dưới 5s lệch → coi là OK, không làm gì
+    const RATE_ADJUST_RANGE = 15;  // 5-15s lệch → Dùng playbackRate bù
+    const HARD_SEEK_THRESHOLD = 30; // >30s lệch → Bắt buộc hard-seek
 
     scheduleSyncInterval = setInterval(() => {
         if (!player) return;
+        syncTickCount++;
+        const isHeavySyncTick = (syncTickCount % 3 === 0); // Chỉ sync nặng mỗi 3 giây
         
         if (latestRoomData && latestRoomData.status === "ended") {
             console.log("🛑 Engine detected ended status from DB. Stopping sync.");
@@ -3449,7 +3729,7 @@ function startScheduleSync(roomData) {
             // ========== ĐÃ QUA GIỜ CHIẾU ==========
             
             // 🔥 NẾU DIFF VƯỢT QUÁ DURATION THÌ KẾT THÚC LUÔN (TRÁNH SEEK VÔ TẬN)
-            if (videoDuration > 0 && diffSeconds >= videoDuration) {
+            if (isHeavySyncTick && videoDuration > 0 && diffSeconds >= videoDuration) {
                 console.log("🎬 diffSeconds exceeds videoDuration. Ending sync engine.");
                 
                 // Tính chính xác mốc thời gian phim hết
@@ -3467,26 +3747,39 @@ function startScheduleSync(roomData) {
             let isPlaying = false;
             let isBufferingState = false;
 
-            if (isYt) {
-                const ytState = player.getPlayerState ? player.getPlayerState() : -1;
-                currentTime = player.getCurrentTime ? player.getCurrentTime() : 0;
-                isPlaying = (ytState === 1);
-                isBufferingState = (ytState === 3);
+            if (isHeavySyncTick) {
+                // Sync nặng: chỉ chạy mỗi 3 giây để tiết kiệm CPU
+                if (isYt) {
+                    const ytState = player.getPlayerState ? player.getPlayerState() : -1;
+                    currentTime = player.getCurrentTime ? player.getCurrentTime() : 0;
+                    isPlaying = (ytState === 1);
+                    isBufferingState = (ytState === 3);
 
-                // Đảm bảo video đang chạy
-                if (!isPlaying && !isBufferingState) {
-                    player.playVideo();
+                    // Đảm bảo video đang chạy
+                    if (!isPlaying && !isBufferingState) {
+                        player.playVideo();
+                    }
+                } else {
+                    currentTime = player.currentTime || 0;
+                    isPlaying = !player.paused;
+                    isBufferingState = (player.readyState < 3);
+
+                    if (!isPlaying && !isBufferingState) {
+                        player.play().catch(e => {
+                            console.log("Schedule auto-play blocked", e);
+                            showMobilePlayOverlay();
+                        });
+                    }
                 }
             } else {
-                currentTime = player.currentTime || 0;
-                isPlaying = !player.paused;
-                isBufferingState = (player.readyState < 3);
-
-                if (!isPlaying && !isBufferingState) {
-                    player.play().catch(e => {
-                        console.log("Schedule auto-play blocked", e);
-                        showMobilePlayOverlay();
-                    });
+                // Tick nhẹ: chỉ đọc trạng thái cơ bản để tính drift
+                if (isYt) {
+                    currentTime = player.getCurrentTime ? player.getCurrentTime() : 0;
+                    isPlaying = (player.getPlayerState ? player.getPlayerState() === 1 : false);
+                } else {
+                    currentTime = player.currentTime || 0;
+                    isPlaying = !player.paused;
+                    isBufferingState = (player.readyState < 3);
                 }
             }
 
@@ -3612,16 +3905,26 @@ function startScheduleSync(roomData) {
             }
 
             if (isYt) {
+                // Chỉ pause nếu đang phát, KHÔNG seek về 0 (để preload buffer)
                 if (player.getPlayerState && player.getPlayerState() === 1) {
                     player.pauseVideo();
                 }
-                if (player.getCurrentTime && player.getCurrentTime() > 1) player.seekTo(0, true);
+                // Preload YouTube: cueVideoById load metadata không autoplay (chỉ gọi 1 lần)
+                if (player.getPlayerState && player.getPlayerState() === -1) {
+                    // -1 = unstarted → chưa load → cue để tải trước
+                    const vidId = roomData.videoId || roomData.video_id || roomData.videoSource;
+                    if (vidId && player.cueVideoById) {
+                        player.cueVideoById(vidId, 0);
+                        console.log('⏳ YouTube: cueVideoById preload trước giờ chiếu');
+                    }
+                }
             } else {
+                // Chỉ pause, KHÔNG đặt lại currentTime về 0 mỗi giây
+                // Giữ nguyên vị trí buffer để browser tự buffer tiếp
                 if (!player.paused) player.pause();
-                if (player.currentTime > 1) player.currentTime = 0;
             }
         }
-    }, 3000); // Kiểm tra mỗi 3 giây thay vì 1 giây (giảm tải CPU/Network)
+    }, 1000); // 1 giây để countdown đếm mượt, sync logic có throttle riêng bên trong
 }
 
 /** Hàm kiểm tra phòng đã kết thúc chưa (Dùng chung cho cả Lobby và Room) **/

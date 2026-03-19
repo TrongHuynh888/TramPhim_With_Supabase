@@ -209,7 +209,7 @@
             Chat
           </button>
           <button class="room-tab" onclick="switchRoomTab('members')">
-            Thành viên (<span id="memberCount">0</span>)
+            Thành viên (<span id="memberTabCount">0</span>)
           </button>
         </div>
 
@@ -225,7 +225,15 @@
             <span onclick="sendReaction('😡')">😡</span>
             <span onclick="sendReaction('🎉')">🎉</span>
           </div>
+          <!-- Emoji Picker Container cho Watch Party (inline, nằm ngoài form) -->
+          <div id="wpEmojiPicker" class="wp-emoji-picker"></div>
           <form class="chat-input-area" onsubmit="sendChatMessage(event)">
+            <!-- Nút mở kho icon emoji -->
+            <button type="button" class="wp-emoji-trigger-btn btn-wp-emoji-trigger"
+                    title="Biểu tượng cảm xúc"
+                    onclick="toggleWpEmojiPicker(true)">
+              <i class="far fa-smile"></i>
+            </button>
             <input
               type="text"
               id="chatInput"

@@ -1963,34 +1963,29 @@ body[data-theme="light"] .chat-msg .author {
     /* Header - NẰM ĐẦU TIÊN trong .room-main (flex column) */
     .room-header-bar {
       display: flex !important;
-      flex-wrap: wrap !important;
-      justify-content: center !important;
+      flex-wrap: nowrap !important;      /* BẮT BUỘC 1 hàng - không wrap */
+      justify-content: flex-start !important;
       align-items: center !important;
       background: var(--bg-secondary) !important;
-      padding: 6px 10px !important;
+      padding: 0 6px !important;
       margin: 0 !important;
       border-radius: 0 !important;
       width: 100% !important;
-      order: -1 !important; /* Luôn đứng đầu trong flex */
+      height: 48px !important;           /* Cố định 1 hàng */
+      min-height: 48px !important;
+      overflow: hidden !important;       /* Tuyệt đối không tràn */
+      order: -1 !important;
       z-index: 100 !important;
       position: relative !important;
-      min-height: 40px !important;
       flex-shrink: 0 !important;
     }
     #roomTitleDisplay {
-      width: 100% !important;
-      text-align: center !important;
-      order: -1 !important;
-      font-weight: 700 !important;
-      margin-bottom: 4px !important;
-      font-size: 14px !important;
-      color: var(--text-primary) !important;
-      display: block !important;
+      /* Header mới dùng .rh-center → ẩn element cũ để không render dư */
+      display: none !important;
     }
     .room-meta {
-      display: flex !important;
-      gap: 8px !important;
-      justify-content: center !important;
+      /* Ẩn: header mới dùng .rh-right zone thay thế */
+      display: none !important;
     }
 
     /* Video Dọc */

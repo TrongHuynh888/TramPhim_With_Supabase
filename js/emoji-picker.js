@@ -1,6 +1,6 @@
 /**
- * Emoji & Sticker Picker Logic for CineChat
- * Phiên bản 10.0: Fix triệt để 100% Lỗi Cuộn, Toggle & Dữ liệu rác
+ * Emoji & Sticker Picker Logic — CineChat + Watch Party
+ * Phiên bản 11.0: Tách biệt 2 picker: commEmojiPicker (CineChat) & wpEmojiPicker (Watch Party)
  */
 
 const EMOJI_DATA = [
@@ -66,6 +66,9 @@ const STICKER_DATA = [
 ];
 
 let isEmojiPickerOpen = false;
+
+// Trạng thái mở/đóng picker riêng cho Watch Party
+let isWpEmojiPickerOpen = false;
 
 function initEmojiPicker() {
     const container = document.getElementById('commEmojiPicker');
@@ -251,4 +254,148 @@ function sendStickerFromPicker(stickerUrl) {
             sendMessage();
         }
     }
+}
+
+// ============================================================
+// WATCH PARTY EMOJI PICKER — Tách biệt, không xung đột CineChat
+// ============================================================
+
+/**
+ * Khởi tạo emoji picker cho Watch Party (container #wpEmojiPicker)
+ * Chỉ render phần emoji, bỏ sticker để giao diện gọn hơn trong chat phòng.
+ */
+function initWpEmojiPicker() {
+    const container = document.getElementById('wpEmojiPicker');
+    if (!container) return;
+
+    // Render tabs danh mục
+    const emojiTabsHtml = EMOJI_DATA.map((cat, index) => `
+        <button class="wp-emoji-tab ${index === 0 ? 'active' : ''}" onclick="switchWpEmojiCategory(${index})" title="${cat.category}">
+            <i class="fas ${cat.icon}"></i>
+        </button>
+    `).join('');
+
+    // Render nội dung emoji theo từng danh mục
+    const emojiContentHtml = EMOJI_DATA.map((cat, index) => `
+        <div class="wp-emoji-category-content ${index === 0 ? 'active' : ''}" id="wp-emoji-cat-${index}">
+            <div class="emoji-grid">
+                ${cat.emojis.filter(e => {
+                    const clean = e.trim();
+                    return clean.length > 0 && !/^[a-zA-Z\s\u00C0-\u024F\u1E00-\u1EFF]+$/.test(clean);
+                }).map(emoji => `
+                    <span class="emoji-item" onclick="insertWpEmoji('${emoji}')">${emoji}</span>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+
+    container.innerHTML = `
+        <div class="wp-emoji-picker-inner">
+            <div class="wp-emoji-picker-header">
+                <div class="wp-emoji-tabs">${emojiTabsHtml}</div>
+                <div class="wp-emoji-search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Tìm emoji..." id="wpEmojiSearchInput" oninput="searchWpEmoji(this.value)">
+                </div>
+            </div>
+            <div class="wp-emoji-picker-body">${emojiContentHtml}</div>
+        </div>
+    `;
+
+    // Đóng picker khi click ra ngoài
+    document.addEventListener('click', (e) => {
+        const picker = document.getElementById('wpEmojiPicker');
+        const isTrigger = e.target.closest('.btn-wp-emoji-trigger');
+        if (isWpEmojiPickerOpen && picker && !picker.contains(e.target) && !isTrigger) {
+            toggleWpEmojiPicker(false);
+        }
+    });
+}
+
+/**
+ * Bật/tắt emoji picker Watch Party
+ * @param {boolean|null} forceState - true=mở, false=đóng, null=toggle
+ */
+function toggleWpEmojiPicker(forceState) {
+    const picker = document.getElementById('wpEmojiPicker');
+    if (!picker) return;
+
+    // Nếu nhấn lại khi đang mở -> đóng
+    if (isWpEmojiPickerOpen && forceState === true) {
+        forceState = false;
+    }
+
+    isWpEmojiPickerOpen = typeof forceState === 'boolean' ? forceState : !isWpEmojiPickerOpen;
+
+    if (isWpEmojiPickerOpen) {
+        picker.classList.add('active');
+        picker.style.display = 'block';
+    } else {
+        picker.classList.remove('active');
+        picker.style.display = 'none';
+    }
+}
+
+/**
+ * Chèn emoji vào ô input chat của Watch Party (#chatInput)
+ * @param {string} emoji - Ký tự emoji được chọn
+ */
+function insertWpEmoji(emoji) {
+    const input = document.getElementById('chatInput');
+    if (!input) return;
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    input.value = input.value.substring(0, start) + emoji + input.value.substring(end);
+    input.focus();
+    const newPos = start + emoji.length;
+    input.setSelectionRange(newPos, newPos);
+}
+
+/**
+ * Chuyển tab danh mục emoji trong picker Watch Party
+ * @param {number} index - Index danh mục
+ */
+function switchWpEmojiCategory(index) {
+    document.querySelectorAll('.wp-emoji-tab').forEach((tab, i) => tab.classList.toggle('active', i === index));
+    document.querySelectorAll('.wp-emoji-category-content').forEach((content, i) => {
+        content.classList.toggle('active', i === index);
+        if (i === index) {
+            const body = document.querySelector('.wp-emoji-picker-body');
+            if (body) body.scrollTop = 0;
+        }
+    });
+}
+
+/**
+ * Tìm kiếm emoji trong picker Watch Party
+ * @param {string} query - Từ khóa tìm kiếm
+ */
+function searchWpEmoji(query) {
+    query = query.toLowerCase().trim();
+    const categories = document.querySelectorAll('.wp-emoji-category-content');
+    const tabs = document.querySelector('.wp-emoji-tabs');
+
+    if (!query) {
+        categories.forEach((cat, i) => {
+            cat.style.display = i === 0 ? 'block' : 'none';
+            cat.classList.toggle('active', i === 0);
+            cat.querySelectorAll('.emoji-item').forEach(e => e.style.display = 'flex');
+        });
+        document.querySelectorAll('.wp-emoji-tab').forEach((t, i) => t.classList.toggle('active', i === 0));
+        if (tabs) tabs.style.display = 'flex';
+        return;
+    }
+
+    if (tabs) tabs.style.display = 'none';
+    categories.forEach(cat => {
+        cat.style.display = 'block';
+        cat.classList.add('active');
+        let hasMatch = false;
+        cat.querySelectorAll('.emoji-item').forEach(item => {
+            const isMatch = item.textContent.includes(query);
+            item.style.display = isMatch ? 'flex' : 'none';
+            if (isMatch) hasMatch = true;
+        });
+        cat.style.display = hasMatch ? 'block' : 'none';
+    });
 }
