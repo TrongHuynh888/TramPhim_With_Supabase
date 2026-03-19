@@ -110,6 +110,7 @@ function normalizeRoomData(room) {
     room.episodeIndex = room.episodeIndex ?? room.episode_index ?? 0;
     room.currentTime = room.currentTime ?? room.current_time ?? 0;
     room.endedAt = room.endedAt || room.ended_at || null;
+    room.sourceLabel = room.sourceLabel || room.source_label || '';
     return room;
 }
 
@@ -298,6 +299,7 @@ function renderWatchRooms(rooms) {
               </div>
             </li>
             <li><i class="fas fa-tv"></i> <span>${epText}</span></li>
+            ${room.sourceLabel ? `<li><i class="fas fa-language" style="color: #00d4ff;"></i> <span>${room.sourceLabel}</span></li>` : ''}
             <li><i class="fas fa-crown"></i> <span>${room.hostName || 'Host'}</span></li>
             <li><i class="fas ${typeIcon}"></i> <span>${typeText}</span></li>
             <li><i class="fas fa-users"></i> <span>${count} người đang xem</span></li>
@@ -514,6 +516,16 @@ async function openCreateRoomModal() {
   if (epGroup) epGroup.classList.add('hidden');
   if (passGroup) passGroup.classList.add('hidden');
 
+  // Reset room type cards về "Công khai" mặc định
+  document.querySelectorAll('.cr-type-card').forEach(c => c.classList.remove('active'));
+  const publicCard = document.querySelector('.cr-type-card[data-value="public"]');
+  if (publicCard) publicCard.classList.add('active');
+  // Reset schedule toggle
+  const schedToggle = document.getElementById('roomScheduleToggle');
+  const schedInput = document.getElementById('roomScheduleInputGroup');
+  if (schedToggle) schedToggle.checked = false;
+  if (schedInput) schedInput.classList.add('hidden');
+
   // Đảm bảo dữ liệu phim đã được tải
   if (!allMovies || allMovies.length === 0) {
     console.warn("DEBUG: allMovies empty, attempting to load...");
@@ -685,10 +697,14 @@ function selectWPMovie(id) {
         </button>
       `).join("");
     }
+    // Load bản chiếu cho tập đầu tiên
+    loadEpisodeSources(id, 0);
     showNotification(`Đã chọn: ${movie.title}. Vui lòng chọn tập.`, "success");
   } else {
     if (epGroup) epGroup.classList.add('hidden');
     if (epIndexInput) epIndexInput.value = "0";
+    // Phim lẻ — cũng load sources
+    loadEpisodeSources(id, 0);
     showNotification(`Đã chọn: ${movie.title}`, "success");
   }
 
@@ -717,6 +733,9 @@ function undoMovieSelection() {
   }
   if (movieIdInput) movieIdInput.value = '';
   if (epGroup) epGroup.classList.add('hidden');
+  // Reset bản chiếu
+  const sourceGroup = document.getElementById('wpSourceSelectGroup');
+  if (sourceGroup) sourceGroup.classList.add('hidden');
 
   // Reset highlight cards
   document.querySelectorAll('.wp-movie-card').forEach(card => card.classList.remove('selected'));
@@ -735,6 +754,47 @@ function selectWPEpisode(index, btnElement) {
   }
   // Đánh dấu nút vừa bấm
   if(btnElement) btnElement.classList.add('active');
+
+  // Load bản chiếu cho tập được chọn
+  const movieId = document.getElementById('roomMovieId')?.value;
+  if (movieId) loadEpisodeSources(movieId, index);
+}
+
+// Fetch và hiển thị các bản chiếu (Vietsub, Thuyết minh...) của tập phim
+async function loadEpisodeSources(movieId, epIndex) {
+  const sourceGroup = document.getElementById('wpSourceSelectGroup');
+  const sourceSelect = document.getElementById('roomSourceLabel');
+  if (!sourceGroup || !sourceSelect) return;
+
+  try {
+    const { data: episodes, error } = await supabase
+      .from('episodes')
+      .select('sources')
+      .eq('movie_id', movieId)
+      .order('episode_index', { ascending: true });
+
+    if (error) throw error;
+    const episode = episodes?.[parseInt(epIndex)] || episodes?.[0];
+
+    if (episode?.sources && Array.isArray(episode.sources) && episode.sources.length > 0) {
+      // Có nhiều bản chiếu → hiện dropdown + render pills
+      sourceGroup.classList.remove('hidden');
+      sourceSelect.innerHTML = episode.sources.map((src, i) => 
+        `<option value="${i}">${src.label || src.type || 'Nguồn ' + (i+1)}</option>`
+      ).join('');
+      // Render pill buttons từ options vừa populate
+      renderSourcePills();
+    } else {
+      // Chỉ 1 hoặc không có sources → ẩn dropdown
+      sourceGroup.classList.add('hidden');
+      sourceSelect.innerHTML = '';
+      const pillsContainer = document.getElementById('crSourcePills');
+      if (pillsContainer) pillsContainer.innerHTML = '';
+    }
+  } catch(e) {
+    console.warn('Không load được bản chiếu:', e);
+    sourceGroup.classList.add('hidden');
+  }
 }
 
 function toggleRoomPass() {
@@ -744,6 +804,56 @@ function toggleRoomPass() {
   if (!typeEl || !passGroup) return;
   
   passGroup.classList.toggle("hidden", typeEl.value !== "private");
+}
+
+/* Xử lý click card chọn loại phòng (Công khai / Riêng tư) */
+function selectRoomType(value, el) {
+  // Cập nhật class active cho cards
+  const cards = document.querySelectorAll('.cr-type-card');
+  cards.forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  // Đồng bộ vào select ẩn để JS handleCreateRoom đọc được
+  const typeSelect = document.getElementById('roomType');
+  if (typeSelect) {
+    typeSelect.value = value;
+    // Fire event để toggleRoomPass chạy
+    typeSelect.dispatchEvent(new Event('change'));
+  }
+}
+
+/* Render pill buttons bản chiếu từ options của #roomSourceLabel select ẩn */
+function renderSourcePills() {
+  const select = document.getElementById('roomSourceLabel');
+  const pillsContainer = document.getElementById('crSourcePills');
+  if (!select || !pillsContainer) return;
+
+  const options = Array.from(select.options);
+  if (options.length === 0) {
+    pillsContainer.innerHTML = '';
+    return;
+  }
+
+  pillsContainer.innerHTML = options.map((opt, i) => `
+    <div class="cr-source-pill ${i === 0 ? 'active' : ''}"
+         onclick="selectSourcePill(${i}, this)">
+      ${opt.text}
+    </div>
+  `).join('');
+
+  // Đặt mặc định option đầu tiên là chọn
+  select.selectedIndex = 0;
+}
+
+/* Xử lý click pill bản chiếu */
+function selectSourcePill(index, el) {
+  // Cập nhật class active
+  document.querySelectorAll('.cr-source-pill').forEach(p => p.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  // Đồng bộ vào select ẩn
+  const select = document.getElementById('roomSourceLabel');
+  if (select) select.selectedIndex = index;
 }
 
 async function handleCreateRoom(e) {
@@ -809,13 +919,16 @@ async function handleCreateRoom(e) {
   // Lấy thông tin video (Hỗ trợ Hybrid - cùng logic với detail.js)
   let videoType = "youtube";
   let videoSource = "";
+  let sourceLabel = "";
   if (episode.sources && Array.isArray(episode.sources) && episode.sources.length > 0) {
-      // Ưu tiên nguồn đã chọn trước đó, fallback sources[0]
-      const preferredLabel = localStorage.getItem("preferredSourceLabel");
-      let sourceObj = episode.sources.find(s => s.label === preferredLabel);
-      if (!sourceObj) sourceObj = episode.sources[0];
+      // Lấy bản chiếu từ dropdown (nếu có)
+      const sourceSelectEl = document.getElementById('roomSourceLabel');
+      let selectedIdx = sourceSelectEl ? parseInt(sourceSelectEl.value) : 0;
+      if (isNaN(selectedIdx) || selectedIdx < 0) selectedIdx = 0;
+      const sourceObj = episode.sources[selectedIdx] || episode.sources[0];
       videoType = sourceObj.type || "youtube";
       videoSource = sourceObj.source || "";
+      sourceLabel = sourceObj.label || sourceObj.type || "";
   } else {
       videoType = episode.videoType || episode.video_type || "youtube";
       videoSource = episode.videoSource || episode.video_source || episode.youtubeId || "";
@@ -907,6 +1020,7 @@ async function handleCreateRoom(e) {
             return d;
         })(),
         scheduled_at: scheduledTime ? scheduledTime : null,
+        source_label: sourceLabel || null,
         created_at: new Date().toISOString(),
         member_count: 1,
         banned_users: []
