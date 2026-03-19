@@ -933,8 +933,13 @@ async function handleCreateRoom(e) {
       videoType = episode.videoType || episode.video_type || "youtube";
       videoSource = episode.videoSource || episode.video_source || episode.youtubeId || "";
   }
-  
-  console.log("🎬 WP Video Source:", videoType, videoSource);
+
+  // Fix kkphim API format: "Full|https://..." → lấy phần sau "http"
+  if (videoSource && typeof videoSource === 'string' && videoSource.includes("http") && !videoSource.startsWith("http")) {
+      videoSource = videoSource.substring(videoSource.indexOf("http")).trim();
+  }
+
+  console.log("🎬 WP Video Source:", videoType, videoSource, "| Bản chiếu:", sourceLabel);
 
   try {
     showLoading(true);
@@ -1021,6 +1026,7 @@ async function handleCreateRoom(e) {
         })(),
         scheduled_at: scheduledTime ? scheduledTime : null,
         source_label: sourceLabel || null,
+        movie_type: movie.type || movie.movieType || null,
         created_at: new Date().toISOString(),
         member_count: 1,
         banned_users: []
@@ -1250,7 +1256,59 @@ async function setupMemberAndChat(roomId) {
 
 function updateRoomUI(data) {
   document.getElementById("roomTitleDisplay").textContent = data.name;
-  
+
+  // Cập nhật subtitle phim (tên phim + tập)
+  const subtitleEl = document.getElementById("roomSubtitleDisplay");
+  if (subtitleEl) {
+      const movieTitle = data.movieTitle || data.movie_title || "";
+      const epName = data.episodeName || data.episode_name || ""; // Tên tập do admin đặt
+      const movieType = data.movieType || data.movie_type || "";
+
+      // Nhãn tập: ưu tiên tên admin ghi → fallback tính tự động
+      let epLabel = "";
+      if (epName) {
+          epLabel = epName; // Admin ghi gì hiện đúng vẫn vậy
+      } else if (data.episodeIndex !== undefined && data.episodeIndex !== null) {
+          epLabel = (movieType === "single") ? "Full" : `Tập ${parseInt(data.episodeIndex) + 1}`;
+      }
+
+      let subtitle = "";
+      if (movieTitle) {
+          subtitle = epLabel ? `${epLabel} • ${movieTitle}` : movieTitle;
+      } else if (epLabel) {
+          subtitle = epLabel;
+      }
+      if (subtitle) {
+          subtitleEl.textContent = subtitle;
+          subtitleEl.classList.remove("hidden");
+      } else {
+          subtitleEl.classList.add("hidden");
+      }
+  }
+
+  // Cập nhật nhãn tên phim góc trên trái video
+  const labelTitle = document.getElementById("wpMovieLabelTitle");
+  const labelEp    = document.getElementById("wpMovieLabelEp");
+  if (labelTitle && labelEp) {
+      const movieTitle = data.movieTitle || data.movie_title || "";
+      const movieType  = data.movieType  || data.movie_type  || "";
+      const epName     = (data.episodeName || data.episode_name || "").trim();
+
+      // Nhãn loại/tập: ưu tiên movie_type rõ ràng nhất
+      let epLabel = "";
+      const isSingle = movieType === "single"
+          || epName.toLowerCase() === "full"    // Fallback khi chưa có movie_type trong DB
+          || epName.toLowerCase() === "phim lẻ";
+      if (isSingle) {
+          epLabel = "Phim lẻ";
+      } else if (data.episodeIndex !== undefined && data.episodeIndex !== null) {
+          epLabel = `Tập ${parseInt(data.episodeIndex) + 1}`;
+      }
+
+      labelTitle.textContent = movieTitle;
+      labelEp.textContent    = epLabel;
+  }
+
   // 🔥 ĐƠN GIẢN HÓA: Kiểm tra kết thúc tập trung
   const { isActuallyEnded, endedAt } = checkIfRoomEnded(data);
   const liveBadge = document.querySelector(".live-badge");
@@ -1262,6 +1320,18 @@ function updateRoomUI(data) {
   } else {
       hideRoomEndedOverlay();
       if (liveBadge) liveBadge.style.display = "inline-flex";
+  }
+
+  // Cập nhật nhãn bản chiếu trên header
+  const sourceBadge = document.getElementById("sourceLabelBadge");
+  if (sourceBadge) {
+      const label = data.sourceLabel || data.source_label || "";
+      if (label) {
+          sourceBadge.textContent = label;
+          sourceBadge.classList.remove("hidden");
+      } else {
+          sourceBadge.classList.add("hidden");
+      }
   }
 
   // 👇 FIX: Admin cũng có quyền điều khiển như chủ phòng
@@ -1444,9 +1514,28 @@ function toggleDeafen() {
 }
 
 // Bật/Tắt popup chỉnh âm lượng Voice tổng
-window.toggleVoiceVolumePopup = function() {
+window.toggleVoiceVolumePopup = function(e) {
+  if (e) e.stopPropagation();
+
   const popup = document.getElementById('voiceVolPopup');
-  if (popup) popup.classList.toggle('hidden');
+  if (!popup) { console.warn('voiceVolPopup not found'); return; }
+
+  const isHidden = popup.classList.contains('hidden');
+
+  if (isHidden) {
+    // Tìm button bằng closest (inline onclick không có currentTarget)
+    const btn = (e && e.target) 
+        ? (e.target.closest('.btn-voice-vol') || e.target) 
+        : document.querySelector('.btn-voice-vol');
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      popup.style.left = rect.left + 'px';
+      popup.style.top  = (rect.bottom + 8) + 'px';
+    }
+    popup.classList.remove('hidden');
+  } else {
+    popup.classList.add('hidden');
+  }
 };
 
 // Chỉnh âm lượng tổng cho tất cả mic (0-200%)
@@ -1706,7 +1795,10 @@ function monitorAudioLevel(stream, peerId) {
 }
 
 function addMicButtonToUI() {
-  const header = document.querySelector(".room-header-bar");
+  // Inject vào slot riêng trong zone LEFT của header mới
+  const slot = document.getElementById("rhVoiceSlot");
+  // Fallback về header cũ nếu không có slot (tương thích ngược)
+  const header = slot || document.querySelector(".room-header-bar");
   if (!header) return;
 
   if (document.getElementById("myMicBtn"))
@@ -1733,8 +1825,9 @@ function addMicButtonToUI() {
   volBtn.id = "voiceVolBtnWrap";
   volBtn.className = "voice-vol-btn-wrap";
   volBtn.innerHTML = `
-    <button class="btn-voice-vol" onclick="toggleVoiceVolumePopup()" title="Âm lượng Voice Chat">
+    <button class="btn-voice-vol" onclick="toggleVoiceVolumePopup(event)" title="Âm lượng Voice Chat">
       <i class="fas fa-volume-up"></i>
+      <span class="btn-voice-vol-label">Âm lượng</span>
     </button>
     <div class="voice-vol-popup hidden" id="voiceVolPopup">
       <div class="voice-vol-popup-header">
@@ -1751,9 +1844,10 @@ function addMicButtonToUI() {
     </div>
   `;
 
-  header.insertBefore(volBtn, header.firstChild);
-  header.insertBefore(deafenBtn, header.firstChild);
-  header.insertBefore(micBtn, header.firstChild);
+  // Thứ tự: mic → deafen → vol (append tuần tự vào slot)
+  header.appendChild(micBtn);
+  header.appendChild(deafenBtn);
+  header.appendChild(volBtn);
 }
 
 async function toggleMyMic() {
@@ -2032,6 +2126,24 @@ function initHTML5Player(type, source, initialData) {
         });
         hls.on(Hls.Events.LEVEL_SWITCHED, (evt, data) => {
             wpUpdateQualityDisplay(data.level);
+        });
+        // Xử lý lỗi HLS: Hiện thông báo thay vì silent buffering
+        hls.on(Hls.Events.ERROR, (event, errData) => {
+            console.error("🔴 HLS Error:", errData.type, errData.details, errData.fatal);
+            if (errData.fatal) {
+                if (errData.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                    // Lỗi mạng: thử load lại
+                    console.warn("⚡ HLS fatal network error, đang thử tải lại...");
+                    hls.startLoad();
+                } else if (errData.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                    console.warn("⚡ HLS fatal media error, recover...");
+                    hls.recoverMediaError();
+                } else {
+                    // Lỗi không thể recover
+                    showNotification("❌ Không thể tải video. Nguồn phim có thể lỗi hoặc không còn hỗ trợ.", "error");
+                    hls.destroy();
+                }
+            }
         });
     } else {
         video.src = source;
@@ -2986,9 +3098,14 @@ function initWpCustomControls(video) {
 
 function wpFormatTime(s) {
     if (!s || isNaN(s)) return "00:00";
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m < 10 ? "0" + m : m}:${sec < 10 ? "0" + sec : sec}`;
+    const totalSec = Math.floor(s);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const sec = totalSec % 60;
+    const mm = m < 10 ? "0" + m : m;
+    const ss = sec < 10 ? "0" + sec : sec;
+    // Nếu >= 1 giờ: "1h05:30", nếu không: "49:12"
+    return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
 
 function wpUpdatePlayIcons(isPlaying) {
@@ -3378,6 +3495,16 @@ function startScheduleSync(roomData) {
 
             // --- TẦNG 1: Initial Seek (Chỉ chạy 1 lần duy nhất khi mới vào phòng) ---
             if (!hasInitialSeeked && diffSeconds > 2) {
+                // Guard: Chỉ seek sau khi HLS/video đã load metadata (readyState >= 1)
+                // readyState 0=NOTHING, 1=METADATA, 2=CURRENT_DATA, 3=FUTURE_DATA, 4=ENOUGH_DATA
+                if (!isYt && player.readyState < 1) {
+                    // Video chưa có metadata → đợi tick sau
+                    if (syncStatus) {
+                        syncStatus.classList.remove("hidden");
+                        syncStatus.querySelector("span").textContent = "Đang tải luồng...";
+                    }
+                    return;
+                }
                 hasInitialSeeked = true;
                 console.log(`⏩ [ScheduleSync] Initial seek tới ${Math.round(diffSeconds)}s`);
                 if (isYt) {

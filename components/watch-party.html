@@ -29,27 +29,51 @@
   <div id="partyRoom" class="hidden">
     <div class="room-layout">
       <div class="room-main">
+        <!-- ═══ HEADER BAR ═══ -->
         <div class="room-header-bar">
-          <button class="btn btn-secondary btn-sm" onclick="leaveRoom()">
-            <i class="fas fa-arrow-left"></i> Rời phòng
-          </button>
-          <h3 id="roomTitleDisplay">Tên Phòng</h3>
-          <div class="room-meta">
-            <button
-              id="roomInviteBtn"
-              class="btn btn-sm btn-neon"
-              onclick="copyRoomLink()"
-              title="Sao chép liên kết chia sẻ"
-            >
-              <i class="fas fa-link"></i> Mời bạn bè
-            </button>
 
-            <span class="live-badge">LIVE</span>
+          <!-- ZONE TRÁI: Voice controls (JS inject mic/deafen/vol vào đây) + Leave -->
+          <div class="rh-left" id="rhLeft">
+            <button class="rh-leave-btn" onclick="leaveRoom()" title="Rời phòng">
+              <i class="fas fa-arrow-left"></i>
+              <span>Rời</span>
+            </button>
+            <div class="rh-divider"></div>
+            <!-- Mic, Deafen, Volume được JS insertBefore vào #rhVoiceSlot -->
+            <div id="rhVoiceSlot" class="rh-voice-slot"></div>
           </div>
+
+          <!-- ZONE GIỮA: Tên phòng + subtitle phim -->
+          <div class="rh-center">
+            <h3 class="rh-room-name" id="roomTitleDisplay">Tên Phòng</h3>
+            <p class="rh-room-subtitle hidden" id="roomSubtitleDisplay"></p>
+          </div>
+
+          <!-- ZONE PHẢI: Status badges + Invite -->
+          <div class="rh-right">
+            <span class="rh-member-count" id="rhMemberCount">
+              <i class="fas fa-users"></i>
+              <span id="memberCount">0</span>
+            </span>
+            <span class="live-badge">LIVE</span>
+            <span class="source-label-badge hidden" id="sourceLabelBadge"></span>
+            <button id="roomInviteBtn" class="rh-invite-btn"
+                    onclick="copyRoomLink()" title="Sao chép liên kết chia sẻ">
+              <i class="fas fa-link"></i>
+              <span>Mời</span>
+            </button>
+          </div>
+
         </div>
 
         <div class="video-container room-player-wrapper" id="wpVideoContainer">
           <div id="floatingEmojis" class="floating-emojis"></div>
+
+          <!-- Nhãn tên phim góc trên trái -->
+          <div class="wp-movie-label" id="wpMovieLabel">
+            <span class="wp-movie-label-title" id="wpMovieLabelTitle"></span>
+            <span class="wp-movie-label-ep" id="wpMovieLabelEp"></span>
+          </div>
 
           <div id="partyPlayer"></div>
 
