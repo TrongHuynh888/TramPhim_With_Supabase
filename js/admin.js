@@ -1,4 +1,4 @@
-// --- KHAI BÁO BIẾN TOÀN CỤC (Đảm bảo luôn tồn tại để tránh ReferenceError) ---
+﻿// --- KHAI BÁO BIẾN TOÀN CỤC (Đảm bảo luôn tồn tại để tránh ReferenceError) ---
 window.editingUserId = null;
 window.selectedActorIds = [];
 window.latestAddedActorIds = JSON.parse(localStorage.getItem('latestAddedActorIds') || '[]');
@@ -11902,3 +11902,8 @@ function closeSitePopup() {
     const overlay = document.getElementById('sitePopupOverlay');
     if (overlay) overlay.style.display = 'none';
 }
+
+/* ============================================================
+   API EXPLORER — Đã tách ra file riêng:
+   js/admin-api-explorer.js
+   ============================================================ */

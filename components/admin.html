@@ -2050,11 +2050,174 @@
             </td></tr>
           </tbody>
         </table>
-      </div>
+      </div><!-- end contactRequestsPanel -->
 
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- API EXPLORER PANEL                          -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div class="admin-panel" id="apiExplorerPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title"><i class="fas fa-plug" style="color:#00d2ff;"></i> Quản lý API Phim</h2>
+          <div class="header-actions">
+            <span class="text-muted" style="font-size:0.85rem;">Khám phá & kiểm tra dữ liệu từ các nguồn API phim</span>
+          </div>
+        </div>
+
+        <!-- PROVIDER + TOOLBAR -->
+        <div class="api-explorer-toolbar">
+          <!-- Chọn nguồn API -->
+          <div class="api-provider-selector">
+            <label class="api-label"><i class="fas fa-database"></i> Nguồn API</label>
+            <div class="api-provider-tabs" id="apiProviderTabs">
+              <!-- Render động bằng JS -->
+            </div>
+          </div>
+
+          <!-- Bộ lọc tham số -->
+          <div class="api-filter-row" id="apiFilterRow">
+            <div class="api-filter-group">
+              <label class="api-label">Loại danh sách</label>
+              <select class="form-select api-select" id="apiTypeList">
+                <option value="phim-bo">Phim bộ</option>
+                <option value="phim-le">Phim lẻ</option>
+                <option value="tv-shows">TV Shows</option>
+                <option value="hoat-hinh">Hoạt hình</option>
+                <option value="phim-vietsub">Vietsub</option>
+                <option value="phim-thuyet-minh">Thuyết minh</option>
+                <option value="phim-long-tieng">Lồng tiếng</option>
+              </select>
+            </div>
+            <div class="api-filter-group">
+              <label class="api-label">Ngôn ngữ</label>
+              <select class="form-select api-select" id="apiSortLang">
+                <option value="">Tất cả</option>
+                <option value="vietsub">Vietsub</option>
+                <option value="thuyet-minh">Thuyết minh</option>
+                <option value="long-tieng">Lồng tiếng</option>
+              </select>
+            </div>
+            <div class="api-filter-group">
+              <label class="api-label">Năm</label>
+              <select class="form-select api-select" id="apiYear">
+                <option value="">Tất cả</option>
+                <!-- JS sẽ điền thêm năm -->
+              </select>
+            </div>
+            <div class="api-filter-group">
+              <label class="api-label">Số lượng</label>
+              <select class="form-select api-select" id="apiLimit">
+                <option value="12">12</option>
+                <option value="24" selected>24</option>
+                <option value="48">48</option>
+                <option value="64">64 (tối đa)</option>
+              </select>
+            </div>
+            <div class="api-filter-group">
+              <label class="api-label">Trang</label>
+              <input type="number" class="form-input api-input-sm" id="apiPage" value="1" min="1" />
+            </div>
+            <div class="api-filter-group api-filter-action">
+              <label class="api-label">&nbsp;</label>
+              <button class="btn btn-primary api-call-btn" onclick="callApiList()" id="btnCallApi">
+                <i class="fas fa-bolt"></i> Gọi API
+              </button>
+            </div>
+          </div>
+
+          <!-- Thống kê nhanh -->
+          <div class="api-stats-row" id="apiStatsRow" style="display:none;">
+            <div class="api-stat-item">
+              <i class="fas fa-film"></i>
+              <span>Trả về: <strong id="apiStatCount">0</strong> phim</span>
+            </div>
+            <div class="api-stat-item">
+              <i class="fas fa-book-open"></i>
+              <span>Tổng trang: <strong id="apiStatTotalPages">0</strong></span>
+            </div>
+            <div class="api-stat-item">
+              <i class="fas fa-list-ol"></i>
+              <span>Tổng phim: <strong id="apiStatTotalItems">0</strong></span>
+            </div>
+            <div class="api-stat-item" id="apiStatTime" style="margin-left:auto;">
+              <i class="fas fa-clock"></i>
+              <span>Thời gian: <strong id="apiResponseTime">0ms</strong></span>
+            </div>
+            <!-- Pagination nhanh -->
+            <div class="api-quick-page">
+              <button class="btn btn-sm" onclick="changeApiPage(-1)" id="btnApiPrev"><i class="fas fa-chevron-left"></i></button>
+              <span id="apiCurrentPage">1</span>
+              <button class="btn btn-sm" onclick="changeApiPage(1)" id="btnApiNext"><i class="fas fa-chevron-right"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- KẾT QUẢ: TABS -->
+        <div class="api-result-section">
+          <div class="api-result-tabs">
+            <button class="api-tab-btn active" data-tab="grid" onclick="switchApiTab('grid')">
+              <i class="fas fa-th-large"></i> Danh sách
+            </button>
+            <button class="api-tab-btn" data-tab="json" onclick="switchApiTab('json')">
+              <i class="fas fa-code"></i> JSON Raw
+            </button>
+          </div>
+
+          <!-- Tab: Grid Card -->
+          <div class="api-tab-content active" id="apiTabGrid">
+            <div id="apiMovieGrid" class="api-movie-grid">
+              <!-- Trạng thái rỗng ban đầu -->
+              <div class="api-empty-state" id="apiEmptyState">
+                <div class="api-empty-icon">
+                  <i class="fas fa-plug"></i>
+                </div>
+                <h3>Chưa có dữ liệu</h3>
+                <p>Chọn bộ lọc và nhấn <strong>Gọi API</strong> để xem dữ liệu từ nguồn phim.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: JSON Viewer -->
+          <div class="api-tab-content" id="apiTabJson">
+            <div class="api-json-toolbar">
+              <span class="text-muted" style="font-size:0.85rem;"><i class="fas fa-info-circle"></i> Dữ liệu JSON thô trả về từ API</span>
+              <button class="btn btn-sm btn-secondary" onclick="copyApiJson()" id="btnCopyJson">
+                <i class="fas fa-copy"></i> Copy JSON
+              </button>
+            </div>
+            <pre class="api-json-viewer" id="apiJsonViewer"><span style="color:var(--text-muted); font-size:0.95rem;">// Gọi API để xem dữ liệu JSON...</span></pre>
+          </div>
+        </div>
+
+
+      </div><!-- end apiExplorerPanel -->
+
+    </div><!-- end admin-content -->
+  </div><!-- end admin-layout -->
+</div><!-- end adminPage -->
+
+<!-- DRAWER: Chi tiết phim (nằm ngoài adminPage để tránh will-change stacking context) -->
+<div class="api-detail-overlay" id="apiDetailOverlay" onclick="closeApiDetail()"></div>
+<div class="api-detail-drawer" id="apiDetailDrawer">
+  <div class="api-detail-header">
+    <h3 id="apiDetailTitle">Chi tiết phim</h3>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-sm" id="btnDetailJson" onclick="toggleDetailJson()" style="background:rgba(255,255,255,0.08); font-size:0.8rem;">
+        <i class="fas fa-code"></i> JSON
+      </button>
+      <button class="api-detail-close" onclick="closeApiDetail()"><i class="fas fa-times"></i></button>
+    </div>
+  </div>
+  <div class="api-detail-body" id="apiDetailBody">
+    <div style="text-align:center; padding:60px 20px; color:var(--text-muted);">
+      <i class="fas fa-mouse-pointer fa-2x"></i>
+      <p style="margin-top:12px;">Click vào một bộ phim để xem chi tiết</p>
     </div>
   </div>
 </div>
+
 
 <!-- Modal Thêm/Sửa Diễn Viên -->
 <div class="modal-overlay no-click-outside" id="actorModal">
