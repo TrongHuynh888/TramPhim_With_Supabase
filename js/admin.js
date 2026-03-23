@@ -3375,9 +3375,9 @@ async function processBulkDubbedLinks() {
                 // Kiểm tra xem đã có label này chưa
                 const existingIdx = epUpdate.sources.findIndex(s => s.label === label);
                 if (existingIdx !== -1) {
-                    epUpdate.sources[existingIdx].url = dubbedLink;
+                    epUpdate.sources[existingIdx].source = dubbedLink;
                 } else {
-                    epUpdate.sources.push({ type: sourceType, url: dubbedLink, label: label });
+                    epUpdate.sources.push({ type: sourceType, source: dubbedLink, label: label });
                 }
                 
                 updatedCount++;
@@ -3619,9 +3619,9 @@ function openEpisodeModal(index = null) {
 
       // Load Sources
       if (episode.sources && Array.isArray(episode.sources) && episode.sources.length > 0) {
-        // Dữ liệu mới (Multi-source) - hỗ trợ cả key 'source' và 'url'
+        // Dữ liệu mới (Multi-source) - field chuẩn là 'source'
         episode.sources.forEach(src => {
-            addSourceInput(src.type, src.source || src.url || '', src.label);
+            addSourceInput(src.type, src.source || '', src.label);
         });
       } else {
         // Dữ liệu cũ (Single source) -> Convert sang 1 dòng source

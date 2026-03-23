@@ -149,7 +149,9 @@ async function viewMovieDetail(movieId, updateHistory = true) {
   }
   
   // [MOD] Chỉ reset tập về 0 nếu không phải đang ở Mini Player của chính phim này
+  // Hoặc không phải đang chuyển phiên bản (version switching)
   const isSeamless = (typeof isMiniPlayerActive !== 'undefined' && isMiniPlayerActive && currentMovieId === movieId);
+  const isVersionSwitch = (window.isSwitchingVersion === true && currentMovieId === movieId);
   window.isSeamlessTransition = isSeamless;
   
   if (isSeamless) {
@@ -160,6 +162,11 @@ async function viewMovieDetail(movieId, updateHistory = true) {
           window.miniPlayerEpisodeIndex = currentEpisode;
           disableMiniPlayer(false); 
       }
+  } else if (isVersionSwitch) {
+      // Chuyển phiên bản: giữ nguyên tập đang xem, chỉ đổi nguồn video
+      console.log("🔄 [VERSION SWITCH] Keeping current episode:", currentEpisode + 1);
+      window.isSwitchingVersion = false; // Reset flag
+      currentMovieId = movieId;
   } else {
       currentMovieId = movieId;
       currentEpisode = 0;
@@ -240,8 +247,8 @@ async function viewMovieDetail(movieId, updateHistory = true) {
           console.log("📍 Resume từ Supabase:", resumeTime, "giây, tập:", lastEp + 1);
         }
         
-        // Gán episode (nếu có)
-        if (lastEp !== undefined) {
+        // Gán episode (nếu có) - Bỏ qua khi đang chuyển phiên bản để giữ tập đang xem
+        if (lastEp !== undefined && !isVersionSwitch) {
           currentEpisode = lastEp;
           console.log(
             `🔄 Đã khôi phục: Bạn đang xem tập ${currentEpisode + 1}`,
@@ -1311,10 +1318,13 @@ async function checkAndUpdateVideoAccess() {
   let hasAccess = false;
 
   // Lấy thông tin phim hiện tại để kiểm tra giá
-  const currentMovie = allMovies.find(m => m.id === currentMovieId);
-  if (!currentMovie) return;
+  // Ưu tiên biến global `currentMovie` (let từ globals.js, đã được set trong viewMovieDetail)
+  // LƯU Ý: currentMovie là `let` global, KHÔNG phải window.currentMovie (let không tạo property window)
+  // Fallback sang allMovies.find() nếu currentMovie chưa được set (bảo toàn cho trường hợp cũ)
+  const movieData = currentMovie || allMovies.find(m => m.id === currentMovieId);
+  if (!movieData) return;
   
-  const isFreeMovie = !currentMovie.price || currentMovie.price === 0;
+  const isFreeMovie = !movieData.price || movieData.price === 0;
   
   // 1. Admin luôn có quyền xem
   if (isAdmin) {
@@ -1360,7 +1370,7 @@ async function checkAndUpdateVideoAccess() {
              buyTicketBtn.classList.add("btn-success");
         }
     } else {
-        buyTicketBtn.innerHTML = `<i class="fas fa-ticket-alt"></i> Mua Vé Xem Phim (${currentMovie.price} CRO)`;
+        buyTicketBtn.innerHTML = `<i class="fas fa-ticket-alt"></i> Mua Vé Xem Phim (${movieData.price} CRO)`;
         buyTicketBtn.disabled = false;
         buyTicketBtn.classList.add("btn-primary");
         buyTicketBtn.classList.remove("btn-success");
@@ -1380,8 +1390,8 @@ async function checkAndUpdateVideoAccess() {
     // Khởi tạo sự kiện cho trình phát tùy chỉnh (Sẽ gọi ở cuối sau khi xác định videoType)
 
     // 👇 LOGIC LOAD VIDEO 👇
-    if (currentMovie.episodes && currentMovie.episodes[currentEpisode]) {
-      const episode = currentMovie.episodes[currentEpisode];
+    if (movieData.episodes && movieData.episodes[currentEpisode]) {
+      const episode = movieData.episodes[currentEpisode];
       
       let videoType = "youtube";
       let videoSource = "";
@@ -1392,8 +1402,9 @@ async function checkAndUpdateVideoAccess() {
           let sourceObj = episode.sources.find(s => s.label === preferredLabel);
           if (!sourceObj) sourceObj = episode.sources[0];
           
-          videoType = sourceObj.type;
-          videoSource = sourceObj.source;
+          videoType = sourceObj.type || "youtube";
+          // Đọc field source (chuẩn hóa) - data cũ dùng url đã được migrate
+          videoSource = sourceObj.source ? String(sourceObj.source) : "";
       } else {
           videoType = episode.videoType || "youtube";
           videoSource = episode.videoSource || episode.youtubeId;
@@ -1412,7 +1423,7 @@ async function checkAndUpdateVideoAccess() {
       const isMiniActive = (typeof isMiniPlayerActive !== 'undefined' && isMiniPlayerActive);
       const isSameEpisode = (typeof window.miniPlayerEpisodeIndex !== 'undefined' && window.miniPlayerEpisodeIndex === currentEpisode);
       
-      if (isMiniActive && movie && movie.id === currentMovieId && isSameEpisode) {
+      if (isMiniActive && movieData && movieData.id === currentMovieId && isSameEpisode) {
           console.log("🎥 [SEAMLESS] Same movie & episode in Mini Player, skip reset/reload");
           if (videoLocked) videoLocked.classList.add("hidden");
           if (videoPlayer && currentVideoType === "youtube") {
@@ -1486,6 +1497,11 @@ async function checkAndUpdateVideoAccess() {
            // Nhận diện link Iframe: 
            // 1. Chứa thẻ <iframe>, 2. Là một link Player có chứa parameters (vd: /player/?url=), 
            // 3. Hoặc link không đuôi chuẩn m3u8/mp4
+           // Guard: chỉ xử lý khi videoSource là string hợp lệ, tránh crash .includes() trên null/undefined
+           if (!videoSource) {
+               showPlayerError("Nguồn video không hợp lệ hoặc chưa được cấu hình.");
+               return;
+           }
            const isEmbedUrl = videoSource.includes("<iframe") || 
                               videoSource.includes("/player/?url=") || 
                               videoSource.includes("player.phimapi.com") || 
@@ -4234,7 +4250,8 @@ function resumeVideoAtTime(timeWatched) {
     console.log("📍 Resume video at:", timeWatched, "seconds", "(" + formatTime(timeWatched) + ")");
     
     const html5Player = document.getElementById("html5Player");
-    if (html5Player) {
+    // Kiểm tra html5Player đang hiển thị VÀ có source hợp lệ trước khi resume
+    if (html5Player && !html5Player.classList.contains("hidden") && html5Player.src && html5Player.src !== window.location.href) {
         // HTML5 Player - đợi video ready rồi mới set time
         const doResume = () => {
             // Dừng video trước (nếu đang phát)
@@ -4261,7 +4278,7 @@ function resumeVideoAtTime(timeWatched) {
             }, { once: true });
         }
     } else {
-        // YouTube Player
+        // YouTube Player hoặc html5Player không có source hợp lệ
         seekYouTubeVideo(timeWatched);
     }
 }
@@ -4843,6 +4860,8 @@ function renderDetailVersions(episode) {
                  saveWatchProgressImmediate(currentMovieId, currentEpisode, time, 0);
               }
               
+              // Set flag để giữ nguyên currentEpisode khi chuyển phiên bản
+              window.isSwitchingVersion = true;
               setTimeout(() => {
                   viewMovieDetail(currentMovieId);
               }, 50);
