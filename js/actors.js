@@ -231,7 +231,7 @@ function populateActorFilters() {
  */
 function filterActors() {
   // Lấy giá trị các bộ lọc
-  const query = (document.getElementById("searchActors")?.value || "").trim().toLowerCase();
+  const query = removeDiacritics(document.getElementById("searchActors")?.value || "");
   const countryStr = (document.getElementById("inputFilterActorCountry")?.value || "").trim();
   const genderStr = (document.getElementById("inputFilterActorGender")?.value || "").trim();
   const sortStr = (document.getElementById("inputFilterActorSort")?.value || "").trim();
@@ -244,9 +244,9 @@ function filterActors() {
   let filtered = _actorsDataCache.filter(actor => {
     // 1. Lọc theo tên
     if (query) {
-      const nameMatch = actor.name.toLowerCase().includes(query);
+      const nameMatch = removeDiacritics(actor.name).includes(query);
       const dbActor = findActorInDB(actor.name);
-      const altMatch = dbActor && dbActor.altNames && dbActor.altNames.some(alt => alt.toLowerCase().includes(query));
+      const altMatch = dbActor && dbActor.altNames && dbActor.altNames.some(alt => removeDiacritics(alt).includes(query));
       if (!nameMatch && !altMatch) return false;
     }
 

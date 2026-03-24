@@ -85,7 +85,7 @@ window.filterSingleMovies = function() {
     const genreStr = document.getElementById("inputSingleCategory")?.value.trim() || "";
     const countryStr = document.getElementById("inputSingleCountry")?.value.trim() || "";
     const yearStr = document.getElementById("inputSingleYear")?.value.trim() || "";
-    const searchVal = document.getElementById("searchSingleMovies")?.value.toLowerCase().trim() || "";
+    const searchVal = removeDiacritics(document.getElementById("searchSingleMovies")?.value || "");
 
     // Chuẩn hóa bộ lọc: Loại bỏ "Tất cả..."
     const genres = genreStr.split(',').map(s => s.trim()).filter(s => s && !s.includes("Tất cả"));
@@ -104,8 +104,8 @@ window.filterSingleMovies = function() {
 
         // 2. Ô tìm kiếm (Luôn là AND)
         if (searchVal) {
-            const titleMatch = (m.title || "").toLowerCase().includes(searchVal);
-            const castMatch = m.cast && m.cast.toLowerCase().includes(searchVal);
+            const titleMatch = removeDiacritics(m.title || "").includes(searchVal);
+            const castMatch = m.cast && removeDiacritics(m.cast).includes(searchVal);
             if (!(titleMatch || castMatch)) return null;
         }
 

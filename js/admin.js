@@ -1473,7 +1473,7 @@ function filterAdminMovies(skipPageReset = false) {
       currentAdminMoviePage = 1; 
   }
   
-  const searchText = searchInput.value.toLowerCase().trim();
+  const searchText = removeDiacritics(searchInput.value);
   const statusFilter = statusSelect ? statusSelect.value : "";
   const typeFilter = typeSelect ? typeSelect.value : "";
   const categoryFilter = categorySelect ? categorySelect.value : "";
@@ -1482,10 +1482,8 @@ function filterAdminMovies(skipPageReset = false) {
 
   console.log("🔍 Đang lọc Admin Movies:", { searchText, statusFilter, typeFilter, categoryFilter, countryFilter });
   const filteredMovies = (allAdminMovies || []).filter(m => {
-    // 1. Phân tách logic: Tên/ID
-    const movieTitle = (m.title || "").toLowerCase();
-    const movieOrigin = (m.originTitle || m.origin_title || "").toLowerCase();
-    const matchText = !searchText || movieTitle.includes(searchText) || movieOrigin.includes(searchText) || (m.id || "").toLowerCase().includes(searchText);
+    // 1. Phân tách logic: Tên/ID (hỗ trợ không dấu)
+    const matchText = !searchText || removeDiacritics(m.title || "").includes(searchText) || removeDiacritics(m.originTitle || m.origin_title || "").includes(searchText) || (m.id || "").toLowerCase().includes(searchText);
     
     // 2. Trạng thái & Loại
     const matchStatus = statusFilter === "" || m.status === statusFilter;
@@ -2669,13 +2667,13 @@ function filterEpisodeMovies() {
   
   if (!searchInput || !grid) return;
 
-  const searchText = searchInput.value.toLowerCase().trim();
+  const searchText = removeDiacritics(searchInput.value.trim());
   const sortOrder = sortSelect ? sortSelect.value : "newest";
   const alphabetFilter = alphabetSelect ? alphabetSelect.value : "";
   
-  // Lọc phim từ allAdminMovies
+  // Lọc phim từ allAdminMovies (hỗ trợ tìm không dấu tiếng Việt)
   let filteredMovies = (allAdminMovies || []).filter(m => {
-    const matchText = m.title.toLowerCase().includes(searchText);
+    const matchText = removeDiacritics(m.title).includes(searchText);
     
     let matchAlphabet = true;
     if (alphabetFilter) {
@@ -4641,11 +4639,11 @@ async function loadAdminUsers() {
  * Hàm lọc user theo tên/email và vai trò
  */
 function filterAdminUsers() {
-  const searchText = document.getElementById("adminSearchUsers").value.toLowerCase().trim();
+  const searchText = removeDiacritics(document.getElementById("adminSearchUsers").value);
   const roleFilter = document.getElementById("adminFilterRole").value;
 
   const filtered = allAdminUsers.filter(user => {
-    const matchName = (user.displayName || "").toLowerCase().includes(searchText);
+    const matchName = removeDiacritics(user.displayName || "").includes(searchText);
     const matchEmail = (user.email || "").toLowerCase().includes(searchText);
     const matchRole = roleFilter ? user.role === roleFilter : true;
 
@@ -10184,18 +10182,18 @@ async function saveUserRoomLimit() {
 }
 
 function filterAdminWatchRooms() {
-    const searchTerm = document.getElementById("adminSearchRooms").value.toLowerCase().trim();
+    const searchTerm = removeDiacritics(document.getElementById("adminSearchRooms").value);
     const filterType = document.getElementById("adminFilterRoomType") ? document.getElementById("adminFilterRoomType").value : 'all';
     const sortBy = document.getElementById("adminSortRooms") ? document.getElementById("adminSortRooms").value : 'newest';
     
     let filtered = [...allAdminWatchRooms];
 
-    // 1. Phân loại theo text
+    // 1. Phân loại theo text (hỗ trợ không dấu)
     if (searchTerm) {
         filtered = filtered.filter(room => {
-            return (room.name && room.name.toLowerCase().includes(searchTerm)) ||
-                   (room.movie && room.movie.title && room.movie.title.toLowerCase().includes(searchTerm)) || // Changed from room.movieTitle
-                   (room.host && room.host.display_name && room.host.display_name.toLowerCase().includes(searchTerm)); // Changed from room.hostName
+            return (room.name && removeDiacritics(room.name).includes(searchTerm)) ||
+                   (room.movie && room.movie.title && removeDiacritics(room.movie.title).includes(searchTerm)) ||
+                   (room.host && room.host.display_name && removeDiacritics(room.host.display_name).includes(searchTerm));
         });
     }
 

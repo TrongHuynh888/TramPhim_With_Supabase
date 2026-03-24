@@ -7,6 +7,50 @@
 // 0. HÀM TỐI ƯU HIỆU NĂNG (CORE OPTIMIZATION)
 // ============================================
 
+// --- LAZY LOAD SCRIPTS ---
+// Danh sách các script đã được tải (tránh tải trùng)
+const _loadedScripts = new Set();
+
+/**
+ * Tải một file JS theo yêu cầu (lazy load)
+ * Trả về Promise resolve khi script đã load xong
+ */
+function lazyLoadScript(src) {
+    if (_loadedScripts.has(src)) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = () => { _loadedScripts.add(src); resolve(); };
+        s.onerror = () => reject(new Error('Không thể tải: ' + src));
+        document.body.appendChild(s);
+    });
+}
+
+/**
+ * Tải nhiều scripts tuần tự (giữ đúng thứ tự dependency) rồi gọi callback
+ */
+async function lazyLoadScriptBundle(scripts, callback) {
+    try {
+        for (const src of scripts) {
+            await lazyLoadScript(src);
+        }
+        if (typeof callback === 'function') callback();
+    } catch (e) {
+        console.error('❌ Lỗi lazy load bundle:', e);
+    }
+}
+
+/**
+ * Bỏ dấu tiếng Việt (dùng cho tìm kiếm không dấu)
+ * VD: "Người Nhện" → "nguoi nhen"
+ */
+function removeDiacritics(str) {
+    if (!str) return '';
+    return str.normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[đĐ]/g, 'd')
+        .toLowerCase();
+}
 /**
  * Debounce: Trì hoãn thực thi hàm cho đến khi ngừng kích hoạt trong một khoảng thời gian
  */
@@ -307,19 +351,48 @@ function showPage(pageName, addToHistory = true) {
   const footer = document.getElementById("footer");
   if (pageName === "admin") {
     if (footer) footer.style.display = "none";
-    // Load data admin nếu cần — CHỈ gọi đầy đủ lần đầu, giữ trang khi quay lại
-    if (typeof loadAdminData === "function") {
-      if (!window._adminDataLoaded) {
-        window._adminDataLoaded = true;
-        loadAdminData();
-      } else {
-        // Lần sau chỉ refresh phim, giữ nguyên trang hiện tại
-        if (typeof loadAdminMovies === 'function') loadAdminMovies(true);
+    // LAZY LOAD: Tải Admin scripts khi vào trang Admin lần đầu
+    if (!window._adminScriptsLoaded) {
+        window._adminScriptsLoaded = true;
+        lazyLoadScriptBundle([
+            'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js',
+            'js/admin.js?v=3',
+            'js/admin-api-explorer.js?v=2',
+            'js/admin-api-import.js?v=2'
+        ], () => {
+            console.log('✅ Admin scripts loaded!');
+            if (typeof loadAdminData === 'function') {
+                window._adminDataLoaded = true;
+                loadAdminData();
+            }
+        });
+    } else {
+      // Load data admin nếu cần — CHỈ gọi đầy đủ lần đầu, giữ trang khi quay lại
+      if (typeof loadAdminData === "function") {
+        if (!window._adminDataLoaded) {
+          window._adminDataLoaded = true;
+          loadAdminData();
+        } else {
+          // Lần sau chỉ refresh phim, giữ nguyên trang hiện tại
+          if (typeof loadAdminMovies === 'function') loadAdminMovies(true);
+        }
       }
     }
-  } else if (pageName === "community" && typeof currentCommView !== 'undefined' && currentCommView === 'chat') {
-    // Nếu quay lại Cộng Đồng mà đang ở tab Chat thì ẩn footer
-    if (footer) footer.style.display = "none";
+  } else if (pageName === "community") {
+    // LAZY LOAD: Tải community.js khi vào Cộng Đồng lần đầu
+    if (!window._communityScriptLoaded) {
+        window._communityScriptLoaded = true;
+        lazyLoadScript('js/community.js?v=7.2').then(() => {
+            console.log('✅ Community script loaded!');
+            if (typeof initCommunity === 'function') initCommunity();
+        });
+    }
+    // Ẩn footer nếu đang ở tab Chat
+    if (typeof currentCommView !== 'undefined' && currentCommView === 'chat') {
+        if (footer) footer.style.display = "none";
+    } else {
+        if (footer) footer.style.display = "block";
+    }
   } else {
     if (footer) footer.style.display = "block";
   }
@@ -349,8 +422,17 @@ function showPage(pageName, addToHistory = true) {
     renderActorsPage();
   }
   // 👉 THÊM TRIGGER CHO WATCH PARTY: Load danh sách phòng khi vào trang Xem Chung
-  if (pageName === "watchParty" && typeof loadRooms === "function") {
-    loadRooms();
+  if (pageName === "watchParty") {
+    // LAZY LOAD: Tải watch-party.js khi vào Xem Chung lần đầu
+    if (!window._watchPartyScriptLoaded) {
+        window._watchPartyScriptLoaded = true;
+        lazyLoadScript('js/watch-party.js?v=5').then(() => {
+            console.log('✅ Watch Party script loaded!');
+            if (typeof loadRooms === 'function') loadRooms();
+        });
+    } else if (typeof loadRooms === 'function') {
+        loadRooms();
+    }
   }
   // 👉 Load hiệu ứng visual (tuyết, sao, pháo hoa) khi vào trang chủ
   if (pageName === "home" && typeof loadAndApplyHomeEffects === "function") {

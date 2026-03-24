@@ -73,7 +73,7 @@
     />
 
     <!-- HLS.js for Streaming -->
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest" crossorigin></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest" crossorigin defer></script>
     <!-- SortableJS for Drag & Drop -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
     <!-- QR Code Generator cho tính năng mã QR user -->
@@ -150,7 +150,7 @@
             href="javascript:void(0)"
             class="nav-link"
             data-page="watchParty"
-            onclick="loadRooms(); showPage('watchParty')"
+            onclick="showPage('watchParty')"
           >
             <i class="fas fa-tv"></i> Xem Chung
           </a>
@@ -159,7 +159,7 @@
             href="javascript:void(0)"
             class="nav-link"
             data-page="community"
-            onclick="showPage('community'); if(!isCommunityLoaded){initCommunity();isCommunityLoaded=true;}"
+            onclick="showPage('community')"
           >
             <i class="fas fa-globe"></i> Cộng Đồng
           </a>
@@ -1148,7 +1148,7 @@
     <div id="modals-container"></div>
 
     <!-- PeerJS for WebRTC -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js" defer></script>
     <!-- ============================================
          SCRIPTS
 
@@ -1156,7 +1156,7 @@
          ============================================ -->
     <!-- Supabase SDK -->
     <!-- Ethers.js for Web3 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" defer></script>
     <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Popup thông báo toàn site (ẩn mặc định, JS sẽ hiện 1 lần/ngày) -->
@@ -1188,23 +1188,20 @@
     <script src="js/user.js?v=8"></script>
     <script src="js/home.js?v=3"></script>
     <script src="js/detail.js?v=2"></script>
-    <!-- Chart.js cho Dashboard Admin -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <script src="js/admin.js?v=3"></script>
+    <!-- Chart.js, Admin, Community, Watch Party → LAZY LOAD trong utils.js khi cần -->
     <script src="js/contact-admin.js?v=1"></script>
 
     <script src="js/upgrade.js?v=2"></script>
     <script src="js/intro.js?v=2"></script>
-    <script src="js/watch-party.js?v=5"></script>
-    <script src="js/community.js?v=7.2"></script>
+    <!-- watch-party.js → LAZY LOAD khi vào Xem Chung -->
+    <!-- community.js → LAZY LOAD khi vào Cộng Đồng -->
     <script src="js/series-movies.js?v=3"></script>
     <script src="js/single-movies.js?v=3"></script>
     <script src="js/banner-slider.js?v=2"></script>
     <script src="js/actors.js?v=2"></script>
     <script src="js/main.js?v=2"></script>
     <script src="js/loader.js?v=2"></script>
-    <script src="js/admin-api-explorer.js?v=2"></script>
-    <!-- YouTube IFrame API: Lazy load trong detail.js khi cần, tránh lỗi postMessage trên localhost -->
+    <!-- admin.js, admin-api-explorer.js, admin-api-import.js → LAZY LOAD khi vào Admin -->
     
     <script>
       // Buộc trình duyệt phải dùng hàm này (Ghi đè mọi hàm cũ bị lỗi)
@@ -1414,7 +1411,6 @@
       <i class="fas fa-arrow-up"></i>
       <span>ĐẦU TRANG</span>
     </button>
-    <!-- Script Import Phim từ API (phải load sau admin-api-explorer.js) -->
-    <script src="js/admin-api-import.js" defer></script>
+    <!-- admin-api-import.js → LAZY LOAD cùng admin.js -->
   </body>
 </html>

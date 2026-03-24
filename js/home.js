@@ -317,7 +317,7 @@ document.addEventListener("click", function (event) {
  * Search movies (Đã tối ưu hóa với Debounce)
  */
 const searchMovies = debounce(function () {
-  const query = document.getElementById("searchMovies").value.toLowerCase();
+  const query = removeDiacritics(document.getElementById("searchMovies").value);
   filterMovies(query);
 }, 300);
 /**
@@ -327,7 +327,7 @@ function filterMovies(searchQuery = null) {
   const query =
     searchQuery !== null
       ? searchQuery
-      : document.getElementById("searchMovies")?.value.toLowerCase() || "";
+      : removeDiacritics(document.getElementById("searchMovies")?.value || "");
       
   const categoryStr = document.getElementById("inputFilterCategory")?.value.trim() || "";
   const countryStr = document.getElementById("inputFilterCountry")?.value.trim() || "";
@@ -341,8 +341,8 @@ function filterMovies(searchQuery = null) {
   console.log("🔍 [Tất cả Phim] Đang lọc với:", { categories, countries, years, query });
 
   let filteredData = allMovies.map((movie) => {
-    // 1. Ô tìm kiếm (Luôn là AND)
-    const matchQuery = !query || movie.title.toLowerCase().includes(query) || (movie.originTitle && movie.originTitle.toLowerCase().includes(query));
+    // 1. Ô tìm kiếm (Luôn là AND) - hỗ trợ không dấu
+    const matchQuery = !query || removeDiacritics(movie.title).includes(query) || (movie.originTitle && removeDiacritics(movie.originTitle).includes(query));
     if (!matchQuery) return null;
 
     let matchedTags = [];
@@ -593,10 +593,10 @@ function initFilterBox(boxId, input, list, data, filterFunctionId = 'filterMovie
         
         // Tách từ khóa tìm kiếm (chỉ lấy phần sau dấu phẩy cuối cùng)
         const parts = inputValue.split(',');
-        const filterText = parts[parts.length - 1].trim().toLowerCase();
+        const filterText = removeDiacritics(parts[parts.length - 1].trim());
         
         let filtered = data.filter(item => 
-            item.toString().toLowerCase().includes(filterText)
+            removeDiacritics(item.toString()).includes(filterText)
         );
 
         list.innerHTML = filtered.map(item => {
