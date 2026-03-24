@@ -310,7 +310,6 @@ function normalizeMovieData(movie) {
     movie.castData = movie.castData || movie.cast_data || [];
     movie.ageLimit = movie.ageLimit || movie.age_limit || "";
     movie.countryId = movie.countryId || movie.country_id || "";
-    movie.categoryId = movie.categoryId || movie.category_id || "";
     
     // --- ĐỒNG BỘ SỐ TẬP HIỆN CÓ ---
     // Tính toán từ mảng episodes nếu có (kết quả của join hoặc cache)
@@ -329,14 +328,15 @@ function normalizeMovieData(movie) {
     }
 
     // --- ĐỒNG BỘ DỮ LIỆU THỂ LOẠI & QUỐC GIA CHO UI ---
-    // 1. Đảm bảo categories luôn là mảng và chứa category_id nếu có
-    if (!movie.categories || !Array.isArray(movie.categories)) {
-        movie.categories = movie.categoryId ? [movie.categoryId] : [];
-    } else if (movie.categoryId && !movie.categories.includes(movie.categoryId)) {
-        movie.categories.unshift(movie.categoryId);
+    // category_ids là mảng text[] - dùng trực tiếp, không còn category_id đơn trị
+    if (!movie.category_ids || !Array.isArray(movie.category_ids)) {
+        movie.category_ids = [];
     }
-    
+    // movie.categories = alias cho category_ids (để tương thích code cũ)
+    movie.categories = [...movie.category_ids].filter(Boolean);
+
     // 2. Đảm bảo country đồng bộ với country_id
+
     if (!movie.country && movie.countryId) {
         movie.country = movie.countryId;
     }

@@ -1,4 +1,4 @@
-﻿// --- KHAI BÁO BIẾN TOÀN CỤC (Đảm bảo luôn tồn tại để tránh ReferenceError) ---
+// --- KHAI BÁO BIẾN TOÀN CỤC (Đảm bảo luôn tồn tại để tránh ReferenceError) ---
 window.editingUserId = null;
 window.selectedActorIds = [];
 window.latestAddedActorIds = JSON.parse(localStorage.getItem('latestAddedActorIds') || '[]');
@@ -2110,28 +2110,25 @@ function openMovieModal(movieId = null) {
       document.getElementById("movieOriginTitle").value = movie.originTitle || movie.origin_title || "";
       document.getElementById("movieApiUrlBackup").value = movie.apiUrlBackup || movie.api_url_backup || "";
       
-      // Xử lý Versions (Checkboxes + Custom)
-      const versionsStr = movie.versions || "";
-      const currentVersions = versionsStr.split(",").map(v => v.trim()).filter(v => v);
-      const defaultVersions = ["Vietsub", "Thuyết minh", "Lồng tiếng"];
+      // Xử lý Versions (Checkboxes + Custom) - versions là text[]
+      const versionsRaw = movie.versions || [];
+      // Hỗ trợ cả array (mới) và string (fallback cũ)
+      const currentVersions = Array.isArray(versionsRaw)
+          ? versionsRaw
+          : String(versionsRaw).split(',').map(v => v.trim()).filter(Boolean);
+      const defaultVersions = ['Vietsub', 'Thuyết minh', 'Lồng tiếng'];
       const vCheckboxes = document.querySelectorAll('input[name="movieVersionCheckbox"]');
       let customVersions = [];
 
       vCheckboxes.forEach(cb => {
-          if (currentVersions.includes(cb.value)) {
-              cb.checked = true;
-          } else {
-              cb.checked = false;
-          }
+          cb.checked = currentVersions.includes(cb.value);
       });
 
       // Tìm các version không thuộc mặc định
       currentVersions.forEach(v => {
-          if (!defaultVersions.includes(v)) {
-              customVersions.push(v);
-          }
+          if (!defaultVersions.includes(v)) customVersions.push(v);
       });
-      document.getElementById("movieVersionsCustom").value = customVersions.join(", ");
+      document.getElementById('movieVersionsCustom').value = customVersions.join(', ');
 
       // Xử lý Thời lượng (Smart Input)
       const dur = parseDuration(movie.duration || "");
@@ -2141,13 +2138,13 @@ function openMovieModal(movieId = null) {
       document.getElementById("movieAgeLimit").value = movie.ageLimit || "P";
       document.getElementById("movieQuality").value = movie.quality || "HD";
 
-      // Xử lý Mult-Genre Checkboxes (Ưu tiên ID)
-      const savedCategoryIds = movie.category_id ? [movie.category_id] : (movie.categories || []);
+      // Xử lý Mult-Genre Checkboxes - đọc từ category_ids (mảng)
+      const savedCategoryIds = (movie.category_ids && movie.category_ids.length > 0)
+          ? movie.category_ids
+          : (movie.categories || []);
       const checkboxes = document.querySelectorAll('input[name="movieCategoryCheckbox"]');
       checkboxes.forEach(cb => {
-          if (savedCategoryIds.includes(cb.value)) {
-              cb.checked = true;
-          }
+          cb.checked = savedCategoryIds.includes(cb.value);
       });
 
       document.getElementById("movieCountry").value = movie.country_id || movie.country || "";
@@ -2342,7 +2339,7 @@ async function handleMovieSubmit(event) {
         'id', 'title', 'origin_title', 'poster_url', 'background_url', 'description', 
         'year', 'type', 'duration', 'quality', 'status', 'age_limit', 'series_id', 
         'price', 'rating', 'total_episodes', 'api_url_backup', 'cast_data', 'tags', 
-        'category_id', 'country_id', 'created_at', 'updated_at', 'view_count'
+        'versions', 'category_ids', 'country_id', 'created_at', 'updated_at', 'view_count'
     ];
 
     const finalMovieData = {};
@@ -2364,11 +2361,19 @@ async function handleMovieSubmit(event) {
         }
     });
 
-    // 1. Đồng bộ Category & Country (Chỉ lấy 1 cái đầu tiên cho category_id)
+    // 1. Đồng bộ Category & Country
     if (selectedCategories && selectedCategories.length > 0) {
-        finalMovieData.category_id = selectedCategories[0];
+        finalMovieData.category_ids = selectedCategories; // Lưu tất cả thể loại dạng mảng
     }
     finalMovieData.country_id = document.getElementById("movieCountry").value;
+
+    // 1b. Versions từ checkbox - lưu dạng array (text[])
+    try {
+        let vels = Array.from(document.querySelectorAll('input[name="movieVersionCheckbox"]:checked')).map(cb => cb.value);
+        const custom = document.getElementById('movieVersionsCustom').value.trim();
+        if (custom) vels.push(...custom.split(',').map(s => s.trim()).filter(Boolean));
+        finalMovieData.versions = [...new Set(vels)]; // Lưu là array
+    } catch(e) {}
 
     // Tự động tạo diễn viên mới và gán vào cast_data
     try {

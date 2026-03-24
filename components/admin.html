@@ -2154,6 +2154,52 @@
           </div>
         </div>
 
+        <!-- TOOLBAR IMPORT PHIM -->
+        <!-- Hàng 1: Chọn tất cả + Toggle R2 + Cấu hình R2 -->
+        <div class="api-import-toolbar" id="apiImportToolbar" style="display:none;">
+          <div class="api-import-toolbar-left">
+            <label class="api-select-all-label">
+              <input type="checkbox" id="apiSelectAllMovies" onchange="selectAllApiMovies(this.checked)" />
+              <span>Chọn tất cả</span>
+            </label>
+          </div>
+          <div class="api-import-toolbar-right">
+            <button class="btn btn-sm api-r2-toggle-btn active" id="btnToggleR2Mode" onclick="toggleImportR2Mode()" title="Bật/tắt upload ảnh lên Cloudflare R2">
+              <i class="fas fa-cloud-upload-alt"></i> Ảnh: Cloudflare R2
+            </button>
+            <button class="btn btn-sm" onclick="openR2ConfigModal()" title="Cấu hình R2 Worker URL" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:var(--text-muted);">
+              <i class="fas fa-cog"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Hàng 2: Bulk Actions (hiện khi có phim được chọn) -->
+        <div class="api-bulk-actions-bar" id="apiBulkActionsBar" style="display:none;">
+          <span class="api-bulk-info">
+            <i class="fas fa-check-square"></i>
+            Đã chọn: <strong id="apiBulkSelectedCount">0</strong> phim
+          </span>
+          <div class="api-bulk-buttons">
+            <button class="btn btn-sm" id="btnBulkImport" onclick="importBulkMoviesFromApi()" style="background:linear-gradient(135deg,#00b4d8,#0077b6);color:#fff;font-weight:700;">
+              <i class="fas fa-file-import"></i> Import đã chọn (0)
+            </button>
+            <button class="btn btn-sm" id="btnAbortImport" onclick="abortBulkImport()" style="display:none;background:rgba(255,107,107,0.15);color:#ff6b6b;border:1px solid rgba(255,107,107,0.3);">
+              <i class="fas fa-stop-circle"></i> Dừng
+            </button>
+            <button class="btn btn-sm" onclick="selectAllApiMovies(false)" style="background:rgba(255,255,255,0.06);color:var(--text-muted);border:1px solid rgba(255,255,255,0.1);">
+              Bỏ chọn
+            </button>
+          </div>
+        </div>
+
+        <!-- Progress Bar Import -->
+        <div class="api-import-progress-container" id="apiImportProgressContainer" style="display:none;">
+          <div class="api-import-progress-bar-wrap">
+            <div class="api-import-progress-bar" id="apiImportProgressBar" style="width:0%"></div>
+          </div>
+          <div class="api-import-progress-label" id="apiImportProgressLabel">0/0 · Đang chờ...</div>
+        </div>
+
         <!-- KẾT QUẢ: TABS -->
         <div class="api-result-section">
           <div class="api-result-tabs">
@@ -2191,12 +2237,30 @@
           </div>
         </div>
 
-
       </div><!-- end apiExplorerPanel -->
 
     </div><!-- end admin-content -->
   </div><!-- end admin-layout -->
 </div><!-- end adminPage -->
+
+<!-- Modal cấu hình R2 Worker URL -->
+<div class="api-r2-modal-overlay" id="apiR2ConfigModal" onclick="closeR2ConfigModal()">
+  <div class="api-r2-modal" onclick="event.stopPropagation()">
+    <div class="api-r2-modal-header">
+      <h3><i class="fas fa-cloud-upload-alt" style="color:#00d2ff;"></i> Cấu hình Cloudflare R2 Worker</h3>
+      <button onclick="closeR2ConfigModal()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1rem;"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="api-r2-modal-body">
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">Nhập URL của Cloudflare Worker dùng để upload ảnh lên R2. Worker phải có endpoint <code>/upload-from-url</code>.</p>
+      <label class="form-label" style="font-size:0.8rem;">R2 Worker URL</label>
+      <input type="url" id="r2WorkerUrlInput" class="form-input" placeholder="https://r2-uploader.your-worker.workers.dev" style="margin-bottom:16px;font-family:monospace;font-size:0.85rem;" />
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-secondary" onclick="closeR2ConfigModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="saveR2WorkerUrl()"><i class="fas fa-save"></i> Lưu</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- DRAWER: Chi tiết phim (nằm ngoài adminPage để tránh will-change stacking context) -->
 <div class="api-detail-overlay" id="apiDetailOverlay" onclick="closeApiDetail()"></div>
@@ -2204,12 +2268,17 @@
   <div class="api-detail-header">
     <h3 id="apiDetailTitle">Chi tiết phim</h3>
     <div style="display:flex;gap:8px;align-items:center;">
+      <!-- Nút Import vào DB -->
+      <button class="btn btn-sm api-detail-import-btn" id="btnDetailImport" onclick="importCurrentDetailMovie()" title="Import phim này vào database Supabase">
+        <i class="fas fa-cloud-upload-alt"></i> Lưu vào DB
+      </button>
       <button class="btn btn-sm" id="btnDetailJson" onclick="toggleDetailJson()" style="background:rgba(255,255,255,0.08); font-size:0.8rem;">
         <i class="fas fa-code"></i> JSON
       </button>
       <button class="api-detail-close" onclick="closeApiDetail()"><i class="fas fa-times"></i></button>
     </div>
   </div>
+
   <div class="api-detail-body" id="apiDetailBody">
     <div style="text-align:center; padding:60px 20px; color:var(--text-muted);">
       <i class="fas fa-mouse-pointer fa-2x"></i>

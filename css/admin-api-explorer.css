@@ -455,3 +455,156 @@ body:has(.admin-sidebar.collapsed) .api-detail-drawer {
 [data-theme="light"] .api-ep-card       { background: #f8f9fb; border-color: rgba(0,0,0,0.07); }
 [data-theme="light"] .api-ep-btn.embed  { color: #7c3aed; border-color: rgba(124,58,237,0.2); background: rgba(124,58,237,0.08); }
 @media (max-width: 768px) { .api-ep-compact-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); } }
+
+/* ============================================================
+   IMPORT PHIM TU API — CSS
+   ============================================================ */
+
+/* Toolbar import (select all + R2 toggle) */
+.api-import-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(0,210,255,0.04);
+  border: 1px solid rgba(0,210,255,0.12);
+  border-radius: 10px; margin-bottom: 10px;
+  gap: 12px; flex-wrap: wrap;
+}
+.api-import-toolbar-left, .api-import-toolbar-right {
+  display: flex; align-items: center; gap: 10px;
+}
+.api-select-all-label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);
+  cursor: pointer; user-select: none;
+}
+.api-select-all-label input { cursor: pointer; width: 16px; height: 16px; accent-color: #00d2ff; }
+.api-r2-toggle-btn {
+  font-size: 0.78rem; font-weight: 700; padding: 6px 12px;
+  border-radius: 8px; cursor: pointer;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+  color: var(--text-muted); transition: all 0.2s;
+}
+.api-r2-toggle-btn.active {
+  background: rgba(0,210,255,0.15); border-color: rgba(0,210,255,0.4);
+  color: #00d2ff; box-shadow: 0 0 10px rgba(0,210,255,0.15);
+}
+.api-r2-toggle-btn:hover { opacity: 0.85; }
+
+/* Bulk Actions Bar */
+.api-bulk-actions-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; gap: 12px; flex-wrap: wrap;
+  background: linear-gradient(135deg, rgba(0,180,216,0.08), rgba(0,119,182,0.08));
+  border: 1px solid rgba(0,180,216,0.25);
+  border-radius: 10px; margin-bottom: 10px;
+}
+.api-bulk-info {
+  font-size: 0.88rem; font-weight: 600; color: var(--text-secondary);
+  display: flex; align-items: center; gap: 8px;
+}
+.api-bulk-info i { color: #00d2ff; }
+.api-bulk-info strong { color: #00d2ff; font-size: 1rem; }
+.api-bulk-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Progress Bar Import */
+.api-import-progress-container {
+  margin-bottom: 10px; padding: 10px 14px;
+  background: rgba(0,0,0,0.2); border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.api-import-progress-bar-wrap {
+  height: 8px; background: rgba(255,255,255,0.07);
+  border-radius: 99px; overflow: hidden; margin-bottom: 6px;
+}
+.api-import-progress-bar {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #00b4d8, #00d2ff, #48cae4);
+  border-radius: 99px; transition: width 0.4s ease;
+  box-shadow: 0 0 8px rgba(0,210,255,0.4);
+}
+.api-import-progress-label {
+  font-size: 0.78rem; color: var(--text-muted); font-weight: 500;
+}
+
+/* Checkbox tren card */
+.api-card-select-wrap {
+  position: absolute; top: 8px; left: 8px; z-index: 5;
+}
+.api-card-select-cb {
+  width: 18px; height: 18px;
+  accent-color: #00d2ff; cursor: pointer;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.5);
+}
+
+/* Nut import nhanh tren card */
+.api-card-import-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 5;
+  width: 30px; height: 30px;
+  background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px; cursor: pointer;
+  color: #fff; font-size: 1rem;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.25s;
+}
+.api-card-import-btn:hover { background: rgba(0,210,255,0.25); border-color: #00d2ff; color: #00d2ff; transform: scale(1.1); }
+.api-card-import-btn:disabled { cursor: default; opacity: 0.8; }
+.api-card-import-btn.import-ok { background: rgba(52,211,153,0.2); border-color: #34d399; color: #34d399; }
+.api-card-import-btn.import-dup-btn { background: rgba(251,191,36,0.15); border-color: #fbbf24; color: #fbbf24; }
+.api-card-import-btn.import-err-btn { background: rgba(255,107,107,0.15); border-color: #ff6b6b; color: #ff6b6b; }
+
+/* Badge trang thai import tren card */
+.api-movie-card.import-success { outline: 2px solid #34d399; outline-offset: 2px; }
+.api-movie-card.import-dup { outline: 2px solid #fbbf24; outline-offset: 2px; }
+.api-movie-card.import-fail { outline: 2px solid #ff6b6b; outline-offset: 2px; }
+
+/* Nut Luu vao DB trong drawer */
+.api-detail-import-btn {
+  font-size: 0.78rem; font-weight: 700; padding: 6px 14px;
+  border-radius: 8px; cursor: pointer;
+  background: linear-gradient(135deg, rgba(0,180,216,0.2), rgba(0,119,182,0.2));
+  border: 1px solid rgba(0,180,216,0.4);
+  color: #00d2ff; transition: all 0.25s;
+  display: flex; align-items: center; gap: 6px;
+}
+.api-detail-import-btn:hover { background: rgba(0,180,216,0.3); box-shadow: 0 0 12px rgba(0,210,255,0.2); }
+.api-detail-import-btn.success { background: rgba(52,211,153,0.15); border-color: #34d399; color: #34d399; }
+.api-detail-import-btn.dup { background: rgba(251,191,36,0.12); border-color: #fbbf24; color: #fbbf24; }
+.api-detail-import-btn.fail { background: rgba(255,107,107,0.12); border-color: #ff6b6b; color: #ff6b6b; }
+.api-detail-import-btn:disabled { opacity: 0.7; cursor: default; }
+
+/* Modal cau hinh R2 Worker URL */
+.api-r2-modal-overlay {
+  position: fixed; inset: 0; z-index: 6000;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s;
+}
+.api-r2-modal-overlay.open { opacity: 1; pointer-events: all; }
+.api-r2-modal {
+  background: var(--bg-card, #1a1d2e);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px; width: 90%; max-width: 480px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.api-r2-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.api-r2-modal-header h3 { font-size: 1rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px; }
+.api-r2-modal-body { padding: 20px; }
+
+/* Light Mode */
+[data-theme="light"] .api-import-toolbar { background: rgba(0,119,182,0.04); border-color: rgba(0,119,182,0.15); }
+[data-theme="light"] .api-bulk-actions-bar { background: rgba(0,119,182,0.06); border-color: rgba(0,119,182,0.2); }
+[data-theme="light"] .api-import-progress-container { background: rgba(0,0,0,0.04); }
+[data-theme="light"] .api-r2-modal { background: #ffffff; }
+
+/* Mobile */
+@media (max-width: 600px) {
+  .api-import-toolbar { padding: 8px 12px; gap: 8px; }
+  .api-bulk-actions-bar { padding: 8px 12px; }
+  .api-r2-toggle-btn { font-size: 0.72rem; padding: 5px 10px; }
+  .api-detail-import-btn { font-size: 0.72rem; padding: 5px 10px; }
+}
+

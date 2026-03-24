@@ -176,7 +176,7 @@ function createMovieCard(movie, matchedTags = []) {
                         <span class="meta-match">${matchScore}% Phù hợp</span>
                         <span class="meta-age">${movie.ageLimit || "T13"}</span>
                         <span>${movie.year || "2026"}</span>
-                        <span>${movie.duration || "90p"}</span>
+                        <span>${(movie.duration || '90p').replace(/\s*\/\s*tập/gi, '')}</span>
                         <span class="meta-quality">${movie.quality || "HD"}</span>
                     </div>
                     <!-- Bản sao chỉ dành cho hiệu ứng cuộn Marquee trên điện thoại -->
@@ -184,7 +184,7 @@ function createMovieCard(movie, matchedTags = []) {
                         <span class="meta-match">${matchScore}% Phù hợp</span>
                         <span class="meta-age">${movie.ageLimit || "T13"}</span>
                         <span>${movie.year || "2026"}</span>
-                        <span>${movie.duration || "90p"}</span>
+                        <span>${(movie.duration || '90p').replace(/\s*\/\s*tập/gi, '')}</span>
                         <span class="meta-quality">${movie.quality || "HD"}</span>
                     </div>
                 </div>
