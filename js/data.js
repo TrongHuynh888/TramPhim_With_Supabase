@@ -398,7 +398,7 @@ async function loadMovies(remoteTimestamp) {
 function renderAllInitialMovies() {
     renderFeaturedMovies();
     renderNewMovies();
-    renderAllMovies();
+    filterMovies(); // Render trang Tất Cả Phim có phân trang
     renderCountrySections();
     renderBannerSlider();
 }
