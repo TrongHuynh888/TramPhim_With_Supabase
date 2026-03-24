@@ -149,8 +149,14 @@ async function loadAdminData() {
     if (typeof loadCategories === "function") await loadCategories();
     if (typeof loadCountries === "function") await loadCountries();
 
+    // Khôi phục trang phim đã xem trước khi rời web (từ sessionStorage)
+    try {
+      const savedPage = parseInt(sessionStorage.getItem('adminMoviePage'));
+      if (savedPage && savedPage > 1) currentAdminMoviePage = savedPage;
+    } catch(e) {}
+
     // Load movies for admin
-    await loadAdminMovies();
+    await loadAdminMovies(currentAdminMoviePage > 1);
 
     // Load users
     await loadAdminUsers();
@@ -1677,6 +1683,7 @@ function getCountryInfo(countryName) {
         'mexico':          { icon: '🇲🇽', code: 'mx', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
         'argentina':       { icon: '🇦🇷', code: 'ar', bg: 'rgba(96,165,250,0.12)',  color: '#93c5fd' },
         'australia':       { icon: '🇦🇺', code: 'au', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        'úc':              { icon: '🇦🇺', code: 'au', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
         'new zealand':     { icon: '🇳🇿', code: 'nz', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
         'nam phi':         { icon: '🇿🇦', code: 'za', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
         'ai cập':          { icon: '🇪🇬', code: 'eg', bg: 'rgba(234,179,8,0.12)',   color: '#fde047' },
@@ -1717,7 +1724,7 @@ let allAdminMovies = [];
 /**
  * Load danh sách phim cho Admin
  */
-async function loadAdminMovies() {
+async function loadAdminMovies(skipPageReset = false) {
   const tbody = document.getElementById("adminMoviesTable");
   if (!supabase) return;
 
@@ -1741,7 +1748,7 @@ async function loadAdminMovies() {
     });
 
     if (typeof populateAdminMovieFilters === 'function') populateAdminMovieFilters();
-    filterAdminMovies();
+    filterAdminMovies(skipPageReset);
     
     const select = document.getElementById("selectMovieForEpisodes");
     if (select) {
@@ -2299,10 +2306,16 @@ async function handleMovieSubmit(event) {
     return;
   }
 
+  // 👇 HIỂN THỊ LOADING NGAY LẬP TỨC 👇
+  showLoading(true, "Đang xử lý dữ liệu phim...");
+
   // Chờ tải ảnh lên Cloudinary nếu có (Deduplicate)
   if (typeof window.uploadPendingImages === "function") {
       const uploadSuccess = await window.uploadPendingImages();
-      if (!uploadSuccess) return; 
+      if (!uploadSuccess) {
+          showLoading(false);
+          return; 
+      }
   }
 
   // Nếu thêm phim mới (chưa có movieId), tạo ID sớm để R2 upload dùng đúng folder
@@ -2319,8 +2332,12 @@ async function handleMovieSubmit(event) {
 
   // Chờ tải ảnh lên Cloudflare R2 nếu có (Thực sự upload khi bấm Lưu)
   if (typeof window.uploadPendingR2Images === "function") {
+      showLoading(true, "Đang upload ảnh lên Server...");
       const r2Success = await window.uploadPendingR2Images();
-      if (!r2Success) return;
+      if (!r2Success) {
+          showLoading(false);
+          return;
+      }
   }
 
   const movieId = document.getElementById("movieId").value;
@@ -2330,10 +2347,12 @@ async function handleMovieSubmit(event) {
                                   .map(cb => cb.value);
   
   if (selectedCategories.length === 0) {
+      showLoading(false);
       showNotification("Vui lòng chọn ít nhất 1 thể loại!", "error");
       return;
   }
 
+  showLoading(true, "Đang đồng bộ dữ liệu...");
   const movieData = {
     title: document.getElementById("movieTitle").value,
     origin_title: document.getElementById("movieOriginTitle").value || "",
@@ -2436,7 +2455,7 @@ async function handleMovieSubmit(event) {
     }
 
     try {
-        showLoading(true, "Đang lưu...");
+        showLoading(true, "Đang lưu vào kho dữ liệu...");
 
         if (movieId) {
             // Cập nhật
@@ -2477,11 +2496,11 @@ async function handleMovieSubmit(event) {
         const _savedMoviePage = currentAdminMoviePage || 1;
 
         if (typeof loadMovies === 'function') await loadMovies();
-        await loadAdminMovies();
+        // Truyền skipPageReset=true để loadAdminMovies không reset trang về 1
+        await loadAdminMovies(true);
 
-        // Khôi phục trang sau khi load xong và render lại đúng trang
+        // Đảm bảo trang không bị thay đổi (phòng hờ)
         currentAdminMoviePage = _savedMoviePage;
-        if (typeof filterAdminMovies === 'function') filterAdminMovies(true);
     } catch (error) {
         console.error("Lỗi chi tiết Supabase:", error);
         showNotification(`Lỗi: ${error.message || 'Không thể lưu phim'}`, "error");
@@ -5547,6 +5566,8 @@ function renderAdminMoviesList(movies) {
  */
 window.changeAdminMoviePage = function(page) {
     currentAdminMoviePage = page;
+    // Lưu trang vào sessionStorage để khôi phục khi quay lại
+    try { sessionStorage.setItem('adminMoviePage', page); } catch(e) {}
     filterAdminMovies(true); // true = không reset trang về 1, giữ nguyên trang đã chọn
     const panel = document.getElementById("moviesPanel");
     if (panel) panel.scrollIntoView({ behavior: 'smooth' });

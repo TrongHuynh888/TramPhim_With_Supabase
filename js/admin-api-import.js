@@ -134,22 +134,100 @@ function _findCategoryIdByName(name) {
 function _findCountryIdByName(name) {
     if (!name || typeof allCountries === 'undefined') return null;
 
-    // Alias map: API trả về tên gộp → map sang tên chuẩn trong DB
+    // Alias map: API trả về tên gộp / tiếng Anh / viết tắt → map sang tên chuẩn trong DB
     const _aliasMap = {
-        'âu mỹ': 'Mỹ',   'âu-mỹ': 'Mỹ',   'us-uk': 'Mỹ',
-        'âu':     'Mỹ',   'au my':  'Mỹ',
-        'mỹ':     'Mỹ',   'usa':    'Mỹ',
+        // Châu Á
+        'trung quốc': 'Trung Quốc', 'china': 'Trung Quốc', 'cn': 'Trung Quốc', 'trung quoc': 'Trung Quốc', 'zhongguo': 'Trung Quốc',
+        'hồng kông': 'Hồng Kông', 'hong kong': 'Hồng Kông', 'hk': 'Hồng Kông', 'hương cảng': 'Hồng Kông', 'huong cang': 'Hồng Kông', 'hong kong sar': 'Hồng Kông', 'hongkong': 'Hồng Kông',
+        'đài loan': 'Đài Loan', 'taiwan': 'Đài Loan', 'tw': 'Đài Loan', 'dai loan': 'Đài Loan',
+        'hàn quốc': 'Hàn Quốc', 'korea': 'Hàn Quốc', 'south korea': 'Hàn Quốc', 'kr': 'Hàn Quốc', 'han quoc': 'Hàn Quốc',
+        'nhật bản': 'Nhật Bản', 'japan': 'Nhật Bản', 'jp': 'Nhật Bản', 'nhat ban': 'Nhật Bản',
+        'thái lan': 'Thái Lan', 'thailand': 'Thái Lan', 'th': 'Thái Lan', 'thai lan': 'Thái Lan',
+        'việt nam': 'Việt Nam', 'vietnam': 'Việt Nam', 'vn': 'Việt Nam', 'viet nam': 'Việt Nam',
+        'ấn độ': 'Ấn Độ', 'india': 'Ấn Độ', 'in': 'Ấn Độ', 'an do': 'Ấn Độ',
+        'philippines': 'Philippines', 'ph': 'Philippines', 'pilipinas': 'Philippines',
+        'indonesia': 'Indonesia', 'id': 'Indonesia',
+        'malaysia': 'Malaysia', 'my': 'Malaysia',
+        'singapore': 'Singapore', 'sg': 'Singapore',
+        'campuchia': 'Campuchia', 'cambodia': 'Campuchia', 'kh': 'Campuchia',
+        'myanma': 'Myanmar', 'myanmar': 'Myanmar', 'mm': 'Myanmar',
+        'lào': 'Lào', 'laos': 'Lào', 'la': 'Lào',
+        'mông cổ': 'Mông Cổ', 'mongolia': 'Mông Cổ', 'mn': 'Mông Cổ',
+        'pakistan': 'Pakistan', 'pk': 'Pakistan',
+        'bangladesh': 'Bangladesh', 'bd': 'Bangladesh',
+        'sri lanka': 'Sri Lanka', 'lk': 'Sri Lanka',
+        'iran': 'Iran', 'ir': 'Iran',
+        'israel': 'Israel', 'il': 'Israel',
+        'ả rập xê út': 'Ả Rập Xê Út', 'saudi arabia': 'Ả Rập Xê Út', 'sa': 'Ả Rập Xê Út',
+        // Châu Âu
+        'mỹ': 'Mỹ', 'usa': 'Mỹ', 'united states': 'Mỹ', 'america': 'Mỹ', 'âu mỹ': 'Mỹ', 'âu-mỹ': 'Mỹ', 'us-uk': 'Mỹ', 'âu': 'Mỹ', 'au my': 'Mỹ',
+        'anh': 'Anh', 'uk': 'Anh', 'united kingdom': 'Anh', 'britain': 'Anh', 'england': 'Anh', 'great britain': 'Anh',
+        'pháp': 'Pháp', 'france': 'Pháp', 'fr': 'Pháp',
+        'đức': 'Đức', 'germany': 'Đức', 'de': 'Đức', 'deutschland': 'Đức',
+        'ý': 'Ý', 'italy': 'Ý', 'italia': 'Ý', 'it': 'Ý',
+        'tây ban nha': 'Tây Ban Nha', 'spain': 'Tây Ban Nha', 'es': 'Tây Ban Nha', 'tay ban nha': 'Tây Ban Nha',
+        'bồ đào nha': 'Bồ Đào Nha', 'portugal': 'Bồ Đào Nha', 'pt': 'Bồ Đào Nha',
+        'nga': 'Nga', 'russia': 'Nga', 'ru': 'Nga',
+        'hà lan': 'Hà Lan', 'netherlands': 'Hà Lan', 'nl': 'Hà Lan', 'ha lan': 'Hà Lan',
+        'bỉ': 'Bỉ', 'belgium': 'Bỉ', 'be': 'Bỉ',
+        'thụy điển': 'Thụy Điển', 'sweden': 'Thụy Điển', 'se': 'Thụy Điển',
+        'đan mạch': 'Đan Mạch', 'denmark': 'Đan Mạch', 'dk': 'Đan Mạch',
+        'nauy': 'Nauy', 'norway': 'Nauy', 'no': 'Nauy',
+        'phần lan': 'Phần Lan', 'finland': 'Phần Lan', 'fi': 'Phần Lan',
+        'áo': 'Áo', 'austria': 'Áo', 'at': 'Áo',
+        'thụy sĩ': 'Thụy Sĩ', 'switzerland': 'Thụy Sĩ', 'ch': 'Thụy Sĩ',
+        'ba lan': 'Ba Lan', 'poland': 'Ba Lan', 'pl': 'Ba Lan',
+        'séc': 'Séc', 'czech': 'Séc', 'czech republic': 'Séc', 'cz': 'Séc',
+        'hungary': 'Hungary', 'hu': 'Hungary',
+        'hy lạp': 'Hy Lạp', 'greece': 'Hy Lạp', 'gr': 'Hy Lạp',
+        // Châu Mỹ & Khác
+        'canada': 'Canada', 'ca': 'Canada',
+        'brazil': 'Brazil', 'br': 'Brazil',
+        'mexico': 'Mexico', 'mx': 'Mexico',
+        'argentina': 'Argentina', 'ar': 'Argentina',
+        'úc': 'Úc', 'australia': 'Úc', 'au': 'Úc', 'aussie': 'Úc',
+        'new zealand': 'New Zealand', 'nz': 'New Zealand',
+        'nam phi': 'Nam Phi', 'south africa': 'Nam Phi', 'za': 'Nam Phi',
+        'ai cập': 'Ai Cập', 'egypt': 'Ai Cập', 'eg': 'Ai Cập',
+        'thổ nhĩ kỳ': 'Thổ Nhĩ Kỳ', 'turkey': 'Thổ Nhĩ Kỳ', 'türkiye': 'Thổ Nhĩ Kỳ', 'tr': 'Thổ Nhĩ Kỳ',
+        // Khác
+        'quốc tế': 'Quốc tế', 'international': 'Quốc tế'
     };
-    const lowerInput = name.toLowerCase().trim();
-    const resolved   = _aliasMap[lowerInput] || name; // Dùng tên gốc nếu không có alias
 
-    const lower = resolved.toLowerCase().trim();
-    const found = allCountries.find(c =>
-        c.name?.toLowerCase().trim() === lower ||
-        c.code?.toLowerCase().trim() === lower
+    const lowerInput = name.toLowerCase().trim();
+    const resolved = _aliasMap[lowerInput] || name; // Dùng tên gốc nếu không có alias
+
+    // Hàm phụ: Chuẩn hóa, loại bỏ dấu tiếng Việt để so sánh an toàn hơn (fallback)
+    const normalizeStr = (str) => {
+        if (!str) return '';
+        return str.toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Bỏ dấu
+            .replace(/[đĐ]/g, "d")
+            .replace(/[^a-z0-9]/g, ""); // Chỉ giữ lại chữ và số
+    };
+
+    const targetNorm = normalizeStr(resolved);
+
+    // 1. Tìm chính xác trước
+    let found = allCountries.find(c =>
+        c.name?.toLowerCase().trim() === resolved.toLowerCase().trim() ||
+        c.code?.toLowerCase().trim() === resolved.toLowerCase().trim()
     );
+
+    // 2. Nếu không thấy, tìm tương đối (bỏ dấu, dính chữ)
+    if (!found) {
+        found = allCountries.find(c => {
+            const dbNameNorm = normalizeStr(c.name);
+            const dbCodeNorm = normalizeStr(c.code);
+            return dbNameNorm === targetNorm || dbCodeNorm === targetNorm ||
+                   // Xử lý các case như API trả về "vietnam" nhưng DB là "việt nam"
+                   (dbNameNorm && targetNorm && (dbNameNorm.includes(targetNorm) || targetNorm.includes(dbNameNorm)));
+        });
+    }
+
     return found?.id || null;
 }
+
 
 /**
  * Kiểm tra phim đã tồn tại trong Supabase chưa bằng `api_url_backup`.
@@ -201,6 +279,8 @@ function _detectMoviePart(viTitle, enTitle) {
         { re: /\bchapter\s*([ivxlcdm\d]+)\b/i,     label: 'Phần' },
         // Số thứ tự ở cuối tên trong ngoặc: "(2)", "(3)"
         { re: /\(\s*(\d+)\s*\)$/,                  label: 'Phần' },
+        // Số La Mã hoặc số thường ở CUỐI CÙNG chuỗi, cách bởi khoảng trắng: "Iron Man 2", "Ám Ảnh Kinh Hoàng II"
+        { re: /\s+([ivxlc\d]+)$/i,                 label: 'Phần' }
     ];
 
     for (const src of [viTitle, enTitle]) {

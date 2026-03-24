@@ -720,12 +720,34 @@ function renderCategoriesList() {
     "linear-gradient(135deg, #30cfd0 0%, #330867 100%)", // Tím than
   ];
 
-  // Icon tương ứng (nếu muốn mapping, ở đây để random cho đơn giản hoặc lấy icon mặc định)
   const defaultIcon = "fa-film";
 
-  container.innerHTML = allCategories
-    .map((cat, index) => {
-      // Chọn màu xoay vòng
+  // Lọc: chỉ giữ thể loại có ít nhất 1 phim trong allMovies
+  const movies = (typeof allMovies !== 'undefined' && allMovies) ? allMovies : [];
+
+  const categoriesWithMovies = allCategories
+    .map(cat => {
+      // Đếm số phim thuộc thể loại này (so sánh theo id hoặc name)
+      const count = movies.filter(m => {
+        const ids = m.category_ids || m.categories || [];
+        return ids.some(cid => {
+          const s = String(cid).trim().toLowerCase();
+          return s === cat.id.toLowerCase() || s === cat.name.toLowerCase();
+        });
+      }).length;
+      return { cat, count };
+    })
+    .filter(item => item.count > 0); // Chỉ lấy thể loại có phim
+
+  if (categoriesWithMovies.length === 0) {
+    container.innerHTML =
+      '<p class="text-center text-muted">Chưa có thể loại nào có phim.</p>';
+    return;
+  }
+
+  container.innerHTML = categoriesWithMovies
+    .map((item, index) => {
+      const { cat, count } = item;
       const bgStyle = gradients[index % gradients.length];
 
       return `
@@ -740,7 +762,7 @@ function renderCategoriesList() {
                     <i class="fas ${cat.icon || defaultIcon}"></i>
                 </div>
                 <h3 class="cat-title">${cat.name}</h3>
-                <span class="cat-subtitle">Khám phá ngay <i class="fas fa-arrow-right"></i></span>
+                <span class="cat-subtitle">${count} phim &nbsp;<i class="fas fa-arrow-right"></i></span>
             </div>
         </div>
     `;

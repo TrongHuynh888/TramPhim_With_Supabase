@@ -307,8 +307,16 @@ function showPage(pageName, addToHistory = true) {
   const footer = document.getElementById("footer");
   if (pageName === "admin") {
     if (footer) footer.style.display = "none";
-    // Load data admin nếu cần
-    if (typeof loadAdminData === "function") loadAdminData();
+    // Load data admin nếu cần — CHỈ gọi đầy đủ lần đầu, giữ trang khi quay lại
+    if (typeof loadAdminData === "function") {
+      if (!window._adminDataLoaded) {
+        window._adminDataLoaded = true;
+        loadAdminData();
+      } else {
+        // Lần sau chỉ refresh phim, giữ nguyên trang hiện tại
+        if (typeof loadAdminMovies === 'function') loadAdminMovies(true);
+      }
+    }
   } else if (pageName === "community" && typeof currentCommView !== 'undefined' && currentCommView === 'chat') {
     // Nếu quay lại Cộng Đồng mà đang ở tab Chat thì ẩn footer
     if (footer) footer.style.display = "none";
