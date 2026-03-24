@@ -577,11 +577,11 @@
             </div>
 
             <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-              <select class="form-select" id="episodeMovieSort" onchange="filterEpisodeMovies()" style="flex: 1;">
+              <select class="form-select" id="episodeMovieSort" onchange="currentEpMovieSelectPage=1; filterEpisodeMovies()" style="flex: 1;">
                 <option value="newest">MỚI NHẤT</option>
                 <option value="oldest">CŨ NHẤT</option>
               </select>
-              <select class="form-select" id="episodeMovieAlphabet" onchange="filterEpisodeMovies()" style="flex: 1;">
+              <select class="form-select" id="episodeMovieAlphabet" onchange="currentEpMovieSelectPage=1; filterEpisodeMovies()" style="flex: 1;">
                 <option value="">CHỮ CÁI (TẤT CẢ)</option>
                 <option value="A-D">Vần A - D</option>
                 <option value="E-H">Vần E - H</option>
@@ -601,6 +601,7 @@
                   <p>Đang tải danh sách phim...</p>
                </div>
             </div>
+            <div id="epMovieSelectPagination" class="pagination-container"></div>
 
             <!-- Dropdown ẩn (vẫn giữ để tránh lỗi code cũ đang ref tới nó nếu có) -->
             <select id="selectMovieForEpisodes" style="display: none;" onchange="loadEpisodesForMovie()">

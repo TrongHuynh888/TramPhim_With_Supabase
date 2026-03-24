@@ -49,6 +49,7 @@ const actorsPerPage = 20;
 // Phân trang các tab khác
 let currentAdminMoviePage = 1;
 let currentAdminEpisodePage = 1;
+let currentEpMovieSelectPage = 1; // Trang hiện tại của grid chọn phim (tab Tập)
 let currentAdminUserPage = 1;
 let currentAdminNotifPage = 1;
 let currentAdminVipPage = 1;
@@ -67,7 +68,8 @@ window.filterAdminMoviesDebounced = debounce(() => {
 }, 300);
 window.filterEpisodeMoviesDebounced = debounce(() => {
     // Lưu ý: Tab Episodes có 2 bước, chọn phim và chọn tập. 
-    // Ở đây reset danh sách phim gợi ý.
+    // Ở đây reset trang grid chọn phim về 1 khi tìm kiếm.
+    window.currentEpMovieSelectPage = 1;
     window.currentAdminEpisodePage = 1; 
     if (typeof filterEpisodeMovies === 'function') filterEpisodeMovies();
 }, 300);
@@ -2711,6 +2713,17 @@ function renderMovieSelectionGrid(movies) {
     const grid = document.getElementById("movieSelectionGrid");
     if (!grid) return;
 
+    // --- PHÂN TRANG cho grid chọn phim ---
+    const totalItems = (movies || []).length;
+    const perPage = adminPerPage;
+    const totalPages = Math.ceil(totalItems / perPage);
+
+    if (currentEpMovieSelectPage > totalPages && totalPages > 0) currentEpMovieSelectPage = totalPages;
+    if (currentEpMovieSelectPage < 1) currentEpMovieSelectPage = 1;
+
+    const startIndex = (currentEpMovieSelectPage - 1) * perPage;
+    const paginatedMovies = (movies || []).slice(startIndex, startIndex + perPage);
+
     if (!movies || movies.length === 0) {
         grid.innerHTML = `
             <div class="text-center py-5 w-100" style="grid-column: 1/-1; opacity: 0.6;">
@@ -2718,10 +2731,12 @@ function renderMovieSelectionGrid(movies) {
                 <p>Không tìm thấy phim nào khớp với bộ lọc.</p>
             </div>
         `;
+        const paginationEl = document.getElementById("epMovieSelectPagination");
+        if (paginationEl) paginationEl.innerHTML = "";
         return;
     }
 
-    grid.innerHTML = movies.map(m => {
+    grid.innerHTML = paginatedMovies.map(m => {
         const currentEps = m._episodeCount || (m.episodes ? m.episodes.length : 0);
         const totalEps = parseInt(m.totalEpisodes || m.total_episodes) || 0;
         
@@ -2763,7 +2778,21 @@ function renderMovieSelectionGrid(movies) {
             </div>
         `;
     }).join("");
+
+    // Render phân trang bên dưới grid
+    renderAdminPagination("epMovieSelectPagination", totalItems, currentEpMovieSelectPage, perPage, "changeEpMovieSelectPage", "phim");
 }
+
+/**
+ * Chuyển trang Grid chọn phim (tab Tập)
+ */
+window.changeEpMovieSelectPage = function(page) {
+    currentEpMovieSelectPage = page;
+    filterEpisodeMovies();
+    // Cuộn lên đầu grid để dễ nhìn
+    const section = document.getElementById("movieSelectionSection");
+    if (section) section.scrollIntoView({ behavior: 'smooth' });
+};
 
 /**
  * Quay lại bảng chọn phim
