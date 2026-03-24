@@ -1092,8 +1092,9 @@ function _updateCardImportBadge(slug, result) {
 }
 
 /* ─── OVERRIDE renderApiMovieCards ─── */
-// Chờ admin-api-explorer.js load xong rồi mới override
-window.addEventListener('load', () => {
+// Script được lazy-load sau page load → chạy override ngay khi script load
+// (không dùng window 'load' event vì nó đã fire trước khi script này được tải)
+(function _initImportOverrides() {
     if (typeof renderApiMovieCards !== 'function') return;
 
     /**
@@ -1232,7 +1233,7 @@ window.addEventListener('load', () => {
             return _origCallApiDetail(slug);
         };
     }
-});
+})();
 
 console.log('✅ Admin API Import module loaded');
 

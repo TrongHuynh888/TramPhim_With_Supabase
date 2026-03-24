@@ -357,8 +357,8 @@ function showPage(pageName, addToHistory = true) {
         lazyLoadScriptBundle([
             'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js',
             'js/admin.js?v=3',
-            'js/admin-api-explorer.js?v=2',
-            'js/admin-api-import.js?v=2'
+            'js/admin-api-explorer.js?v=3',
+            'js/admin-api-import.js?v=3'
         ], () => {
             console.log('✅ Admin scripts loaded!');
             if (typeof loadAdminData === 'function') {
@@ -827,10 +827,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// Áp dụng cài đặt giao diện + marquee + popup từ Supabase khi load trang
+// Áp dụng cài đặt giao diện + hiệu ứng + marquee + popup từ Supabase khi load trang
 document.addEventListener("DOMContentLoaded", () => {
   setTimeout(() => {
     if (typeof applyAppearanceOnLoad === 'function') applyAppearanceOnLoad();
+    if (typeof loadAndApplyHomeEffects === 'function') loadAndApplyHomeEffects();
     if (typeof loadAndShowMarquee === 'function') loadAndShowMarquee();
     if (typeof loadAndShowPopup === 'function') loadAndShowPopup();
   }, 1500);

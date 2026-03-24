@@ -359,12 +359,14 @@
               Xem tất cả <i class="fas fa-arrow-right"></i>
             </a>
           </div>
-          <div class="movie-grid" id="featuredMovies">
-            <!-- Movies sẽ được load từ Firestore -->
-            <div class="skeleton" style="height: 350px"></div>
-            <div class="skeleton" style="height: 350px"></div>
-            <div class="skeleton" style="height: 350px"></div>
-            <div class="skeleton" style="height: 350px"></div>
+          <div class="featured-scroll-wrapper" id="featuredScrollWrapper">
+            <div class="movie-grid" id="featuredMovies">
+              <!-- Movies sẽ được load từ Firestore -->
+              <div class="skeleton" style="height: 350px"></div>
+              <div class="skeleton" style="height: 350px"></div>
+              <div class="skeleton" style="height: 350px"></div>
+              <div class="skeleton" style="height: 350px"></div>
+            </div>
           </div>
         </section>
 
@@ -1177,6 +1179,7 @@
     </div>
 
     <script src="js/supabase-config.js?v=2"></script>
+    <script src="js/site-frontend.js?v=1"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="js/globals.js?v=2"></script>

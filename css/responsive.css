@@ -981,6 +981,40 @@ body.watch-party-active #watchPartyPage {
     padding: 8px !important;
   }
 
+  /* --- Phim Nổi Bật: Mobile/Tablet cuộn ngang --- */
+  .featured-scroll-wrapper {
+    padding: 10px 10px 15px !important;
+    scrollbar-width: none;
+  }
+  .featured-scroll-wrapper::-webkit-scrollbar {
+    display: none;
+  }
+  #featuredMovies {
+    gap: 12px !important;
+  }
+
+  /* --- Phim Mới Cập Nhật: Mobile/Tablet cuộn ngang --- */
+  #newMovies {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 12px !important;
+    padding: 10px 10px 15px !important;
+    max-height: none !important; /* Bỏ giới hạn 2 hàng của PC */
+    scrollbar-width: none; /* Firefox */
+  }
+  #newMovies::-webkit-scrollbar {
+    display: none; /* Chrome/Safari ẩn thanh cuộn */
+  }
+  #newMovies > .movie-card-wrapper {
+    flex: 0 0 140px; /* Chiều rộng cố định mỗi card */
+    scroll-snap-align: start;
+    max-width: 140px;
+  }
+
   /* --- D. LƯỚI PHIM (2 CỘT TRÊN MOBILE CHO DỄ NHÌN) --- */
   .movie-grid {
     grid-template-columns: repeat(2, 1fr) !important;

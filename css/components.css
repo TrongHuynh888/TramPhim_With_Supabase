@@ -816,6 +816,16 @@
   background: rgba(46, 204, 113, 0.9);
 }
 
+/* Phim bộ hoàn tất — xanh dương gradient để phân biệt với "Full" phim lẻ */
+.episode-badge-completed {
+  background: linear-gradient(135deg, rgba(52, 152, 219, 0.9), rgba(41, 128, 185, 0.95));
+}
+
+/* Phim bộ đang chiếu — cam gradient để phân biệt với hoàn tất */
+.episode-badge-ongoing {
+  background: linear-gradient(135deg, rgba(243, 156, 18, 0.9), rgba(230, 126, 34, 0.95));
+}
+
 /* Container cho nhãn khớp kết quả lọc */
 .match-badges-container {
   position: absolute;

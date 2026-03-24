@@ -366,6 +366,46 @@
   padding: var(--spacing-lg) 40px; /* Thêm padding 2 bên để không sát lề */
 }
 
+/* Phim Nổi Bật — Wrapper cuộn ngang */
+.featured-scroll-wrapper {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Ẩn thanh cuộn Firefox */
+  cursor: grab;
+  /* Padding trên/dưới tạo khoảng trống cho popup hiển thị đầy đủ */
+  padding: 50px 40px 220px;
+  margin-top: -50px;
+  margin-bottom: -220px;
+}
+.featured-scroll-wrapper:active {
+  cursor: grabbing;
+}
+.featured-scroll-wrapper::-webkit-scrollbar {
+  display: none; /* Ẩn thanh cuộn Chrome/Safari */
+}
+/* Grid phim bên trong — flex 1 hàng, overflow visible cho popup */
+#featuredMovies {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: var(--spacing-lg);
+  overflow: visible !important;
+  padding: 0 !important;
+}
+/* Thẻ phim: dùng --card-width từ JS, fallback 200px */
+#featuredMovies > .movie-card-wrapper {
+  flex: 0 0 var(--card-width, 200px);
+  min-width: var(--card-width, 200px);
+}
+
+/* Phim Mới Cập Nhật — PC: đúng 2 hàng, ẩn thừa */
+#newMovies {
+  grid-template-rows: repeat(2, auto);
+  overflow: hidden;
+  /* Giới hạn chiều cao = 2 hàng phim (chiều cao poster + card body + gap) */
+  max-height: calc((300px + 70px) * 2 + var(--spacing-lg));
+}
+
 /* Grid danh sách thể loại (New) */
 #categoriesList {
   display: grid;
@@ -1861,6 +1901,16 @@
   font-weight: 700;
   color: #fff;
   z-index: 2;
+}
+
+/* Phim bộ hoàn tất — xanh dương gradient để phân biệt với "Full" phim lẻ */
+.landscape-badge-completed {
+  background: linear-gradient(135deg, rgba(52, 152, 219, 0.9), rgba(41, 128, 185, 0.95));
+}
+
+/* Phim bộ đang chiếu — cam gradient */
+.landscape-badge-ongoing {
+  background: linear-gradient(135deg, rgba(243, 156, 18, 0.9), rgba(230, 126, 34, 0.95));
 }
 
 /* Sidebar decoration */
@@ -3384,5 +3434,7 @@ body.has-pseudo-fullscreen::-webkit-scrollbar {
 }
 [data-theme="light"] .site-marquee-close:hover {
   background: rgba(0, 0, 0, 0.15);
+  color: var(--text-primary);
+}
   color: var(--text-primary);
 }

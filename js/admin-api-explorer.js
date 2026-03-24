@@ -185,6 +185,10 @@ async function callApiList() {
     const btn = document.getElementById('btnCallApi');
     if (btn) { btn.classList.add('loading'); btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang gọi...'; }
 
+    // Đọc trang từ ô input (admin nhập tay) và đồng bộ vào state
+    const inputPage = parseInt(document.getElementById('apiPage')?.value) || 1;
+    _apiState.currentPage = inputPage;
+
     const params = {
         type: document.getElementById('apiTypeList')?.value || 'phim-bo',
         lang: document.getElementById('apiSortLang')?.value || '',

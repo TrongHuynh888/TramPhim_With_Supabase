@@ -318,7 +318,7 @@ async function handleAuthStateChange(user) {
         }
       }, 500);
 
-      if (isAdmin) loadAdminData();
+      if (isAdmin && typeof loadAdminData === 'function') loadAdminData();
 
       // Render lại giao diện
       if (typeof renderAllInitialMovies === 'function') renderAllInitialMovies();

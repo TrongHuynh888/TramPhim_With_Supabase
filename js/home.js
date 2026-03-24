@@ -1,18 +1,164 @@
 /**
- * Render phim nổi bật
+ * Render phim nổi bật — Top 10 phim view cao nhất trong ngày
+ * Query bảng view_logs trên Supabase để lấy lượt xem theo ngày
+ * Fallback: nếu không có dữ liệu view_logs → dùng tổng views
  */
-function renderFeaturedMovies() {
+async function renderFeaturedMovies() {
   const container = document.getElementById("featuredMovies");
   if (!container) return;
 
-  // Lấy 4 phim có rating cao nhất
-  const featured = [...allMovies]
-    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-    .slice(0, 4);
+  let featured = [];
+
+  try {
+    // Tính mốc đầu ngày hôm nay (00:00:00)
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
+    // Query view_logs trong ngày hôm nay từ Supabase
+    if (typeof supabase !== 'undefined' && supabase) {
+      const { data, error } = await supabase
+        .from('view_logs')
+        .select('movie_id')
+        .gte('viewed_at', todayStart)
+        .limit(10000);
+
+      if (!error && data && data.length > 0) {
+        // Đếm lượt xem theo movie_id
+        const viewCounts = {};
+        data.forEach(log => {
+          viewCounts[log.movie_id] = (viewCounts[log.movie_id] || 0) + 1;
+        });
+
+        // Sort và lấy top 10 movie_id
+        const top10Ids = Object.entries(viewCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 10)
+          .map(([movieId]) => movieId);
+
+        // Map về object phim từ allMovies
+        featured = top10Ids
+          .map(id => allMovies.find(m => m.id === id))
+          .filter(Boolean);
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Lỗi query view_logs cho Phim Nổi Bật:', err.message);
+  }
+
+  // Fallback: nếu chưa có dữ liệu trong ngày → dùng tổng views
+  if (featured.length === 0) {
+    featured = [...allMovies]
+      .sort((a, b) => (b.views || 0) - (a.views || 0))
+      .slice(0, 10);
+  }
 
   container.innerHTML = featured
     .map((movie) => createMovieCard(movie))
     .join("");
+
+  // Đồng bộ kích thước thẻ phim với grid gốc + kích hoạt kéo cuộn
+  syncFeaturedCardWidth();
+  initFeaturedDragScroll();
+}
+
+/**
+ * Đồng bộ kích thước thẻ #featuredMovies = kích thước cột grid "Phim Mới Cập Nhật"
+ * Đọc computed grid column width từ #newMovies và set --card-width cho #featuredMovies
+ */
+function syncFeaturedCardWidth() {
+  const featured = document.getElementById('featuredMovies');
+  if (!featured) return;
+
+  // Tìm grid tham chiếu: "Phim Mới Cập Nhật" hoặc "Tất Cả Phim"
+  const refGrid = document.getElementById('newMovies') || document.getElementById('allMoviesGrid');
+
+  if (refGrid) {
+    // Đọc chiều rộng cột đầu tiên từ grid tham chiếu
+    const cols = window.getComputedStyle(refGrid).gridTemplateColumns;
+    if (cols && cols !== 'none') {
+      const firstColWidth = parseFloat(cols.split(' ')[0]);
+      if (!isNaN(firstColWidth) && firstColWidth > 0) {
+        featured.style.setProperty('--card-width', firstColWidth + 'px');
+        return;
+      }
+    }
+  }
+
+  // Fallback: tự tính dựa trên container width (giống auto-fill minmax(200px, 1fr))
+  const containerWidth = featured.parentElement ? featured.parentElement.clientWidth - 80 : 1200;
+  const gap = 24;
+  const numCols = Math.floor((containerWidth + gap) / (200 + gap));
+  const colWidth = (containerWidth - (numCols - 1) * gap) / numCols;
+  featured.style.setProperty('--card-width', Math.max(200, colWidth) + 'px');
+}
+
+// Cập nhật kích thước thẻ khi resize cửa sổ
+window.addEventListener('resize', debounce(syncFeaturedCardWidth, 200));
+
+/**
+ * Kéo chuột để cuộn ngang cho wrapper Phim Nổi Bật (PC)
+ * preventDefault trên mousedown chặn browser kéo ảnh
+ * Ngưỡng 5px phân biệt click vs drag
+ */
+function initFeaturedDragScroll() {
+  const el = document.getElementById('featuredScrollWrapper');
+  if (!el || el._dragInitialized) return;
+  el._dragInitialized = true;
+
+  let isDown = false;
+  let isDragging = false;
+  let startX = 0;
+  let scrollLeft = 0;
+
+  el.addEventListener('mousedown', (e) => {
+    isDown = true;
+    isDragging = false;
+    startX = e.pageX;
+    scrollLeft = el.scrollLeft;
+    // Chặn browser kéo ảnh mặc định — cho phép kéo cuộn từ mọi vị trí
+    e.preventDefault();
+  });
+
+  el.addEventListener('mouseleave', () => {
+    isDown = false;
+    isDragging = false;
+    el.style.cursor = 'grab';
+  });
+
+  el.addEventListener('mouseup', () => {
+    isDown = false;
+    el.style.cursor = 'grab';
+    // Giữ isDragging = true cho đến khi click handler xử lý xong
+    // Reset bằng setTimeout để click event kịp kiểm tra
+    if (isDragging) {
+      setTimeout(() => { isDragging = false; }, 0);
+    }
+  });
+
+  // Chặn click nếu vừa drag xong (tránh mở popup/chuyển trang sau khi kéo)
+  el.addEventListener('click', (e) => {
+    if (isDragging) {
+      e.preventDefault();
+      e.stopPropagation();
+      isDragging = false;
+    }
+  }, true); // capture phase — chặn trước khi onclick trên card xử lý
+
+  el.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+
+    const diff = Math.abs(e.pageX - startX);
+    if (diff > 5) {
+      isDragging = true;
+      el.style.cursor = 'grabbing';
+      e.preventDefault();
+    }
+
+    if (isDragging) {
+      const walk = (e.pageX - startX) * 1.5;
+      el.scrollLeft = scrollLeft - walk;
+    }
+  });
 }
 
 /**
@@ -33,7 +179,7 @@ function renderNewMovies() {
         : new Date(b.createdAt);
       return dateB - dateA;
     })
-    .slice(0, 8);
+    .slice(0, 12);
 
   container.innerHTML = newMovies
     .map((movie) => createMovieCard(movie))
@@ -98,18 +244,35 @@ function createMovieCard(movie, matchedTags = []) {
     "https://placehold.co/300x450/2a2a3a/FFFFFF?text=NO+POSTER";
   const matchScore = movie.rating ? Math.round(movie.rating * 10) : 95;
 
-  // Tính badge trạng thái tập (chỉ cho phim bộ)
+  // Tính badge trạng thái tập
   let episodeBadgeHtml = "";
   if (movie.type === "series") {
     const currentEps = movie._episodeCount || (movie.episodes || []).length;
     const totalEps = movie.totalEpisodes || 0;
     if (totalEps > 0 && currentEps >= totalEps) {
-      episodeBadgeHtml = `<span class="episode-badge episode-badge-full">Hoàn Tất (${currentEps}/${totalEps})</span>`;
+      episodeBadgeHtml = `<span class="episode-badge episode-badge-completed">Hoàn Tất (${currentEps}/${totalEps})</span>`;
     } else if (totalEps > 0) {
-      episodeBadgeHtml = `<span class="episode-badge">Tập ${currentEps}/${totalEps}</span>`;
+      episodeBadgeHtml = `<span class="episode-badge episode-badge-ongoing">Tập ${currentEps}/${totalEps}</span>`;
     } else if (currentEps > 0) {
-      episodeBadgeHtml = `<span class="episode-badge">Tập ${currentEps}</span>`;
+      episodeBadgeHtml = `<span class="episode-badge episode-badge-ongoing">Tập ${currentEps}</span>`;
     }
+  } else {
+    // Phim lẻ (single) → hiện badge "Full"
+    episodeBadgeHtml = `<span class="episode-badge episode-badge-full">Full</span>`;
+  }
+
+  // Tính text hiển thị tập cho popup
+  let popupEpisodeText = '';
+  if (movie.type === 'series') {
+    const currentEps = movie._episodeCount || (movie.episodes || []).length;
+    if (currentEps > 0) {
+      popupEpisodeText = `Tập ${currentEps}`;
+    } else {
+      popupEpisodeText = 'Đang cập nhật';
+    }
+  } else {
+    // Phim lẻ: không hiện text tập trong popup
+    popupEpisodeText = '';
   }
 
   // Logic hiển thị nhãn khớp (Match Badges) - CHI HIÊN KHI LỌC
@@ -177,6 +340,7 @@ function createMovieCard(movie, matchedTags = []) {
                         <span class="meta-age">${movie.ageLimit || "T13"}</span>
                         <span>${movie.year || "2026"}</span>
                         <span>${(movie.duration || '90p').replace(/\s*\/\s*tập/gi, '')}</span>
+                        ${popupEpisodeText ? `<span>${popupEpisodeText}</span>` : ''}
                         <span class="meta-quality">${movie.quality || "HD"}</span>
                     </div>
                     <!-- Bản sao chỉ dành cho hiệu ứng cuộn Marquee trên điện thoại -->
@@ -185,6 +349,7 @@ function createMovieCard(movie, matchedTags = []) {
                         <span class="meta-age">${movie.ageLimit || "T13"}</span>
                         <span>${movie.year || "2026"}</span>
                         <span>${(movie.duration || '90p').replace(/\s*\/\s*tập/gi, '')}</span>
+                        ${popupEpisodeText ? `<span>${popupEpisodeText}</span>` : ''}
                         <span class="meta-quality">${movie.quality || "HD"}</span>
                     </div>
                 </div>
@@ -1011,16 +1176,21 @@ function createLandscapeMovieCard(movie) {
   const likeClass = isLiked ? "liked" : "";
   const matchScore = movie.rating ? Math.round(movie.rating * 10) : 95;
 
-  // Tính badge trạng thái tập (chỉ cho phim bộ)
+  // Tính badge trạng thái tập (phim bộ: Tập X/Y, phim lẻ: Full)
   let lsEpisodeBadge = "";
   if (movie.type === "series") {
-    const currentEps = (movie.episodes || []).length;
+    const currentEps = movie._episodeCount || (movie.episodes || []).length;
     const totalEps = movie.totalEpisodes || 0;
     if (totalEps > 0 && currentEps >= totalEps) {
-      lsEpisodeBadge = `<div class="landscape-badge" style="left: 10px; right: auto; top: 10px; bottom: auto; background: rgba(81,207,102,0.9);">FULL</div>`;
+      lsEpisodeBadge = `<div class="landscape-badge landscape-badge-completed" style="left: 10px; right: auto; top: 10px; bottom: auto;">Hoàn Tất (${currentEps}/${totalEps})</div>`;
     } else if (totalEps > 0) {
-      lsEpisodeBadge = `<div class="landscape-badge" style="left: 10px; right: auto; top: 10px; bottom: auto; background: rgba(255,193,7,0.85); color: #000;">Tập ${currentEps}/${totalEps}</div>`;
+      lsEpisodeBadge = `<div class="landscape-badge landscape-badge-ongoing" style="left: 10px; right: auto; top: 10px; bottom: auto;">Tập ${currentEps}/${totalEps}</div>`;
+    } else if (currentEps > 0) {
+      lsEpisodeBadge = `<div class="landscape-badge landscape-badge-ongoing" style="left: 10px; right: auto; top: 10px; bottom: auto;">Tập ${currentEps}</div>`;
     }
+  } else {
+    // Phim lẻ (single) → hiện badge "Full"
+    lsEpisodeBadge = `<div class="landscape-badge" style="left: 10px; right: auto; top: 10px; bottom: auto; background: rgba(81,207,102,0.9);">Full</div>`;
   }
 
   return `
@@ -1073,7 +1243,13 @@ function createLandscapeMovieCard(movie) {
                         <span class="badge-item imdb">IMDb ${movie.rating || "7.0"}</span>
                         <span class="badge-item year">${movie.year || "2026"}</span>
                         ${movie.part ? `<span class="badge-item">${displayPart}</span>` : ""}
-                        ${movie.totalEpisodes ? `<span class="badge-item">Tập ${movie.totalEpisodes}</span>` : ""}
+                        ${(() => {
+                          if (movie.type === 'series') {
+                            const curEps = movie._episodeCount || (movie.episodes || []).length;
+                            return curEps > 0 ? `<span class="badge-item">Tập ${curEps}</span>` : '';
+                          }
+                          return '<span class="badge-item">Full</span>';
+                        })()}
                         <span class="badge-item">${movie.quality || "HD"}</span>
                     </div>
 
