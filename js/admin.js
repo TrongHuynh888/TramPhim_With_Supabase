@@ -187,6 +187,9 @@ async function loadAdminData() {
 
     // ✅ Cập nhật thống kê Dashboard
     await loadAdminStats();
+
+    // 🔄 Tự động sync tập mới từ API (chạy ngầm, không ảnh hưởng UI)
+    if (typeof autoSyncEpisodesIfNeeded === 'function') autoSyncEpisodesIfNeeded();
   } catch (error) {
     console.error("Lỗi load admin data:", error);
   }
@@ -1449,7 +1452,7 @@ window.deleteErrorReport = async function(id) {
 /**
  * Lọc danh sách phim (Admin)
  */
-function filterAdminMovies() {
+function filterAdminMovies(skipPageReset = false) {
   const searchInput = document.getElementById("adminSearchMovies");
   const statusSelect = document.getElementById("adminFilterStatus");
   const typeSelect = document.getElementById("adminFilterMovieType");
@@ -1457,8 +1460,8 @@ function filterAdminMovies() {
   const countrySelect = document.getElementById("adminFilterCountry");
   const sortSelect = document.getElementById("adminSortMovies");
   
-  // TỰ ĐỘNG RESET VỀ TRANG 1 KHI LỌC (Tránh lỗi không thấy phim do đang ở trang cao)
-  if (typeof currentAdminMoviePage !== 'undefined') {
+  // Reset về trang 1 khi người dùng lọc — KHÔNG reset khi changeAdminMoviePage gọi
+  if (!skipPageReset && typeof currentAdminMoviePage !== 'undefined') {
       currentAdminMoviePage = 1; 
   }
   
@@ -1622,18 +1625,66 @@ function getCountryInfo(countryName) {
     const name = countryName.toLowerCase().trim();
     
     const countries = {
-        'việt nam': { icon: '🇻🇳', code: 'vn', bg: 'rgba(229, 9, 20, 0.15)', color: '#ff4d4d' },
-        'hàn quốc': { icon: '🇰🇷', code: 'kr', bg: 'rgba(77, 171, 247, 0.15)', color: '#4dabf7' },
-        'trung quốc': { icon: '🇨🇳', code: 'cn', bg: 'rgba(253, 126, 20, 0.15)', color: '#fd7e14' },
-        'mỹ': { icon: '🇺🇸', code: 'us', bg: 'rgba(51, 154, 240, 0.15)', color: '#339af0' },
-        'nhật bản': { icon: '🇯🇵', code: 'jp', bg: 'rgba(255, 255, 255, 0.15)', color: '#fff' },
-        'thái lan': { icon: '🇹🇭', code: 'th', bg: 'rgba(81, 207, 102, 0.15)', color: '#51cf66' },
-        'âu mỹ': { icon: '🇪🇺', code: 'eu', bg: 'rgba(132, 94, 247, 0.15)', color: '#845ef7' },
-        'đài loan': { icon: '🇹🇼', code: 'tw', bg: 'rgba(20, 184, 166, 0.15)', color: '#14b8a6' },
-        'ấn độ': { icon: '🇮🇳', code: 'in', bg: 'rgba(245, 159, 0, 0.15)', color: '#f59f00' },
-        'pháp': { icon: '🇫🇷', code: 'fr', bg: 'rgba(45, 201, 255, 0.12)', color: '#2dc9ff' },
-        'anh': { icon: '🇬🇧', code: 'gb', bg: 'rgba(77, 171, 247, 0.12)', color: '#4dabf7' }
+        // Châu Á
+        'việt nam':        { icon: '🇻🇳', code: 'vn', bg: 'rgba(229,9,20,0.15)',    color: '#ff4d4d' },
+        'hàn quốc':        { icon: '🇰🇷', code: 'kr', bg: 'rgba(77,171,247,0.15)',  color: '#4dabf7' },
+        'trung quốc':      { icon: '🇨🇳', code: 'cn', bg: 'rgba(253,126,20,0.15)',  color: '#fd7e14' },
+        'nhật bản':        { icon: '🇯🇵', code: 'jp', bg: 'rgba(255,255,255,0.15)', color: '#fff' },
+        'thái lan':        { icon: '🇹🇭', code: 'th', bg: 'rgba(81,207,102,0.15)',  color: '#51cf66' },
+        'đài loan':        { icon: '🇹🇼', code: 'tw', bg: 'rgba(20,184,166,0.15)',  color: '#14b8a6' },
+        'hồng kông':       { icon: '🇭🇰', code: 'hk', bg: 'rgba(220,38,38,0.15)',   color: '#f87171' },
+        'ấn độ':           { icon: '🇮🇳', code: 'in', bg: 'rgba(245,159,0,0.15)',   color: '#f59f00' },
+        'philippines':     { icon: '🇵🇭', code: 'ph', bg: 'rgba(59,130,246,0.15)',  color: '#60a5fa' },
+        'indonesia':       { icon: '🇮🇩', code: 'id', bg: 'rgba(239,68,68,0.15)',   color: '#f87171' },
+        'malaysia':        { icon: '🇲🇾', code: 'my', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'singapore':       { icon: '🇸🇬', code: 'sg', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'campuchia':       { icon: '🇰🇭', code: 'kh', bg: 'rgba(99,102,241,0.12)',  color: '#a5b4fc' },
+        'myanma':          { icon: '🇲🇲', code: 'mm', bg: 'rgba(234,179,8,0.12)',   color: '#fde047' },
+        'myanmar':         { icon: '🇲🇲', code: 'mm', bg: 'rgba(234,179,8,0.12)',   color: '#fde047' },
+        'lào':             { icon: '🇱🇦', code: 'la', bg: 'rgba(239,68,68,0.12)',   color: '#fca5a5' },
+        'mông cổ':         { icon: '🇲🇳', code: 'mn', bg: 'rgba(99,102,241,0.12)',  color: '#a5b4fc' },
+        'pakistan':        { icon: '🇵🇰', code: 'pk', bg: 'rgba(34,197,94,0.15)',   color: '#4ade80' },
+        'bangladesh':      { icon: '🇧🇩', code: 'bd', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'sri lanka':       { icon: '🇱🇰', code: 'lk', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'iran':            { icon: '🇮🇷', code: 'ir', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'israel':          { icon: '🇮🇱', code: 'il', bg: 'rgba(96,165,250,0.12)',  color: '#93c5fd' },
+        'thổ nhĩ kỳ':      { icon: '🇹🇷', code: 'tr', bg: 'rgba(220,38,38,0.15)',   color: '#f87171' },
+        'ả rập xê út':     { icon: '🇸🇦', code: 'sa', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        // Châu Âu
+        'mỹ':              { icon: '🇺🇸', code: 'us', bg: 'rgba(51,154,240,0.15)',  color: '#339af0' },
+        'anh':             { icon: '🇬🇧', code: 'gb', bg: 'rgba(77,171,247,0.12)',  color: '#4dabf7' },
+        'pháp':            { icon: '🇫🇷', code: 'fr', bg: 'rgba(45,201,255,0.12)',  color: '#2dc9ff' },
+        'đức':             { icon: '🇩🇪', code: 'de', bg: 'rgba(234,179,8,0.12)',   color: '#fde047' },
+        'ý':               { icon: '🇮🇹', code: 'it', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'tây ban nha':     { icon: '🇪🇸', code: 'es', bg: 'rgba(239,68,68,0.12)',   color: '#f87171' },
+        'bồ đào nha':      { icon: '🇵🇹', code: 'pt', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'nga':             { icon: '🇷🇺', code: 'ru', bg: 'rgba(239,68,68,0.12)',   color: '#f87171' },
+        'hà lan':          { icon: '🇳🇱', code: 'nl', bg: 'rgba(245,158,11,0.12)',  color: '#fbbf24' },
+        'bỉ':              { icon: '🇧🇪', code: 'be', bg: 'rgba(234,179,8,0.12)',   color: '#fde047' },
+        'thụy điển':       { icon: '🇸🇪', code: 'se', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        'đan mạch':        { icon: '🇩🇰', code: 'dk', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'nauy':            { icon: '🇳🇴', code: 'no', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'phần lan':        { icon: '🇫🇮', code: 'fi', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        'áo':              { icon: '🇦🇹', code: 'at', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'thụy sĩ':         { icon: '🇨🇭', code: 'ch', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'ba lan':          { icon: '🇵🇱', code: 'pl', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'séc':             { icon: '🇨🇿', code: 'cz', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        'hungary':         { icon: '🇭🇺', code: 'hu', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'hy lạp':          { icon: '🇬🇷', code: 'gr', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        // Châu Mỹ & Khác
+        'canada':          { icon: '🇨🇦', code: 'ca', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'brazil':          { icon: '🇧🇷', code: 'br', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'mexico':          { icon: '🇲🇽', code: 'mx', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'argentina':       { icon: '🇦🇷', code: 'ar', bg: 'rgba(96,165,250,0.12)',  color: '#93c5fd' },
+        'australia':       { icon: '🇦🇺', code: 'au', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        'new zealand':     { icon: '🇳🇿', code: 'nz', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        'nam phi':         { icon: '🇿🇦', code: 'za', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'ai cập':          { icon: '🇪🇬', code: 'eg', bg: 'rgba(234,179,8,0.12)',   color: '#fde047' },
+        // Liên minh / Đa quốc gia
+        'âu mỹ':           { icon: '🇪🇺', code: 'eu', bg: 'rgba(132,94,247,0.15)',  color: '#845ef7' },
+        'quốc tế':         { icon: '🌍', code: '',   bg: 'rgba(148,163,184,0.12)', color: '#94a3b8' },
     };
+
 
     // 1. Tìm kiếm trong danh sách được cấu hình sẵn màu sắc đẹp
     for (const key in countries) {
@@ -2339,7 +2390,7 @@ async function handleMovieSubmit(event) {
         'id', 'title', 'origin_title', 'poster_url', 'background_url', 'description', 
         'year', 'type', 'duration', 'quality', 'status', 'age_limit', 'series_id', 
         'price', 'rating', 'total_episodes', 'api_url_backup', 'cast_data', 'tags', 
-        'versions', 'category_ids', 'country_id', 'created_at', 'updated_at', 'view_count'
+        'versions', 'category_ids', 'country_id', 'created_at', 'updated_at'
     ];
 
     const finalMovieData = {};
@@ -2348,7 +2399,7 @@ async function handleMovieSubmit(event) {
             let value = movieData[key];
             
             // Ép kiểu cho các trường số (Tránh lỗi 22P02 của PostgreSQL khi gửi "")
-            const numericFields = ['year', 'price', 'rating', 'total_episodes', 'view_count'];
+            const numericFields = ['year', 'price', 'rating', 'total_episodes'];
             if (numericFields.includes(key)) {
                 if (value === "" || value === null || isNaN(value)) {
                     value = null;
@@ -2399,7 +2450,7 @@ async function handleMovieSubmit(event) {
             // Thêm mới - Dùng ID đã sinh sớm (trước upload R2) hoặc tạo mới nếu chưa có
             finalMovieData.id = window._preGeneratedMovieId || (generateSeriesIdFromTitle(movieData.title) + '-' + Date.now().toString().slice(-8));
             window._preGeneratedMovieId = null; // Reset sau khi dùng
-            finalMovieData.view_count = 0;
+
             finalMovieData.rating = 0;
             
 
@@ -2422,8 +2473,15 @@ async function handleMovieSubmit(event) {
         notifyDataChange("movies"); 
         closeModal("movieModal");
 
+        // Lưu lại trang hiện tại để sau khi reload không bị nhảy về trang 1
+        const _savedMoviePage = currentAdminMoviePage || 1;
+
         if (typeof loadMovies === 'function') await loadMovies();
         await loadAdminMovies();
+
+        // Khôi phục trang sau khi load xong và render lại đúng trang
+        currentAdminMoviePage = _savedMoviePage;
+        if (typeof filterAdminMovies === 'function') filterAdminMovies(true);
     } catch (error) {
         console.error("Lỗi chi tiết Supabase:", error);
         showNotification(`Lỗi: ${error.message || 'Không thể lưu phim'}`, "error");
@@ -2784,7 +2842,7 @@ async function loadEpisodesForMovie(movieIdFromGrid, resetPage = true) {
       const paginatedEpisodes = fullMovieData.episodes.slice(startIndex, startIndex + perPage);
 
       if (totalItems === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center">Chưa có tập nào</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center">Chưa có tập nào</td></tr>';
         const paginationContainer = document.getElementById("adminEpisodePagination");
         if (paginationContainer) paginationContainer.innerHTML = "";
         return;
@@ -2813,6 +2871,10 @@ async function loadEpisodesForMovie(movieIdFromGrid, resetPage = true) {
                   <td>${ep.sources ? ep.sources.length + " sources" : "N/A"}</td>
                   <td>${ep.duration || "N/A"}</td>
                   <td>${ep.quality || "HD"}</td>
+                  <td style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">
+                      ${ep.is_new ? '<span style="background:linear-gradient(135deg,#00d2ff,#0099cc);color:#fff;font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px;letter-spacing:0.5px;">MỚI</span>' : ''}
+                      ${ep.created_at ? (() => { const d = new Date(ep.created_at); return d.toLocaleDateString('vi-VN') + '<br><span style="font-size:0.7rem;opacity:0.7;">' + d.toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) + '</span>'; })() : '<span style="opacity:0.4;">—</span>'}
+                  </td>
                   <td>
                       <button class="btn btn-sm btn-secondary" onclick="editEpisode(${globalIdx})" title="Sửa">
                           <i class="fas fa-edit"></i>
@@ -4982,12 +5044,14 @@ async function deleteCategory(categoryId) {
 /**
  * Hiển thị bảng Quốc gia (Admin) - CÓ NÚT SỬA/XÓA
  */
+// Biến trạng thái: true = hiện tất cả, false = chỉ hiện 10 quốc gia đầu
+let _showAllCountries = false;
+
 function renderAdminCountries() {
   const tbody = document.getElementById("adminCountriesTable");
   const searchInput = document.getElementById("adminSearchCountry");
   if (!tbody) return;
 
-  // Nếu không có dữ liệu thì báo trống
   let countriesToRender = allCountries;
 
   // Đếm số phim cho từng quốc gia
@@ -5001,6 +5065,7 @@ function renderAdminCountries() {
     });
   }
 
+  // Lọc theo ô tìm kiếm
   if (searchInput) {
     const searchText = searchInput.value.toLowerCase().trim();
     if (searchText) {
@@ -5017,14 +5082,28 @@ function renderAdminCountries() {
   if (countriesToRender.length === 0) {
     tbody.innerHTML =
       '<tr><td colspan="6" class="text-center">Không tìm thấy quốc gia nào</td></tr>';
+    _renderCountryToggleBtn(0, 0);
     return;
   }
 
+  // Sắp xếp: nước có phim lên trước, sau đó theo tên
+  const sorted = [...countriesToRender].sort((a, b) => {
+    const ca = movieCountByCountry[a.id] || 0;
+    const cb = movieCountByCountry[b.id] || 0;
+    if (cb !== ca) return cb - ca;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  // Giới hạn 10 nếu không mở rộng và không đang tìm kiếm
+  const isSearching = searchInput && searchInput.value.trim() !== '';
+  const limit = (_showAllCountries || isSearching) ? sorted.length : Math.min(10, sorted.length);
+  const displayed = sorted.slice(0, limit);
+
   // Vẽ từng dòng
-  tbody.innerHTML = countriesToRender
+  tbody.innerHTML = displayed
     .map((country, index) => {
       const countryInfo = getCountryInfo(country.name);
-      
+      const numMovies = movieCountByCountry[country.id] || 0;
       return `
             <tr>
                 <td style="text-align: center;">${index + 1}</td>
@@ -5039,8 +5118,8 @@ function renderAdminCountries() {
                 </td>
                 <td style="text-align: center;"><span class="badge badge-primary">${countryInfo.code ? countryInfo.code.toUpperCase() : "N/A"}</span></td>
                 <td style="text-align: center;">
-                    <span class="badge" style="background: ${(movieCountByCountry[country.id] || 0) > 0 ? 'rgba(77, 184, 255, 0.15)' : 'rgba(255,255,255,0.05)'}; color: ${(movieCountByCountry[country.id] || 0) > 0 ? '#4db8ff' : '#888'}; font-weight: 600; padding: 4px 10px; border-radius: 6px;">
-                        ${movieCountByCountry[country.id] || 0} phim
+                    <span class="badge" style="background: ${numMovies > 0 ? 'rgba(77, 184, 255, 0.15)' : 'rgba(255,255,255,0.05)'}; color: ${numMovies > 0 ? '#4db8ff' : '#888'}; font-weight: 600; padding: 4px 10px; border-radius: 6px;">
+                        ${numMovies} phim
                     </span>
                 </td>
                 <td style="text-align: center;">
@@ -5056,6 +5135,9 @@ function renderAdminCountries() {
     })
     .join("");
 
+  // Render nút toggle Xem tất cả / Thu gọn
+  _renderCountryToggleBtn(sorted.length, limit);
+
   // Tự động render biểu đồ thống kê khi load bảng quốc gia
   if (typeof populateCountryStatsDropdown === 'function') populateCountryStatsDropdown();
   if (typeof renderCountryStatsChart === 'function') {
@@ -5063,6 +5145,49 @@ function renderAdminCountries() {
     renderCountryStatsChart(sel ? sel.value : '', _countryStatsPeriod || 'all');
   }
 }
+
+/**
+ * Render nút "Xem tất cả / Thu gọn" bên dưới bảng quốc gia
+ */
+function _renderCountryToggleBtn(total, shown) {
+  // Tìm hoặc tạo container cho nút toggle
+  let btnContainer = document.getElementById('countryToggleBtnWrapper');
+  if (!btnContainer) {
+    const table = document.getElementById('adminCountriesTable');
+    if (!table) return;
+    // Tìm phần tử cha của table và thêm vào sau
+    const parentTable = table.closest('table') || table.parentElement;
+    btnContainer = document.createElement('div');
+    btnContainer.id = 'countryToggleBtnWrapper';
+    btnContainer.style.cssText = 'text-align: center; padding: 12px 0 4px;';
+    parentTable.insertAdjacentElement('afterend', btnContainer);
+  }
+
+  if (total <= 10) {
+    // Không cần nút nếu tổng ≤ 10
+    btnContainer.innerHTML = '';
+    return;
+  }
+
+  const remaining = total - shown;
+  btnContainer.innerHTML = _showAllCountries
+    ? `<button onclick="_toggleAllCountries()" class="btn btn-sm" style="background: rgba(255,255,255,0.07); color: #aaa; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 18px; cursor: pointer; font-size: 0.85rem;">
+          <i class="fas fa-chevron-up" style="margin-right:6px;"></i>Thu gọn (hiện 10)
+       </button>`
+    : `<button onclick="_toggleAllCountries()" class="btn btn-sm" style="background: rgba(77,184,255,0.1); color: #4db8ff; border: 1px solid rgba(77,184,255,0.25); border-radius: 6px; padding: 6px 18px; cursor: pointer; font-size: 0.85rem;">
+          <i class="fas fa-chevron-down" style="margin-right:6px;"></i>Xem tất cả (còn ${remaining} quốc gia)
+       </button>`;
+}
+
+/**
+ * Toggle trạng thái hiển thị tất cả / thu gọn
+ */
+window._toggleAllCountries = function() {
+  _showAllCountries = !_showAllCountries;
+  renderAdminCountries();
+};
+
+
 
 
 /* ============================================
@@ -5422,7 +5547,7 @@ function renderAdminMoviesList(movies) {
  */
 window.changeAdminMoviePage = function(page) {
     currentAdminMoviePage = page;
-    filterAdminMovies(); // Gọi lại hàm lọc để render đúng dữ liệu trang mới
+    filterAdminMovies(true); // true = không reset trang về 1, giữ nguyên trang đã chọn
     const panel = document.getElementById("moviesPanel");
     if (panel) panel.scrollIntoView({ behavior: 'smooth' });
 };

@@ -21,6 +21,7 @@ const _importState = {
     useR2: true,               // true = upload ảnh lên R2, false = dùng URL gốc
     isImporting: false,        // Đang chạy bulk import
     importAbort: false,        // Signal dừng import
+    newOnlyFilterActive: false, // true = ẩn phím đã có trong DB
 };
 
 /* ─── CẤU HÌNH R2 ─── */
@@ -151,17 +152,22 @@ function _findCountryIdByName(name) {
 }
 
 /**
- * Kiểm tra phim đã tồn tại trong Supabase chưa bằng `api_url_backup` = slug.
- * @param {string} slug
+ * Kiểm tra phim đã tồn tại trong Supabase chưa bằng `api_url_backup`.
+ * Chấp nhận cả 2 dạng: URL đầy đủ hoặc slug ngắn (tương thích DB cũ).
+ * @param {string} slug  - slug hoặc URL đầy đủ
  * @returns {Promise<string|null>} ID phim nếu tồn tại, null nếu chưa
  */
 async function _checkMovieExistsBySlug(slug) {
     if (!slug || typeof supabase === 'undefined') return null;
+    // Chuẩn hóa: luôn dùng URL đầy đủ để check
+    const fullUrl = slug.startsWith('http') ? slug : `https://phimapi.com/phim/${slug}`;
+    const shortSlug = slug.startsWith('http') ? slug.replace(/.*\/phim\//, '').split('?')[0].replace(/\/$/, '') : slug;
     try {
+        // Tìm cả 2 dạng để tương thích với dữ liệu cũ trong DB
         const { data } = await supabase
             .from('movies')
             .select('id')
-            .eq('api_url_backup', slug)
+            .or(`api_url_backup.eq.${fullUrl},api_url_backup.eq.${shortSlug}`)
             .maybeSingle();
         return data?.id || null;
     } catch { return null; }
@@ -374,6 +380,8 @@ async function _importEpisodesForMovie(movieId, episodesData, movieDuration = ''
                     intro_begin:    0,
                     intro_end:      0,
                     intro_start:    0,
+                    is_new:         false,
+                    created_at:     new Date().toISOString(),
                     updated_at:     new Date().toISOString(),
                 };
             }
@@ -553,7 +561,7 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             series_id:      '',
             price:          0,
             rating:         0,
-            view_count:     0,
+            view_count:     undefined, // Đã xóa cột, không gửi lên DB
             total_episodes: totalEps,
             duration:       parsedDuration,
             tags:           [],
@@ -563,7 +571,7 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             country_id:     countryId,
             part:           _detectMoviePart(movie.name || '', movie.origin_name || ''),
             series_id:      _buildSeriesId(movie.slug || safeSlug, ''), // Tất cả phim đều có series_id
-            api_url_backup: movie.slug,
+            api_url_backup: `https://phimapi.com/phim/${movie.slug}`, // Luôn lưu dạng URL đầy đủ
             created_at:     new Date().toISOString(),
             updated_at:     new Date().toISOString(),
         };
@@ -574,9 +582,9 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             'year', 'type', 'duration', 'quality', 'status', 'age_limit', 'series_id',
             'price', 'rating', 'total_episodes', 'api_url_backup', 'cast_data', 'tags',
             'versions', 'category_ids', 'country_id', 'part',
-            'created_at', 'updated_at', 'view_count',
+            'created_at', 'updated_at',
         ];
-        const _NUM_FIELDS = ['year', 'price', 'rating', 'total_episodes', 'view_count'];
+        const _NUM_FIELDS = ['year', 'price', 'rating', 'total_episodes'];
         const finalMovieData = {};
         _WHITELIST.forEach(k => {
             if (movieData[k] !== undefined) {
@@ -807,9 +815,18 @@ function toggleImportSelect(slug, checkbox) {
     _updateBulkImportBar();
 }
 
-/** Chọn/bỏ chọn tất cả phim trong trang. */
+/** Chọn/bỏ chọn tất cả phim trong trang — BỎ QUA phim đã có trong DB khi chọn. */
 function selectAllApiMovies(checked) {
     document.querySelectorAll('.api-card-select-cb').forEach(cb => {
+        const card = cb.closest('.api-movie-card');
+        const isInDb = card && card.dataset.inDb === 'true';
+
+        if (checked && isInDb) {
+            // Bỏ qua phim đã có trong DB khi chọn tất cả
+            cb.checked = false;
+            return;
+        }
+
         cb.checked = checked;
         const s = cb.dataset.slug;
         if (s) { if (checked) _importState.selectedSlugs.add(s); else _importState.selectedSlugs.delete(s); }
@@ -832,6 +849,145 @@ function _updateBulkImportBar() {
     if (bar)     bar.style.display = count > 0 ? 'flex' : 'none';
     if (countEl) countEl.textContent = count;
     if (btnBulk) btnBulk.innerHTML = `<i class="fas fa-file-import"></i> Import đã chọn (${count})`;
+}
+
+/**
+ * Kiểm tra từng phím trong danh sách API có trong DB chưa, gắn badge "Có" cho phím đã import.
+ * Chạy bất đồng bộ sau khi render, không block UI.
+ * @param {Array} items - Danh sách phím vừa render
+ */
+async function _markImportedCards(items) {
+    if (!items?.length || typeof supabase === 'undefined') return;
+
+    const slugs = items.map(i => i.slug).filter(Boolean);
+    if (!slugs.length) return;
+
+    try {
+        // Lấy tất cả các api_url_backup khớp (dạng URL đầy đủ hoặc slug ngắn)
+        const fullUrls = slugs.map(s => `https://phimapi.com/phim/${s}`);
+        const { data: existingRows } = await supabase
+            .from('movies')
+            .select('api_url_backup')
+            .in('api_url_backup', [...slugs, ...fullUrls]);
+
+        if (!existingRows?.length) return;
+
+        // Tạo Set cạc slug/URL đã có trong DB
+        const inDbSet = new Set();
+        existingRows.forEach(r => {
+            const val = r.api_url_backup || '';
+            inDbSet.add(val);
+            // Chuẩn hóa: thêm cạ dạng slug ngắn
+            const short = val.replace(/.*\/phim\//, '').split('?')[0].replace(/\/$/, '');
+            inDbSet.add(short);
+        });
+
+        // Gắn class + badge lên từng card đã import
+        slugs.forEach(slug => {
+            if (!inDbSet.has(slug)) return;
+            const card = document.querySelector(`.api-movie-card[data-slug="${slug}"]`);
+            if (!card) return;
+            card.dataset.inDb = 'true';
+            card.classList.add('in-db');
+
+            // 1. Ẩn ô checkbox góc trái
+            const cbWrap = card.querySelector('.api-card-select-wrap');
+            if (cbWrap) cbWrap.style.display = 'none';
+
+            // 2. Đổi nút ➕ thành icon database (không cho import lại)
+            const importBtn = card.querySelector('.api-card-import-btn');
+            if (importBtn) {
+                importBtn.innerHTML = '<i class="fas fa-database"></i>';
+                importBtn.title = 'Đã có trong database';
+                importBtn.style.background = 'rgba(16,185,129,0.85)';
+                importBtn.style.cursor = 'default';
+                importBtn.onclick = e => { e.stopPropagation(); }; // chặn click
+            }
+
+            // 3. Badge "Đã có" góc trên trái
+            if (!card.querySelector('.api-in-db-badge')) {
+                const badge = document.createElement('span');
+                badge.className = 'api-in-db-badge';
+                badge.textContent = 'Đã có';
+                badge.style.cssText = 'position:absolute;top:8px;left:8px;background:rgba(16,185,129,0.9);color:#fff;font-size:0.62rem;font-weight:700;padding:2px 7px;border-radius:5px;z-index:10;letter-spacing:0.4px;pointer-events:none;';
+                card.style.position = card.style.position || 'relative';
+                card.appendChild(badge);
+            }
+        });
+
+        // 4. Nếu drawer đang mở với slug đã có DB → đổi nút Lưu vào DB
+        _updateDrawerImportBtnIfInDb(inDbSet);
+
+
+        // Nếu filter đang bật, áp dụng ngay
+        if (_importState.newOnlyFilterActive) applyNewOnlyFilter();
+    } catch (err) {
+        console.warn('[FilterDB] Lỗi check DB:', err.message);
+    }
+}
+
+/**
+ * Nếu drawer chi tiết đang mở với phim đã có trong DB → đổi nút "Lưu vào DB"
+ * thành icon database màu xanh lá và disable để tránh import nhầm.
+ * @param {Set} inDbSet - Set chứa slug/URL đã có trong DB
+ */
+function _updateDrawerImportBtnIfInDb(inDbSet) {
+    const drawer = document.getElementById('apiDetailDrawer');
+    if (!drawer || drawer.style.display === 'none' || !drawer.dataset.currentSlug) return;
+    const currentSlug = drawer.dataset.currentSlug;
+    const fullUrl = `https://phimapi.com/phim/${currentSlug}`;
+    if (!inDbSet.has(currentSlug) && !inDbSet.has(fullUrl)) return;
+
+    // Tìm nút Lưu vào DB trong drawer
+    const importBtn = Array.from(drawer.querySelectorAll('button')).find(b =>
+        b.textContent.includes('Lưu') || b.innerHTML.includes('cloud-upload')
+    );
+    if (!importBtn) return;
+    importBtn.innerHTML = '<i class="fas fa-database"></i> Đã có trong DB';
+    importBtn.style.background = 'rgba(16,185,129,0.2)';
+    importBtn.style.borderColor = 'rgba(16,185,129,0.5)';
+    importBtn.style.color = '#34d399';
+    importBtn.style.cursor = 'default';
+    importBtn.onclick = e => e.preventDefault();
+}
+
+/**
+ * Ẩn/hiện các card phím theo trạng thái filter "Chỉ phím mới".
+ * Card có class .in-db sẽ được ẩn khi filter bật.
+ */
+function applyNewOnlyFilter() {
+    const cards = document.querySelectorAll('.api-movie-card');
+    cards.forEach(card => {
+        if (_importState.newOnlyFilterActive && card.dataset.inDb === 'true') {
+            card.style.display = 'none';
+        } else {
+            card.style.display = '';
+        }
+    });
+}
+
+/**
+ * Toggle nút "Chỉ phím mới" — 2 trạng thái:
+ *   - Bật: ẩn phím đã có trong DB, thảy màu tím đậm
+ *   - Tắt: hiện lại hết, nút về màu mặc định
+ */
+function toggleNewOnlyFilter() {
+    _importState.newOnlyFilterActive = !_importState.newOnlyFilterActive;
+    const btn = document.getElementById('btnFilterNewOnly');
+    if (btn) {
+        if (_importState.newOnlyFilterActive) {
+            btn.style.background = 'rgba(167,139,250,0.3)';
+            btn.style.borderColor = '#a78bfa';
+            btn.style.color = '#fff';
+            btn.innerHTML = '<i class="fas fa-filter"></i> Chỉ phím mới ●';
+        } else {
+            btn.style.background = 'rgba(167,139,250,0.08)';
+            btn.style.borderColor = 'rgba(167,139,250,0.4)';
+            btn.style.color = '#a78bfa';
+            btn.innerHTML = '<i class="fas fa-filter"></i> Chỉ phím mới';
+        }
+    }
+    applyNewOnlyFilter();
 }
 
 /** Cập nhật progress bar import hàng loạt. */
@@ -880,6 +1036,9 @@ window.addEventListener('load', () => {
         // Hiện toolbar import sau khi có dữ liệu
         const importToolbar = document.getElementById('apiImportToolbar');
         if (importToolbar) importToolbar.style.display = 'flex';
+
+        // Khởi tạo nút toggle Auto-Sync (sau khi toolbar hiện)
+        if (typeof initAutoSyncToggleUI === 'function') initAutoSyncToggleUI();
 
         // Ẩn progress container
         const progressCont = document.getElementById('apiImportProgressContainer');
@@ -970,6 +1129,12 @@ window.addEventListener('load', () => {
 
             grid.appendChild(card);
         });
+
+        // Sau khi render xong → check từng phim có trong DB không (async, không block UI)
+        _markImportedCards(items);
+
+        // Áp filter ngay nếu đang bật chế độ "Chỉ phim mới"
+        if (_importState.newOnlyFilterActive) applyNewOnlyFilter();
     };
 
     // Override callApiDetail để lưu slug hiện tại vào drawer
@@ -990,3 +1155,390 @@ window.addEventListener('load', () => {
 });
 
 console.log('✅ Admin API Import module loaded');
+
+/* ─── AUTO-SYNC EPISODES ─── */
+
+/**
+ * Sync tập phim cho 1 phim từ API: chỉ INSERT tập mới, không xóa tập cũ.
+ * Tập mới được gán created_at = NOW() và is_new = true để hiển thị badge MỚI.
+ *
+ * @param {string} movieId   - ID phim trong Supabase
+ * @param {string} slug      - api_url_backup (slug KKPhim)
+ * @param {object} provider  - API provider object từ API_PROVIDERS
+ * @returns {Promise<{added: number, total: number}>}
+ */
+async function syncEpisodesForMovie(movieId, slug, provider) {
+    if (!movieId || !slug || !provider || typeof supabase === 'undefined') return { added: 0, total: 0 };
+
+    try {
+        // Chuẩn hóa slug: nếu api_url_backup là URL đầy đủ thì trích xuất phần cuối
+        // VD: "https://phimapi.com/phim/toi-pham-101" → "toi-pham-101"
+        const cleanSlug = slug.startsWith('http')
+            ? slug.replace(/.*\/phim\//, '').split('?')[0].replace(/\/$/, '')
+            : slug;
+
+        // 1. Gọi API lấy danh sách tập mới nhất
+        const res = await fetch(provider.buildDetailUrl(cleanSlug));
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const raw = await res.json();
+        const apiEpisodes = raw.episodes || [];
+        if (!apiEpisodes.length) return { added: 0, total: 0 };
+
+        // 2. Lấy danh sách episode_number đang có trong DB
+        const { data: existingEps } = await supabase
+            .from('episodes')
+            .select('episode_number')
+            .eq('movie_id', movieId);
+
+        const existingNumbers = new Set((existingEps || []).map(e => String(e.episode_number)));
+
+        // 3. Map FHD/FullHD/raw → giá trị chuẩn
+        const _qualityMap = {
+            'fhd': '1080p', 'fullhd': '1080p', 'full hd': '1080p',
+            'hd': '720p', 'sd': '480p',
+            '4k': '4K (2160p)', '2k': '2K (1440p)',
+            '1080p': '1080p', '720p': '720p', '480p': '480p', '360p': '360p',
+        };
+        const normQuality = _qualityMap[(raw.movie?.quality || '').toLowerCase().trim()] || raw.movie?.quality || '1080p';
+        const movieDuration = raw.movie?.time || '';
+
+        // 4. Xây dựng map tập mới (theo cùng logic _importEpisodesForMovie)
+        const episodeMap = {};
+        apiEpisodes.forEach(server => {
+            const serverName = server.server_name || '';
+            const lower = serverName.toLowerCase();
+            let mainLabel = 'Vietsub';
+            let embedLabel = 'Dự phòng';
+            if (lower.includes('thuyet-minh') || lower.includes('thuyết minh') || lower.includes('tm')) {
+                mainLabel = 'Thuyết minh'; embedLabel = 'Thuyết minh dự phòng';
+            } else if (lower.includes('long-tieng') || lower.includes('lồng tiếng') || lower.includes('lt')) {
+                mainLabel = 'Lồng tiếng'; embedLabel = 'Lồng tiếng dự phòng';
+            }
+
+            (server.server_data || []).forEach((ep, idx) => {
+                const epName = String(ep.name || (idx + 1));
+                if (!episodeMap[epName]) {
+                    episodeMap[epName] = {
+                        movie_id: movieId,
+                        episode_index: idx,
+                        episode_number: epName,
+                        title: epName,
+                        quality: normQuality,
+                        duration: movieDuration,
+                        sources: [],
+                        intro_begin: 0, intro_end: 0, intro_start: 0,
+                        is_new: true,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    };
+                }
+                if (ep.link_m3u8 && !episodeMap[epName].sources.some(s => s.source === ep.link_m3u8)) {
+                    episodeMap[epName].sources.push({ label: mainLabel, type: 'hls', source: ep.link_m3u8 });
+                }
+                if (ep.link_embed && !episodeMap[epName].sources.some(s => s.source === ep.link_embed)) {
+                    episodeMap[epName].sources.push({ label: embedLabel, type: 'embed', source: ep.link_embed });
+                }
+            });
+        });
+
+        // 5. Chỉ INSERT tập chưa có trong DB
+        const toInsert = Object.values(episodeMap)
+            .filter(ep => !existingNumbers.has(ep.episode_number))
+            .sort((a, b) => (parseFloat(a.episode_number) || 0) - (parseFloat(b.episode_number) || 0));
+
+        if (!toInsert.length) return { added: 0, total: existingNumbers.size };
+
+        const BATCH = 50;
+        for (let i = 0; i < toInsert.length; i += BATCH) {
+            const { error } = await supabase.from('episodes').insert(toInsert.slice(i, i + BATCH));
+            if (error) console.warn(`[AutoSync] Lỗi insert tập batch:`, error.message);
+        }
+
+        console.log(`[AutoSync] ✅ Phim "${slug}": thêm ${toInsert.length} tập mới.`);
+        return { added: toInsert.length, total: existingNumbers.size + toInsert.length };
+
+    } catch (err) {
+        console.warn(`[AutoSync] ⚠️ Lỗi sync phim "${slug}":`, err.message);
+        return { added: 0, total: 0 };
+    }
+}
+
+/**
+ * Tự động sync tập mới cho phim bộ đang chiếu (chưa đủ tập theo total_episodes).
+ * Chạy hoàn toàn ngầm, cooldown 6h lưu trong app_configs.
+ * Chỉ sync phim có total_episodes > 0 và số tập hiện tại < total_episodes.
+ * Kiểm tra toggle bật/tắt từ localStorage trước khi chạy.
+ */
+async function autoSyncEpisodesIfNeeded() {
+    if (typeof supabase === 'undefined') return;
+
+    // Kiểm tra toggle bật/tắt từ Supabase app_configs
+    try {
+        const { data: toggleRow } = await supabase
+            .from('app_configs')
+            .select('value')
+            .eq('key', 'auto_sync_enabled')
+            .maybeSingle();
+        // Mặc định là bật (nếu chưa có config thì xem là ON)
+        const isEnabled = toggleRow?.value?.enabled !== false;
+        if (!isEnabled) {
+            console.log('[AutoSync] ⏸️ Đã tắt bởi admin.');
+            return;
+        }
+    } catch (_) {}
+
+    // Đọc thời gian cooldown từ app_configs (admin cài), mặc định 6h nếu chưa cài
+    let COOLDOWN_HOURS = 6;
+    try {
+        const { data: intervalRow } = await supabase
+            .from('app_configs')
+            .select('value')
+            .eq('key', 'auto_sync_interval_hours')
+            .maybeSingle();
+        const saved = Number(intervalRow?.value?.hours);
+        if (saved >= 1 && saved <= 720) COOLDOWN_HOURS = saved;
+    } catch (_) {}
+    const CONFIG_KEY = 'last_episode_sync';
+
+    try {
+        // 1. Kiểm tra cooldown từ app_configs
+        const { data: configRow } = await supabase
+            .from('app_configs')
+            .select('value')
+            .eq('key', CONFIG_KEY)
+            .maybeSingle();
+
+        const lastSync = configRow?.value?.timestamp || 0;
+        const hoursSinceLast = (Date.now() - lastSync) / (1000 * 60 * 60);
+
+        if (hoursSinceLast < COOLDOWN_HOURS) {
+            console.log(`[AutoSync] ⏱️ Bỏ qua — lần sync cuối ${hoursSinceLast.toFixed(1)}h trước (cooldown ${COOLDOWN_HOURS}h).`);
+            _updateAutoSyncLastInfo(configRow?.value);
+            return;
+        }
+
+        console.log('[AutoSync] 🔄 Bắt đầu sync tập phim từ API...');
+
+        // 2. Lấy provider
+        const provider = typeof API_PROVIDERS !== 'undefined' && typeof _apiState !== 'undefined'
+            ? API_PROVIDERS[_apiState.currentProvider]
+            : (typeof API_PROVIDERS !== 'undefined' ? API_PROVIDERS['kkphim'] : null);
+        if (!provider) { console.warn('[AutoSync] Không tìm thấy API provider.'); return; }
+
+        // 3. Lấy phim bộ có api_url_backup VÀ total_episodes > 0
+        const { data: movies } = await supabase
+            .from('movies')
+            .select('id, title, api_url_backup, total_episodes')
+            .eq('type', 'series')
+            .not('api_url_backup', 'is', null)
+            .neq('api_url_backup', '')
+            .gt('total_episodes', 0); // Chỉ phim có cài tổng số tập
+
+        if (!movies?.length) {
+            console.log('[AutoSync] Không có phim bộ nào đủ điều kiện sync.');
+            return;
+        }
+
+        // 4. Lọc: chỉ sync phim chưa đủ tập (số tập hiện có < total_episodes)
+        const moviesNeedSync = [];
+        for (const movie of movies) {
+            const { count } = await supabase
+                .from('episodes')
+                .select('*', { count: 'exact', head: true })
+                .eq('movie_id', movie.id);
+            const currentCount = count || 0;
+            if (currentCount < movie.total_episodes) {
+                moviesNeedSync.push({ ...movie, currentEps: currentCount });
+                console.log(`[AutoSync] Cần sync: "${movie.title}" (${currentCount}/${movie.total_episodes})`);
+            }
+        }
+
+        if (!moviesNeedSync.length) {
+            console.log('[AutoSync] ✅ Tất cả phim đã đủ tập, không cần sync.');
+            // Vẫn lưu timestamp để reset cooldown
+            const syncData = { timestamp: Date.now(), totalAdded: 0, movieCount: 0, checkedCount: movies.length };
+            await supabase.from('app_configs').upsert({ key: CONFIG_KEY, value: syncData, updated_at: new Date().toISOString() });
+            _updateAutoSyncLastInfo(syncData);
+            return;
+        }
+
+        let totalAdded = 0;
+
+        // 5. Sync từng phim chưa đủ tập (delay 600ms tránh spam API)
+        for (const movie of moviesNeedSync) {
+            const result = await syncEpisodesForMovie(movie.id, movie.api_url_backup, provider);
+            totalAdded += result.added;
+            await new Promise(r => setTimeout(r, 600));
+        }
+
+        // 6. Lưu timestamp vào app_configs
+        const syncData = { timestamp: Date.now(), totalAdded, movieCount: moviesNeedSync.length, checkedCount: movies.length };
+        await supabase.from('app_configs').upsert({ key: CONFIG_KEY, value: syncData, updated_at: new Date().toISOString() });
+        _updateAutoSyncLastInfo(syncData);
+
+        console.log(`[AutoSync] ✅ Hoàn tất: sync ${moviesNeedSync.length}/${movies.length} phim, thêm ${totalAdded} tập mới.`);
+
+        // 7. Refresh danh sách tập — CHỈ KHI modal edit episode KHÔNG đang mở
+        // (tránh đóng modal preview khi admin đang xem/chỉnh tập)
+        const episodeModal = document.getElementById('episodeModal');
+        const isModalOpen = episodeModal && (episodeModal.style.display === 'flex' || episodeModal.classList.contains('active') || episodeModal.classList.contains('show'));
+        if (totalAdded > 0 && !isModalOpen && typeof selectedMovieForEpisodes !== 'undefined' && selectedMovieForEpisodes) {
+            if (typeof loadEpisodesForMovie === 'function') loadEpisodesForMovie(selectedMovieForEpisodes, false);
+        }
+
+    } catch (err) {
+        console.warn('[AutoSync] Lỗi:', err.message);
+    }
+}
+
+/**
+ * Cập nhật thông tin "sync lần cuối" hiển thị cạnh nút toggle.
+ * @param {object} syncData - { timestamp, totalAdded, movieCount }
+ */
+function _updateAutoSyncLastInfo(syncData) {
+    const el = document.getElementById('autoSyncLastInfo');
+    if (!el || !syncData?.timestamp) return;
+    const d = new Date(syncData.timestamp);
+    const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+    el.textContent = `Sync lúc ${timeStr} ${dateStr}`;
+}
+
+/**
+ * Bật/tắt tính năng Auto-Sync tập mới.
+ * Lưu trạng thái vào Supabase app_configs (key: auto_sync_enabled).
+ */
+async function toggleAutoSyncFeature() {
+    if (typeof supabase === 'undefined') return;
+    const btn = document.getElementById('btnToggleAutoSync');
+    if (btn) { btn.disabled = true; btn.textContent = '...'; }
+
+    try {
+        // Đọc trạng thái hiện tại từ DB
+        const { data: row } = await supabase
+            .from('app_configs')
+            .select('value')
+            .eq('key', 'auto_sync_enabled')
+            .maybeSingle();
+
+        const current = row?.value?.enabled !== false; // mặc định ON
+        const newState = !current;
+
+        // Lưu trạng thái mới vào DB
+        await supabase.from('app_configs').upsert({
+            key: 'auto_sync_enabled',
+            value: { enabled: newState, updatedAt: new Date().toISOString() },
+            updated_at: new Date().toISOString(),
+        });
+
+        _renderAutoSyncToggleBtn(newState);
+        if (typeof showNotification === 'function') {
+            showNotification(
+                newState ? '✅ Đã bật Auto-Sync tập mới' : '⏸️ Đã tắt Auto-Sync tập mới',
+                newState ? 'success' : 'warning'
+            );
+        }
+    } catch (err) {
+        console.error('[AutoSync] Lỗi đổi trạng thái:', err.message);
+        if (typeof showNotification === 'function') showNotification('Lỗi khi lưu cài đặt!', 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+/* 🧪 TEST ONLY — XÓA SAU KHI TEST XONG */
+let _testSyncIntervalId = null;
+async function toggleTestSyncLoop() {
+    const btn = document.getElementById('btnTestSyncLoop');
+    if (_testSyncIntervalId) {
+        clearInterval(_testSyncIntervalId);
+        _testSyncIntervalId = null;
+        if (btn) { btn.textContent = '🧪 Test Sync'; btn.style.background = 'rgba(255,146,43,0.12)'; btn.style.borderColor = '#ff922b'; btn.style.color = '#ff922b'; }
+        if (typeof showNotification === 'function') showNotification('Đã dừng test sync', 'warning');
+        return;
+    }
+    const runSync = async () => {
+        // Reset cooldown để bypass kiểm tra 6h
+        if (typeof supabase !== 'undefined') {
+            await supabase.from('app_configs').upsert({ key: 'last_episode_sync', value: { timestamp: 0 }, updated_at: new Date().toISOString() });
+        }
+        if (typeof autoSyncEpisodesIfNeeded === 'function') await autoSyncEpisodesIfNeeded();
+    };
+    await runSync();
+    _testSyncIntervalId = setInterval(runSync, 5 * 60 * 1000);
+    if (btn) { btn.textContent = '🔴 Dừng Test (5m)'; btn.style.background = 'rgba(255,50,50,0.15)'; btn.style.borderColor = '#ff4444'; btn.style.color = '#ff4444'; }
+    if (typeof showNotification === 'function') showNotification('🧪 Test sync bắt đầu — lặp mỗi 5 phút. Xem log F12.', 'info');
+}
+/* END TEST ONLY */
+
+/**
+ * Lưu thời gian cooldown sync do admin cài vào Supabase app_configs.
+ * Key: 'auto_sync_interval_hours', value: { hours: N }
+ * Giới hạn: 1-720 giờ (tối đa 30 ngày).
+ */
+async function saveAutoSyncInterval() {
+    if (typeof supabase === 'undefined') return;
+    const input = document.getElementById('autoSyncIntervalInput');
+    const hours = parseInt(input?.value);
+    if (!hours || hours < 1 || hours > 720) {
+        if (typeof showNotification === 'function') showNotification('Số giờ không hợp lệ (1 - 720h)!', 'error');
+        return;
+    }
+    try {
+        await supabase.from('app_configs').upsert({
+            key: 'auto_sync_interval_hours',
+            value: { hours, updatedAt: new Date().toISOString() },
+            updated_at: new Date().toISOString(),
+        });
+        if (typeof showNotification === 'function')
+            showNotification(`✅ Đã lưu: tự động sync mỗi ${hours} giờ`, 'success');
+    } catch (err) {
+        console.error('[AutoSync] Lỗi lưu interval:', err.message);
+        if (typeof showNotification === 'function') showNotification('Lỗi khi lưu!', 'error');
+    }
+}
+
+/**
+ * Render trạng thái nút toggle Auto-Sync (ON/OFF).
+ * @param {boolean} isEnabled
+ */
+function _renderAutoSyncToggleBtn(isEnabled) {
+    const btn = document.getElementById('btnToggleAutoSync');
+    if (!btn) return;
+    btn.textContent = isEnabled ? 'ON' : 'OFF';
+    btn.style.background = isEnabled
+        ? 'linear-gradient(135deg,#00d2ff,#0099cc)'
+        : 'rgba(255,255,255,0.1)';
+    btn.style.color = isEnabled ? '#fff' : 'var(--text-muted)';
+}
+
+/**
+ * Khởi tạo trạng thái toggle Auto-Sync khi toolbar hiện ra.
+ * Đọc trạng thái từ Supabase app_configs.
+ */
+function initAutoSyncToggleUI() {
+    if (typeof supabase === 'undefined') return;
+    _renderAutoSyncToggleBtn(true);
+    const btn = document.getElementById('btnToggleAutoSync');
+    if (btn) btn.disabled = true;
+
+    // Đọc cả 3 config cùng lúc: trạng thái, lần sync cuối, và số giờ
+    Promise.all([
+        supabase.from('app_configs').select('value').eq('key', 'auto_sync_enabled').maybeSingle(),
+        supabase.from('app_configs').select('value').eq('key', 'last_episode_sync').maybeSingle(),
+        supabase.from('app_configs').select('value').eq('key', 'auto_sync_interval_hours').maybeSingle(),
+    ]).then(([{ data: toggleRow }, { data: syncRow }, { data: intervalRow }]) => {
+        const isEnabled = toggleRow?.value?.enabled !== false;
+        _renderAutoSyncToggleBtn(isEnabled);
+        if (syncRow?.value) _updateAutoSyncLastInfo(syncRow.value);
+        // Hiện số giờ đã lưu vào input
+        const savedHours = Number(intervalRow?.value?.hours);
+        const input = document.getElementById('autoSyncIntervalInput');
+        if (input && savedHours >= 1) input.value = savedHours;
+        if (btn) btn.disabled = false;
+    }).catch(() => {
+        _renderAutoSyncToggleBtn(true);
+        if (btn) btn.disabled = false;
+    });
+}
+

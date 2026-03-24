@@ -392,21 +392,116 @@ function filterMovies(searchQuery = null) {
 
   console.log(`✅ [Tất cả Phim] Tìm thấy ${filteredData.length} phim thỏa mãn.`);
 
-  // Render kết quả
-  const container = document.getElementById("allMoviesGrid");
-  if (container) {
-    if (filteredData.length === 0) {
-      container.innerHTML = '<div class="text-center w-100">Không tìm thấy phim phù hợp.</div>';
-    } else {
-      container.innerHTML = filteredData.map(item => createMovieCard(item.movie, item.matchedTags)).join("");
-    }
-  }
+  // Lưu vào biến global để dùng khi chuyển trang (không filter lại)
+  allMoviesFilteredData = filteredData;
+
+  // Reset về trang 1 khi filter mới
+  allMoviesCurrentPage = 1;
+
+  // Render trang đầu tiên
+  _renderAllMoviesPage();
   
   // Hiển thị tóm tắt kết quả (Categories, Countries, Years)
   if (typeof updateFilterSummary === 'function') {
     updateFilterSummary(categories, countries, years, allMovies, "homeFilterResultSummary");
   }
 }
+
+// --- STATE PHÂN TRANG TRANG TẤT CẢ PHIM ---
+const ALL_MOVIES_PER_PAGE = 60;
+let allMoviesCurrentPage = 1;
+let allMoviesFilteredData = [];
+
+/** Render phim theo trang hiện tại và vẽ pagination */
+function _renderAllMoviesPage() {
+  const container = document.getElementById("allMoviesGrid");
+  if (!container) return;
+
+  const total = allMoviesFilteredData.length;
+  const totalPages = Math.ceil(total / ALL_MOVIES_PER_PAGE) || 1;
+
+  if (allMoviesCurrentPage < 1) allMoviesCurrentPage = 1;
+  if (allMoviesCurrentPage > totalPages) allMoviesCurrentPage = totalPages;
+
+  const start = (allMoviesCurrentPage - 1) * ALL_MOVIES_PER_PAGE;
+  const end = start + ALL_MOVIES_PER_PAGE;
+  const pageData = allMoviesFilteredData.slice(start, end);
+
+  // Render grid
+  if (total === 0) {
+    container.innerHTML = '<div class="text-center w-100">Không tìm thấy phim phù hợp.</div>';
+  } else {
+    container.innerHTML = pageData.map(item => createMovieCard(item.movie, item.matchedTags)).join("");
+  }
+
+  // Render UI phân trang
+  _renderAllMoviesPagination(total, totalPages);
+
+  // Cuộn lên grid khi chuyển trang (bỏ qua trang 1)
+  if (allMoviesCurrentPage > 1) {
+    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+/** Vẽ UI phân trang cho Tất Cả Phim */
+function _renderAllMoviesPagination(total, totalPages) {
+  const paginationEl = document.getElementById("allMoviesPagination");
+  if (!paginationEl) return;
+
+  if (total === 0 || totalPages <= 1) {
+    paginationEl.innerHTML = '';
+    paginationEl.style.display = 'none';
+    return;
+  }
+
+  paginationEl.style.display = 'flex';
+
+  const page = allMoviesCurrentPage;
+  const start = (page - 1) * ALL_MOVIES_PER_PAGE + 1;
+  const end = Math.min(page * ALL_MOVIES_PER_PAGE, total);
+
+  // Số trang hiển thị: tối đa 5 trang xung quanh trang hiện tại
+  let pages = [];
+  for (let i = Math.max(1, page - 2); i <= Math.min(totalPages, page + 2); i++) {
+    pages.push(i);
+  }
+
+  paginationEl.innerHTML = `
+    <span class="pagination-info">Hiển thị ${start}–${end} / ${total} phim</span>
+    <div class="pagination-controls">
+      <button class="btn-page" onclick="changeAllMoviesPage(1)" ${page === 1 ? 'disabled' : ''} title="Trang đầu">
+        <i class="fas fa-angle-double-left"></i>
+      </button>
+      <button class="btn-page" onclick="changeAllMoviesPage(${page - 1})" ${page === 1 ? 'disabled' : ''} title="Trang trước">
+        <i class="fas fa-angle-left"></i>
+      </button>
+      ${pages.map(p => `
+        <button class="btn-page ${p === page ? 'active' : ''}" onclick="changeAllMoviesPage(${p})">${p}</button>
+      `).join('')}
+      <button class="btn-page" onclick="changeAllMoviesPage(${page + 1})" ${page === totalPages ? 'disabled' : ''} title="Trang sau">
+        <i class="fas fa-angle-right"></i>
+      </button>
+      <button class="btn-page" onclick="changeAllMoviesPage(${totalPages})" ${page === totalPages ? 'disabled' : ''} title="Trang cuối">
+        <i class="fas fa-angle-double-right"></i>
+      </button>
+    </div>
+    <div class="pagination-jump">
+      <span>Đến trang</span>
+      <input type="number" min="1" max="${totalPages}" value="${page}" id="allMoviesPaginationJump" class="jump-input"
+        onkeydown="if(event.key==='Enter') changeAllMoviesPage(parseInt(this.value))">
+      <button class="btn-jump" onclick="changeAllMoviesPage(parseInt(document.getElementById('allMoviesPaginationJump').value))">→</button>
+    </div>
+  `;
+}
+
+/** Chuyển trang Tất Cả Phim */
+window.changeAllMoviesPage = function(page) {
+  const totalPages = Math.ceil(allMoviesFilteredData.length / ALL_MOVIES_PER_PAGE) || 1;
+  if (isNaN(page) || page < 1 || page > totalPages) return;
+  allMoviesCurrentPage = page;
+  _renderAllMoviesPage();
+};
+
 /**
  * Lọc phim theo Loại (Lẻ / Bộ)
  */
@@ -422,14 +517,8 @@ function filterByMovieType(type) {
   document.querySelector("#moviesPage .section-title").textContent =
     titleMap[type] || "Tất cả Phim";
 
-  // 3. Lọc danh sách
-  const filtered = allMovies.filter((m) => m.type === type);
-
-  // 4. Hiển thị ra màn hình
-  renderAllMovies(filtered);
-
-  // 5. Active menu (optional)
-  // Nếu bạn muốn làm nút menu sáng lên thì cần thêm code xử lý class active ở đây
+  // 3. Lọc danh sách (dùng filterMovies để có pagination)
+  filterMovies();
 }
 // ============================================
 // LOGIC YÊU THÍCH & LỊCH SỬ (USER LIBRARY)

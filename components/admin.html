@@ -674,8 +674,10 @@
                 <th>YouTube ID</th>
                 <th>Thời lượng</th>
                 <th>Chất lượng</th>
+                <th>Ngày thêm</th>
                 <th>Thao tác</th>
               </tr>
+
             </thead>
             <tbody id="adminEpisodesTable">
               <!-- Data sẽ được load động -->
@@ -2164,6 +2166,41 @@
             </label>
           </div>
           <div class="api-import-toolbar-right">
+            <!-- Nút Toggle Auto-Sync tập mới -->
+            <div id="autoSyncToggleWrap" style="display:flex;align-items:center;gap:6px;background:rgba(0,210,255,0.06);border:1px solid rgba(0,210,255,0.15);border-radius:8px;padding:5px 10px;flex-wrap:wrap;">
+              <i class="fas fa-sync-alt" style="font-size:0.8rem;color:#00d2ff;"></i>
+              <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">Auto-Sync tập:</span>
+              <button id="btnToggleAutoSync" onclick="toggleAutoSyncFeature()"
+                style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:20px;border:none;cursor:pointer;transition:all 0.2s;">
+              </button>
+              <!-- Cài giờ cooldown -->
+              <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-left:4px;">Mỗi</span>
+              <input type="number" id="autoSyncIntervalInput" min="1" max="72" value="6"
+                style="width:46px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                title="Số giờ giữa các lần sync" />
+              <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">giờ</span>
+              <button onclick="saveAutoSyncInterval()" title="Lưu cài đặt giờ sync"
+                style="font-size:0.7rem;padding:2px 8px;border-radius:6px;border:none;cursor:pointer;background:rgba(0,210,255,0.15);color:#00d2ff;font-weight:600;">
+                Lưu
+              </button>
+              <span id="autoSyncLastInfo" style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap;"></span>
+            </div>
+
+            <!-- Nút lọc chỉ phim chưa có trong DB -->
+            <button id="btnFilterNewOnly" onclick="toggleNewOnlyFilter()"
+              title="Ẩn phim đã có trong database, chỉ hiện phim mới"
+              style="font-size:0.72rem;font-weight:700;padding:4px 11px;border-radius:8px;cursor:pointer;border:1px solid rgba(167,139,250,0.4);background:rgba(167,139,250,0.08);color:#a78bfa;white-space:nowrap;transition:all 0.2s;">
+              <i class="fas fa-filter"></i> Chỉ phim mới
+            </button>
+
+            <!-- 🧪 NÚT TEST - XÓA SAU KHI TEST XONG -->
+            <button id="btnTestSyncLoop" onclick="toggleTestSyncLoop()"
+              title="TEST: Sync ngay + lặp mỗi 5 phút (bấm lại để dừng)"
+              style="font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;border:1px dashed #ff922b;cursor:pointer;background:rgba(255,146,43,0.12);color:#ff922b;white-space:nowrap;">
+              🧪 Test Sync
+            </button>
+            <!-- END NÚT TEST -->
+
             <button class="btn btn-sm api-r2-toggle-btn active" id="btnToggleR2Mode" onclick="toggleImportR2Mode()" title="Bật/tắt upload ảnh lên Cloudflare R2">
               <i class="fas fa-cloud-upload-alt"></i> Ảnh: Cloudflare R2
             </button>
@@ -2171,7 +2208,9 @@
               <i class="fas fa-cog"></i>
             </button>
           </div>
+
         </div>
+
 
         <!-- Hàng 2: Bulk Actions (hiện khi có phim được chọn) -->
         <div class="api-bulk-actions-bar" id="apiBulkActionsBar" style="display:none;">
