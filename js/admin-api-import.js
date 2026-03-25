@@ -64,6 +64,8 @@ function saveR2WorkerUrl() {
     closeR2ConfigModal();
 }
 
+/* ─── OMDB API — Lấy điểm IMDb thật (Đã chuyển sang utils.js) ─── */
+
 /* ─── HELPER FUNCTIONS ─── */
 
 /**
@@ -562,10 +564,14 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             if (countryId) break;
         }
 
-        // 7. Resolve diễn viên (tạo mới trong DB nếu chưa có)
-        if (!opts.silent && typeof showLoading === 'function') showLoading(true, 'Xử lý diễn viên...');
+        // 7. Resolve diễn viên + tra cứu IMDb song song (tạo mới trong DB nếu chưa có)
+        if (!opts.silent && typeof showLoading === 'function') showLoading(true, 'Xử lý diễn viên & tra cứu IMDb...');
         const actorNames = (movie.actor || []).slice(0, 20); // Giới hạn 20 diễn viên
-        const castData   = await _resolveActorsForImport(actorNames);
+        const [castData, imdbRating] = await Promise.all([
+            _resolveActorsForImport(actorNames),
+            // Sử dụng hàm Global trong utils.js hỗ trợ Cơ chế Tự Dụng Pool Khi Quá Tải
+            _fetchImdbRatingGlobal(movie.origin_name || movie.name || '', movie.year)
+        ]);
 
         // 8. Build movieData - theo đúng whitelist bảng movies Supabase
         // whitelist: id, title, origin_title, poster_url, background_url, description,
@@ -641,6 +647,7 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             series_id:      '',
             price:          0,
             rating:         0,
+            imdb_rating:    imdbRating, // Điểm IMDb thật từ OMDB API
             view_count:     undefined, // Đã xóa cột, không gửi lên DB
             total_episodes: totalEps,
             duration:       parsedDuration,
@@ -660,11 +667,11 @@ async function importSingleMovieFromApi(slug, opts = {}) {
         const _WHITELIST = [
             'id', 'title', 'origin_title', 'poster_url', 'background_url', 'description',
             'year', 'type', 'duration', 'quality', 'status', 'age_limit', 'series_id',
-            'price', 'rating', 'total_episodes', 'api_url_backup', 'cast_data', 'tags',
+            'price', 'rating', 'imdb_rating', 'total_episodes', 'api_url_backup', 'cast_data', 'tags',
             'versions', 'category_ids', 'country_id', 'part',
             'created_at', 'updated_at',
         ];
-        const _NUM_FIELDS = ['year', 'price', 'rating', 'total_episodes'];
+        const _NUM_FIELDS = ['year', 'price', 'rating', 'imdb_rating', 'total_episodes'];
         const finalMovieData = {};
         _WHITELIST.forEach(k => {
             if (movieData[k] !== undefined) {
@@ -1622,4 +1629,84 @@ function initAutoSyncToggleUI() {
         if (btn) btn.disabled = false;
     });
 }
+
+/* ─── BATCH UPDATE IMDb RATING CHO PHIM CŨ ─── */
+
+/**
+ * Cập nhật hàng loạt điểm IMDb cho tất cả phim chưa có imdb_rating.
+ * Gọi OMDB API bằng origin_title + year, delay 500ms giữa các request.
+ * Dùng trong Admin Console hoặc gắn vào nút trên giao diện Admin.
+ *
+ * @param {boolean} forceAll - true = cập nhật tất cả phim (kể cả đã có điểm)
+ */
+async function batchUpdateImdbRatings(forceAll = false) {
+    if (typeof supabase === 'undefined' || typeof allMovies === 'undefined') {
+        console.error('[IMDb Batch] Supabase hoặc allMovies chưa sẵn sàng');
+        return;
+    }
+
+    // Lọc phim cần cập nhật
+    const moviesToUpdate = forceAll
+        ? allMovies
+        : allMovies.filter(m => !m.imdbRating && !m.imdb_rating);
+
+    if (moviesToUpdate.length === 0) {
+        console.log('✅ [IMDb Batch] Tất cả phim đã có điểm IMDb!');
+        if (typeof showNotification === 'function') showNotification('Tất cả phim đã có điểm IMDb!', 'success');
+        return;
+    }
+
+    console.log(`🎬 [IMDb Batch] Bắt đầu cập nhật ${moviesToUpdate.length} phim...`);
+    if (typeof showNotification === 'function') {
+        showNotification(`Đang cập nhật IMDb cho ${moviesToUpdate.length} phim... Vui lòng đợi.`, 'info');
+    }
+
+    let updated = 0, skipped = 0, failed = 0;
+
+    for (const movie of moviesToUpdate) {
+        const title = movie.originTitle || movie.origin_title || movie.title || '';
+        if (!title) { skipped++; continue; }
+
+        try {
+            const imdbRating = await _fetchImdbRating(title, movie.year);
+
+            if (imdbRating !== null) {
+                // Cập nhật vào Supabase
+                const { error } = await supabase
+                    .from('movies')
+                    .update({ imdb_rating: imdbRating })
+                    .eq('id', movie.id);
+
+                if (error) {
+                    console.warn(`❌ [IMDb] Lỗi update "${movie.title}":`, error.message);
+                    failed++;
+                } else {
+                    // Cập nhật cache local
+                    movie.imdbRating = imdbRating;
+                    movie.imdb_rating = imdbRating;
+                    updated++;
+                    console.log(`✅ [IMDb] "${movie.title}" → ${imdbRating}`);
+                }
+            } else {
+                skipped++;
+            }
+        } catch (e) {
+            console.warn(`❌ [IMDb] Lỗi xử lý "${movie.title}":`, e.message);
+            failed++;
+        }
+
+        // Delay 500ms để không spam OMDB API (free: 1000 req/ngày)
+        await new Promise(r => setTimeout(r, 500));
+    }
+
+    const msg = `✅ IMDb Batch: ${updated} cập nhật · ${skipped} bỏ qua · ${failed} lỗi`;
+    console.log(`🎬 [IMDb Batch] ${msg}`);
+    if (typeof showNotification === 'function') showNotification(msg, 'success');
+
+    // Lưu lại cache
+    if (typeof saveToCache === 'function') saveToCache('movies', allMovies);
+}
+
+// Gắn ra global scope để admin gọi từ DevTools console
+window.batchUpdateImdbRatings = batchUpdateImdbRatings;
 

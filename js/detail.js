@@ -127,6 +127,25 @@ replyStyles.innerHTML = `
 `;
 document.head.appendChild(replyStyles);
 
+// --- GHI NHỚ TRẠNG THÁI PAUSE/PLAY CỦA USER ---
+// Khi user nhấn pause/play, lưu vào sessionStorage để giữ trạng thái khi quay lại trang.
+// Các web phim chuyên nghiệp đều dùng cách này để tôn trọng ý định người dùng.
+document.addEventListener('DOMContentLoaded', function() {
+    const html5Player = document.getElementById('html5Player');
+    if (!html5Player) return;
+
+    html5Player.addEventListener('pause', function() {
+        // Chỉ ghi nhận pause khi video đang thực sự hoạt động (có duration > 0)
+        if (html5Player.duration > 0 && !html5Player.ended) {
+            sessionStorage.setItem('userPausedVideo', 'true');
+        }
+    });
+
+    html5Player.addEventListener('play', function() {
+        sessionStorage.removeItem('userPausedVideo');
+    });
+});
+
 /**
  * Xem chi tiết phim (Đã nâng cấp: Tự động nhớ tập đang xem dở)
  */
@@ -314,7 +333,7 @@ async function viewMovieDetail(movieId, updateHistory = true) {
               return found ? found.name : (movie.category || "N/A");
           })();
   }
-  if (document.getElementById("detailRating")) document.getElementById("detailRating").textContent = movie.rating || 0;
+  if (document.getElementById("detailRating")) document.getElementById("detailRating").textContent = movie.imdbRating ? `IMDb ${movie.imdbRating}` : (movie.rating || 0);
   if (document.getElementById("detailViews")) document.getElementById("detailViews").textContent = formatNumber(movie.views || 0);
   if (document.getElementById("detailDescription")) document.getElementById("detailDescription").textContent = movie.description || "Chưa có mô tả";
 
@@ -487,6 +506,43 @@ function renderDetailActorSidebar(movie) {
             </div>
         `;
     }).join("");
+
+    // --- Bắt đầu phần thêm nút Xem thêm ---
+    const sidebar = grid.closest('.detail-actor-sidebar');
+    if (sidebar) {
+        // Xóa nút cũ nếu có (tránh trùng khi click load detail phim khác)
+        const oldBtn = sidebar.querySelector('.btn-toggle-actors');
+        if (oldBtn) oldBtn.remove();
+
+        // Mặc định luôn thu gọn khi load phim
+        grid.classList.remove('expanded');
+        sidebar.classList.remove('expanded-layout');
+
+        // Hiện nút nếu vượt quá sức chứa mặc định của 3 hàng (9 diễn viên) trên PC
+        if (actorsToRender.length > 9) {
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'btn-toggle-actors';
+            toggleBtn.innerHTML = 'Xem đầy đủ <i class="fas fa-chevron-down" style="margin-left: 5px;"></i>';
+            toggleBtn.onclick = function() {
+                const isExpanded = grid.classList.toggle('expanded');
+                if (isExpanded) {
+                    sidebar.classList.add('expanded-layout');
+                    toggleBtn.innerHTML = 'Ẩn bớt <i class="fas fa-chevron-up" style="margin-left: 5px;"></i>';
+                } else {
+                    toggleBtn.innerHTML = 'Xem đầy đủ <i class="fas fa-chevron-down" style="margin-left: 5px;"></i>';
+                    // Trì hoãn gỡ bỏ layout 3 hàng bằng với thời gian CSS transition max-height (0.4s)
+                    // để không làm nảy (jump) chiều cao của cột thông tin (Row 2) khi đang thu hồi.
+                    setTimeout(() => {
+                        // Double check nhỡ user click liên tục
+                        if (!grid.classList.contains('expanded')) {
+                            sidebar.classList.remove('expanded-layout');
+                        }
+                    }, 400);
+                }
+            };
+            sidebar.appendChild(toggleBtn);
+        }
+    }
 }
 
 // --- LOGIC ẨN HIỆN TOOLBAR TRONG CINEMA MODE ---
@@ -1277,6 +1333,8 @@ function selectEpisode(index) {
   // ✅ RESET RESUME DATA: Khi chuyển tập mới, không dùng lại thời gian của tập cũ
   window.hasResumeHistory = false;
   window.resumeTimeData = null;
+  // ✅ Reset trạng thái pause khi chọn tập mới (cho phép auto-play tập mới)
+  sessionStorage.removeItem('userPausedVideo');
   
   currentEpisode = index;
 
@@ -1529,7 +1587,13 @@ async function checkAndUpdateVideoAccess() {
                html5Player.classList.remove("hidden");
                const handleInitialPlayback = (player) => {
                    const isModalActive = document.getElementById("continueWatchingModal")?.classList.contains("active");
-                   if (isModalActive) return; // Chờ người dùng click modal
+                   if (isModalActive) return;
+                    
+                    // Neu user da chu dich dung video -> khong tu phat lai
+                    if (sessionStorage.getItem('userPausedVideo') === 'true') {
+                        console.log('User da dung video, giu pause.');
+                        return;
+                    } // Chờ người dùng click modal
                    
                     if (window.hasResumeHistory && window.resumeTimeData && window.resumeTimeData.timeWatched > 0) {
                         resumeVideoAtTime(window.resumeTimeData.timeWatched);
@@ -1592,7 +1656,13 @@ async function checkAndUpdateVideoAccess() {
           
           const handleInitialPlayback = (player) => {
               const isModalActive = document.getElementById("continueWatchingModal")?.classList.contains("active");
-              if (isModalActive) return; // Chờ người dùng click modal
+              if (isModalActive) return;
+                    
+                    // Neu user da chu dich dung video -> khong tu phat lai
+                    if (sessionStorage.getItem('userPausedVideo') === 'true') {
+                        console.log('User da dung video, giu pause.');
+                        return;
+                    } // Chờ người dùng click modal
               
                if (window.hasResumeHistory && window.resumeTimeData && window.resumeTimeData.timeWatched > 0) {
                    resumeVideoAtTime(window.resumeTimeData.timeWatched);
@@ -3442,7 +3512,7 @@ function createCommentHtml(comment) {
                 <div class="comment-header">
                     <span class="comment-author">${comment.userName || "Ẩn danh"}</span>
                     <span class="comment-rating">
-                        ${comment.rating ? `<i class="fas fa-star"></i> ${comment.rating}/10` : ""}
+                        ${comment.rating ? `<i class="fas fa-star"></i> ${comment.rating}/5` : ""}
                     </span>
                 </div>
                 <p class="comment-text">${escapeHtml(comment.content)}</p>
@@ -3735,7 +3805,7 @@ async function submitComment() {
     document.getElementById("commentContent").value = "";
     selectedRating = 0;
     updateRatingStars(0);
-    document.getElementById("ratingValue").textContent = "0/10";
+    document.getElementById("ratingValue").textContent = "0/5";
 
     // Reload comments
     await loadComments(currentMovieId);

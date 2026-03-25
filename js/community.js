@@ -1725,7 +1725,9 @@ function compressImage(file, maxWidth = 1200, quality = 0.8) {
 async function uploadToImgBB(blob) {
     const formData = new FormData();
     formData.append('image', blob);
-    formData.append('key', IMGBB_API_KEY);
+    // Ưu tiên đọc từ DB, dự phòng lấy từ JS Fix
+    const apiKey = (window.SYSTEM_SETTINGS && window.SYSTEM_SETTINGS.imgbb_api_key) ? window.SYSTEM_SETTINGS.imgbb_api_key : IMGBB_API_KEY;
+    formData.append('key', apiKey);
 
     try {
         const response = await fetch('https://api.imgbb.com/1/upload', {

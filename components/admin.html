@@ -142,6 +142,15 @@
           <i class="fas fa-plug" style="color: #00d2ff;"></i>
           <span>Quản lý API</span>
         </div>
+        <!-- API Keys Nav Item -->
+        <div
+          class="admin-nav-item"
+          data-panel="apiKeys"
+          onclick="showAdminPanel('apiKeys'); if(typeof initApiKeysManager === 'function') initApiKeysManager();"
+        >
+          <i class="fas fa-key" style="color: #f1c40f;"></i>
+          <span>Cấu hình API Key</span>
+        </div>
       </nav>
     </aside>
 
@@ -347,6 +356,28 @@
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Keys Panel -->
+      <div class="admin-panel" id="apiKeysPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Cấu hình API Key</h2>
+        </div>
+        
+        <div class="api-keys-wrapper">
+          <div class="api-keys-header-info">
+            <h3><i class="fas fa-shield-alt"></i> Quản lý khóa API Hệ thống</h3>
+            <p>Tại đây bạn có thể quản lý các API Key được dùng trên toàn trạm phim. Các key quan trọng (Cơ sở dữ liệu, Xác thực) bắt buộc phải cấu hình trực tiếp qua code File để đảm bảo an toàn kết nối, chỉ cho phép hiển thị. Các key mở rộng có thể được thay đổi theo thời gian thực.</p>
+          </div>
+          <!-- Nơi render bằng JS -->
+          <div id="adminApiKeysContainer">
+            <div class="api-skeleton" style="height: 150px; background: rgba(255,255,255,0.05); margin-bottom: 20px; border-radius: 10px;"></div>
+            <div class="api-skeleton" style="height: 150px; background: rgba(255,255,255,0.05); margin-bottom: 20px; border-radius: 10px;"></div>
           </div>
         </div>
       </div>

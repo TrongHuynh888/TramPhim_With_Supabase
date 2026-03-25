@@ -116,12 +116,11 @@ function createTopCommentCard(comment) {
         timeAgo = formatTopCommentTime(new Date(comment.created_at));
     }
 
-    // Render rating stars (10 sao → 5 sao hiển thị)
+    // Render rating stars (thang 5 sao)
     let starsHtml = '';
     if (rating > 0) {
-        const fullStars = Math.floor(rating / 2);
         for (let i = 0; i < 5; i++) {
-            starsHtml += i < fullStars
+            starsHtml += i < rating
                 ? '<i class="fas fa-star"></i>'
                 : '<i class="far fa-star"></i>';
         }
@@ -162,7 +161,7 @@ function createTopCommentCard(comment) {
                     <i class="fas fa-film"></i> ${safeMovie}
                 </div>
                 <div class="tc-footer">
-                    ${starsHtml ? `<div class="tc-stars">${starsHtml} <span>${rating}/10</span></div>` : ''}
+                    ${starsHtml ? `<div class="tc-stars">${starsHtml} <span>${rating}/5</span></div>` : ''}
                     ${totalReactions > 0 ? `<div class="tc-reactions">${reactionIcons} <span>${totalReactions}</span></div>` : ''}
                 </div>
             </div>
@@ -557,7 +556,7 @@ async function loadReviewsList() {
             .select('id, content, rating, movie_id, profiles(display_name)')
             .is('parent_id', null)
             .not('rating', 'is', null)
-            .gt('rating', 5)
+            .gt('rating', 3)
             .order('created_at', { ascending: false })
             .limit(20);
 

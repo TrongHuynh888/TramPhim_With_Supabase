@@ -127,7 +127,7 @@ async function viewMovieIntro(movieId, updateHistory = true) {
     }
     setTextContent("introCategory", categoryNames);
     
-    setTextContent("introRating", movie.rating || "N/A");
+    setTextContent("introRating", movie.imdbRating ? `IMDb ${movie.imdbRating}` : (movie.rating ? `${movie.rating}/5 ⭐` : "N/A"));
     
     // -- Info New Fields (Cast, Version) — Render dạng avatar chips
     renderIntroCastChips(movie.cast);
@@ -408,13 +408,8 @@ async function loadIntroComments(movieId) {
                     <i class="fas fa-star" data-value="3"></i>
                     <i class="fas fa-star" data-value="4"></i>
                     <i class="fas fa-star" data-value="5"></i>
-                    <i class="fas fa-star" data-value="6"></i>
-                    <i class="fas fa-star" data-value="7"></i>
-                    <i class="fas fa-star" data-value="8"></i>
-                    <i class="fas fa-star" data-value="9"></i>
-                    <i class="fas fa-star" data-value="10"></i>
                 </div>
-                <span class="rating-value" id="introRatingValue" style="margin-left: 10px; font-weight: bold; color: var(--accent-secondary);">0/10</span>
+                <span class="rating-value" id="introRatingValue" style="margin-left: 10px; font-weight: bold; color: var(--accent-secondary);">0/5</span>
             </div>
             <textarea class="form-textarea" id="introCommentContent" placeholder="Viết cảm nghĩ của bạn về phim này..."></textarea>
             <button class="btn btn-primary" style="margin-top:10px;" onclick="submitIntroComment()">Gửi bình luận</button>
@@ -526,10 +521,10 @@ function createIntroCommentHtml(comment) {
         : `<div class="comment-avatar">${initial}</div>`;
 
     // Stars & Rating Text
-    const stars = Array(10).fill(0).map((_, i) => 
+    const stars = Array(5).fill(0).map((_, i) => 
         `<i class="fas fa-star ${i < comment.rating ? 'text-warning' : 'text-muted'}" style="font-size: 12px;"></i>`
     ).join("");
-    const ratingText = comment.rating ? `<span class="comment-rating-text" style="margin-left: 5px; font-weight: bold; color: var(--accent-secondary); font-size: 13px;">${comment.rating}/10</span>` : "";
+    const ratingText = comment.rating ? `<span class="comment-rating-text" style="margin-left: 5px; font-weight: bold; color: var(--accent-secondary); font-size: 13px;">${comment.rating}/5</span>` : "";
 
     // Replies logic
     let childrenHtml = "";
@@ -646,7 +641,7 @@ async function submitIntroComment() {
         const starsEl = document.querySelectorAll("#introRatingStars .fa-star");
         starsEl.forEach(s => s.classList.remove("active", "text-warning"));
         const valText = document.getElementById("introRatingValue");
-        if (valText) valText.textContent = "0/10";
+        if (valText) valText.textContent = "0/5";
         
         // Reload
         await loadCommentsToContainer(currentIntroMovieId, "introCommentsList");
@@ -836,7 +831,7 @@ function initStarRating(containerId) {
             }
             // Cập nhật text value
             if (valText) {
-                valText.textContent = `${ratingValue}/10`;
+                valText.textContent = `${ratingValue}/5`;
             }
         };
     });

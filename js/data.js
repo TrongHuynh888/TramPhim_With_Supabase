@@ -140,6 +140,29 @@ async function loadInitialData() {
         startWatchHistoryRealtimeListener();
     }
 
+    // 6. Auto-sync tập phim mới khi Admin mở web (không cần vào trang Admin)
+    if (typeof isAdmin !== 'undefined' && isAdmin) {
+        setTimeout(() => {
+            // Lazy load admin-api-import.js nếu chưa load
+            if (!window._adminScriptsLoaded) {
+                console.log('🔄 [AutoSync] Admin detected → Loading sync scripts...');
+                if (typeof lazyLoadScript === 'function') {
+                    lazyLoadScript('js/admin-api-import.js?v=3').then(() => {
+                        if (typeof autoSyncEpisodesIfNeeded === 'function') {
+                            console.log('🔄 [AutoSync] Bắt đầu kiểm tra tập phim mới...');
+                            autoSyncEpisodesIfNeeded();
+                        }
+                    }).catch(e => console.warn('[AutoSync] Lỗi load script:', e.message));
+                }
+            } else {
+                // Script đã load rồi (admin đã vào trang Admin trước đó)
+                if (typeof autoSyncEpisodesIfNeeded === 'function') {
+                    autoSyncEpisodesIfNeeded();
+                }
+            }
+        }, 5000); // Chờ 5s sau khi data load xong
+    }
+
   } catch (error) {
     console.error("Lỗi load dữ liệu:", error);
   }
@@ -310,6 +333,7 @@ function normalizeMovieData(movie) {
     movie.castData = movie.castData || movie.cast_data || [];
     movie.ageLimit = movie.ageLimit || movie.age_limit || "";
     movie.countryId = movie.countryId || movie.country_id || "";
+    movie.imdbRating = movie.imdbRating || movie.imdb_rating || null;
     
     // --- ĐỒNG BỘ SỐ TẬP HIỆN CÓ ---
     // Tính toán từ mảng episodes nếu có (kết quả của join hoặc cache)

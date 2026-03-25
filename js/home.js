@@ -255,7 +255,7 @@ function createMovieCard(movie, matchedTags = []) {
   const likeClass = isLiked ? "liked" : "";
   const fallbackImage =
     "https://placehold.co/300x450/2a2a3a/FFFFFF?text=NO+POSTER";
-  const matchScore = movie.rating ? Math.round(movie.rating * 10) : 95;
+  const matchScore = movie.rating ? Math.round(movie.rating * 20) : 95;
 
   // Tính badge trạng thái tập
   let episodeBadgeHtml = "";
@@ -1228,7 +1228,7 @@ function createLandscapeMovieCard(movie) {
   }
   const likeIcon = isLiked ? "fas fa-heart" : "far fa-heart";
   const likeClass = isLiked ? "liked" : "";
-  const matchScore = movie.rating ? Math.round(movie.rating * 10) : 95;
+  const matchScore = movie.rating ? Math.round(movie.rating * 20) : 95;
 
   // Tính badge trạng thái tập (phim bộ: Tập X/Y, phim lẻ: Full)
   let lsEpisodeBadge = "";
@@ -1294,7 +1294,7 @@ function createLandscapeMovieCard(movie) {
                     </div>
 
                     <div class="meta-badges-row">
-                        <span class="badge-item imdb">IMDb ${movie.rating || "7.0"}</span>
+                        ${movie.imdbRating ? `<span class="badge-item imdb">IMDb ${movie.imdbRating}</span>` : ''}
                         <span class="badge-item year">${movie.year || "2026"}</span>
                         ${movie.part ? `<span class="badge-item">${displayPart}</span>` : ""}
                         ${(() => {

@@ -1700,8 +1700,9 @@ function initVoiceChat() {
 async function getTurnCredentials() {
   try {
     console.log("🔄 Đang lấy Server xuyên tường lửa...");
+    const finalApiKey = (window.SYSTEM_SETTINGS && window.SYSTEM_SETTINGS.metered_api_key) ? window.SYSTEM_SETTINGS.metered_api_key : METERED_API_KEY;
     const response = await fetch(
-      `https://${APP_NAME}.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`,
+      `https://${APP_NAME}.metered.live/api/v1/turn/credentials?apiKey=${finalApiKey}`,
     );
     if (!response.ok) throw new Error("API Metered lỗi");
     const iceServers = await response.json();

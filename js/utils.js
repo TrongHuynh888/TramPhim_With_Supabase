@@ -711,9 +711,9 @@ function initializeRatingStars() {
 
   if (!container) return; // Nếu không có chỗ chứa sao thì thôi
 
-  // Tạo 10 ngôi sao
+  // Tạo 5 ngôi sao
   let html = "";
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 5; i++) {
     html += `<i class="far fa-star star-item" data-value="${i}" style="cursor: pointer; margin: 0 2px; font-size: 1.2rem; transition: color 0.2s;"></i>`;
   }
   container.innerHTML = html;
@@ -725,7 +725,7 @@ function initializeRatingStars() {
     star.addEventListener("click", () => {
       const value = parseInt(star.dataset.value);
       selectedRating = value; // Cập nhật biến toàn cục
-      if (valueDisplay) valueDisplay.textContent = `${value}/10`;
+      if (valueDisplay) valueDisplay.textContent = `${value}/5`;
 
       // Tô màu các sao đã chọn
       updateRatingStars(value);
@@ -1360,3 +1360,158 @@ function getCacheTimestamp(key) {
 function setCacheTimestamp(key, timestamp) {
     localStorage.setItem(`cache_sync_${key}`, timestamp.toString());
 }
+
+// ============================================
+// OMDB API — Tra cứu điểm IMDb thật (Luôn khả dụng)
+// ============================================
+
+/** OMDB API Key (Khóa mặc định) */
+let _OMDB_KEY = '461430ce';
+let _OMDB_POOL = [];
+let _OMDB_AUTOSWITCH = false;
+
+// Đọc cấu hình động từ system_settings khi vừa load trang
+document.addEventListener('DOMContentLoaded', async () => {
+    if (typeof window.supabase === 'undefined') return;
+    try {
+        const { data, error } = await window.supabase.from('system_settings').select('key_name, key_value');
+        if (!error && data) {
+            window.SYSTEM_SETTINGS = {};
+            data.forEach(item => {
+                window.SYSTEM_SETTINGS[item.key_name] = item.key_value;
+            });
+            // Ghi đè khóa OMDB nếu có dưới Database
+            if (window.SYSTEM_SETTINGS.omdb_api_key) _OMDB_KEY = window.SYSTEM_SETTINGS.omdb_api_key;
+            if (window.SYSTEM_SETTINGS.omdb_api_key_autoswitch === 'true') _OMDB_AUTOSWITCH = true;
+            if (window.SYSTEM_SETTINGS.omdb_api_key_pool) {
+                try { _OMDB_POOL = JSON.parse(window.SYSTEM_SETTINGS.omdb_api_key_pool); } catch(e){}
+            }
+        }
+    } catch(e) {
+        console.warn("Không thể nạp system_settings cho Frontend:", e);
+    }
+});
+
+async function _fetchImdbRatingGlobal(title, year) {
+    if (!title || !_OMDB_KEY) return null;
+    
+    // Tạo danh sách Khóa OMDB để thử (Ưu tiên khóa chính trước, dự phòng sau)
+    let keysToTry = [_OMDB_KEY];
+    if (_OMDB_AUTOSWITCH && Array.isArray(_OMDB_POOL) && _OMDB_POOL.length > 0) {
+        keysToTry = keysToTry.concat(_OMDB_POOL.filter(k => k !== _OMDB_KEY));
+    }
+    
+    try {
+        const cleanTitle = title.replace(/\s*\(.*\)\s*$/, '').trim();
+        if (!cleanTitle) return null;
+
+        for (let key of keysToTry) {
+            if (!key) continue;
+            try {
+                let url = `https://www.omdbapi.com/?t=${encodeURIComponent(cleanTitle)}&apikey=${key}`;
+                if (year) url += `&y=${year}`;
+                let res = await fetch(url);
+                let data = await res.json();
+                
+                const checkLimit = (d) => d.Response === 'False' && (d.Error === 'Request limit reached!' || d.Error === 'Invalid API key!');
+
+                if (checkLimit(data)) {
+                    console.warn(`[OMDB] Khóa ${key} quá tải! Tự động xoay vòng khóa...`);
+                    continue; 
+                }
+
+                // Thử lại không có year nếu không tìm thấy
+                if (data.Response === 'False' && year) {
+                    res = await fetch(`https://www.omdbapi.com/?t=${encodeURIComponent(cleanTitle)}&apikey=${key}`);
+                    data = await res.json();
+                    if (checkLimit(data)) continue;
+                }
+
+                // Thử search nếu vẫn không thấy
+                if (data.Response === 'False') {
+                    res = await fetch(`https://www.omdbapi.com/?s=${encodeURIComponent(cleanTitle)}&apikey=${key}${year ? `&y=${year}` : ''}`);
+                    const searchData = await res.json();
+                    if (checkLimit(searchData)) continue;
+                    
+                    if (searchData.Search && searchData.Search.length > 0) {
+                        res = await fetch(`https://www.omdbapi.com/?i=${searchData.Search[0].imdbID}&apikey=${key}`);
+                        data = await res.json();
+                        if (checkLimit(data)) continue;
+                    }
+                }
+
+                if (data.Response === 'True' && data.imdbRating && data.imdbRating !== 'N/A') {
+                    const rating = parseFloat(data.imdbRating);
+                    console.log(`🎬 [OMDB] "${cleanTitle}" → IMDb ${rating} (Bởi mã: ${key.substring(0,4)}...)`);
+                    return isNaN(rating) ? null : rating;
+                }
+                
+                // Nếu chạy qua hết phim không có, thì khỏi thử khóa khác
+                return null;
+
+            } catch(e) {
+                console.warn(`[OMDB] Lỗi mạng với khóa ${key}. Thử khóa sau..`);
+                continue;
+            }
+        }
+        
+        return null;
+    } catch (err) {
+        console.warn('[OMDB] Lỗi:', err.message);
+        return null;
+    }
+}
+
+/**
+ * Batch update điểm IMDb cho tất cả phim chưa có imdb_rating
+ * Gọi từ Console: batchUpdateImdbRatings()
+ */
+async function batchUpdateImdbRatings(forceAll = false) {
+    if (typeof supabase === 'undefined' || typeof allMovies === 'undefined') {
+        console.error('[IMDb] Supabase hoặc allMovies chưa sẵn sàng');
+        return;
+    }
+
+    const movies = forceAll
+        ? allMovies
+        : allMovies.filter(m => !m.imdbRating && !m.imdb_rating);
+
+    if (movies.length === 0) {
+        console.log('✅ Tất cả phim đã có điểm IMDb!');
+        if (typeof showNotification === 'function') showNotification('Tất cả phim đã có điểm IMDb!', 'success');
+        return;
+    }
+
+    console.log(`🎬 Bắt đầu cập nhật IMDb cho ${movies.length} phim...`);
+    if (typeof showNotification === 'function') showNotification(`Đang cập nhật IMDb cho ${movies.length} phim...`, 'info');
+
+    let updated = 0, skipped = 0, failed = 0;
+
+    for (const movie of movies) {
+        const title = movie.originTitle || movie.origin_title || movie.title || '';
+        if (!title) { skipped++; continue; }
+
+        try {
+            const imdbRating = await _fetchImdbRatingGlobal(title, movie.year);
+            if (imdbRating !== null) {
+                const { error } = await supabase.from('movies').update({ imdb_rating: imdbRating }).eq('id', movie.id);
+                if (!error) {
+                    movie.imdbRating = imdbRating;
+                    movie.imdb_rating = imdbRating;
+                    updated++;
+                } else { failed++; }
+            } else { skipped++; }
+        } catch (e) { failed++; }
+
+        // Delay 500ms để không spam API
+        await new Promise(r => setTimeout(r, 500));
+    }
+
+    const msg = `✅ IMDb: ${updated} cập nhật · ${skipped} bỏ qua · ${failed} lỗi`;
+    console.log(msg);
+    if (typeof showNotification === 'function') showNotification(msg, 'success');
+    if (typeof saveToCache === 'function') saveToCache('movies', allMovies);
+}
+
+// Gắn global để gọi từ Console
+window.batchUpdateImdbRatings = batchUpdateImdbRatings;

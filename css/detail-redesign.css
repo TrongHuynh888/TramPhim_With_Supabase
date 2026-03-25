@@ -496,7 +496,7 @@ body.cinema-mode.controls-visible .detail-toolbar {
 .info-layout {
     display: grid;
     grid-template-columns: 100px 1fr 280px; /* Poster, Info, Actors */
-    gap: 30px; 
+    gap: 15px 30px; /* Hẹp dọc 15px, rộng ngang 30px */
     align-items: start;
 }
 
@@ -773,6 +773,7 @@ body.cinema-mode.controls-visible .detail-toolbar {
     border-radius: 10px;
     padding: 10px 18px;
     gap: 15px;
+    width: 100%;
 }
 
 .part-selector-dropdown {
@@ -893,14 +894,25 @@ body.cinema-mode.controls-visible .detail-toolbar {
     to { opacity: 1; transform: translateY(0); }
 }
 
-#movieExtraControlsRow,
-#recommendedMoviesContainer {
-    margin-top: 10px !important; /* Thu hẹp tối đa khoảng cách phía trên */
-    padding: 0 40px !important;
+#movieExtraControlsRow {
+    grid-column: 1 / 3; /* Nằm dưới ảnh và nội dung mô tả, không lấn sang cột diễn viên */
+    grid-row: 2; /* Ép cố định ở hàng 2 */
+    width: 100%;
+    margin-top: 0 !important; /* Xoá margin thừa do layout mới đã tự fix */
+    padding: 0 !important;
 }
 
 #episodesSectionWrapper {
-    margin-top: 5px !important; /* Khoảng cách tối thiểu */
+    grid-column: 1 / -1; /* Trải dài toàn bộ chiều rộng bên dưới */
+    grid-row: 4; /* Đặt ở hàng 4 để chừa hàng 3 cho diễn viên giãn nở */
+    width: 100%;
+    margin-top: 0 !important;
+    padding: 0 !important;
+}
+
+#recommendedMoviesContainer {
+    margin-top: 10px !important; 
+    padding: 0 40px !important;
 }
 
 
@@ -930,6 +942,15 @@ body.cinema-mode.controls-visible .detail-toolbar {
     border-radius: 16px;
     padding: 20px;
     box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.02);
+    grid-column: 3;
+    grid-row: 1 / span 2; /* Chỉ kéo dài qua khu vực info và controls */
+    align-self: stretch; /* Tự động giãn chiều cao bằng với bên trái */
+    display: flex;
+    flex-direction: column;
+}
+
+.detail-actor-sidebar.expanded-layout {
+    grid-row: 1 / span 3; /* Khi mở rộng, mượn thêm hàng 3 để bung mà không đẩy hàng 2 */
 }
 
 .sidebar-title {
@@ -951,8 +972,15 @@ body.cinema-mode.controls-visible .detail-toolbar {
 
 .sidebar-actor-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr)); /* Fix lỗi grid bung rộng theo text */
     gap: 12px;
+    max-height: 236px; /* Hiển thị 3 hàng diễn viên (khoảng 9 người) */
+    overflow: hidden;
+    transition: max-height 0.4s ease;
+}
+
+.sidebar-actor-grid.expanded {
+    max-height: 2000px;
 }
 
 .sidebar-actor-item {
@@ -960,6 +988,7 @@ body.cinema-mode.controls-visible .detail-toolbar {
     flex-direction: column;
     align-items: center;
     gap: 6px;
+    width: 100%; /* Giới hạn chiều rộng theo grid content */
     cursor: pointer;
     transition: transform 0.2s ease;
     text-decoration: none;
@@ -970,8 +999,8 @@ body.cinema-mode.controls-visible .detail-toolbar {
 }
 
 .sidebar-actor-item img {
-    width: 60px;
-    height: 60px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     object-fit: cover;
     border: 2px solid rgba(255, 255, 255, 0.1);
@@ -987,7 +1016,8 @@ body.cinema-mode.controls-visible .detail-toolbar {
     font-size: 0.72rem;
     color: var(--text-secondary, #aaa);
     text-align: center;
-    max-width: 80px;
+    max-width: 100%; /* Dựa vào parent (cột lưới) thay vì cố định */
+    padding: 0 4px; /* Tránh chạm viền quá khít */
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -998,10 +1028,43 @@ body.cinema-mode.controls-visible .detail-toolbar {
     color: #fff;
 }
 
+/* NÚT XEM THÊM DIỄN VIÊN */
+.btn-toggle-actors {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #aaa;
+    padding: 8px 0;
+    margin-top: auto; /* Tự động đẩy nút xuống sát đáy của hộp flex */
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.btn-toggle-actors:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border-color: var(--accent-primary);
+}
+
 /* Light theme cho sidebar */
 [data-theme="light"] .detail-actor-sidebar {
     background: rgba(0, 0, 0, 0.02);
     border-color: var(--border-color);
+}
+
+[data-theme="light"] .btn-toggle-actors {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+[data-theme="light"] .btn-toggle-actors:hover {
+    background: rgba(0, 0, 0, 0.08);
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
 }
 
 [data-theme="light"] .sidebar-title {
@@ -1090,10 +1153,18 @@ body.cinema-mode.controls-visible .detail-toolbar {
         font-size: 1.8rem;
     }
     /* Fix vỡ layout diễn viên khi xoay ngang mobile */
+    #movieExtraControlsRow,
+    #episodesSectionWrapper {
+        grid-column: 1 / -1; /* Trải dài full màn hình nếu kích thước nhỏ */
+    }
     .detail-actor-sidebar {
         grid-column: 1 / -1; /* Chiếm full chiều rộng hàng mới */
+        grid-row: auto; /* Xoá grid-row cố định */
         width: 100%;
         margin-top: 15px;
+    }
+    .movie-extra-controls-inner {
+        width: 100%; /* Reset lại full chiều rộng khi ở màn hình nhỏ */
     }
     .sidebar-actor-grid {
         grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
