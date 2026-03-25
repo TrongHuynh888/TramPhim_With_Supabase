@@ -8,6 +8,15 @@ let hasSystemSettingsTable = true;
 // Cache settings từ DB
 let dbSettingsCache = {};
 
+// Bảo mật Sudo Mode
+let sudoUnlocked = sessionStorage.getItem('sudo_api_unlocked') === 'true';
+let sudoUnlockExpiredAt = parseInt(sessionStorage.getItem('sudo_api_expired_at') || '0');
+let isSuperAdmin = false;
+let sudoTimerInterval = null;
+
+const SUPER_ADMINS_DEFAULT = ['huynhphutrong8223@gmail.com'];
+const SUDO_PIN_DEFAULT = '123456';
+
 // Chứa các giá trị gốc đọc trực tiếp từ source code (Dùng Regex để parse)
 let defaultCodeKeys = {
     imgbb: '',
@@ -104,6 +113,14 @@ async function initApiKeysManager() {
         await loadSettingsFromDB();
     }
     
+    // --- SUDO MODE CHECK ---
+    isSuperAdmin = verifySuperAdmin();
+    if (!checkSudoSession()) {
+        renderSudoLockScreen();
+        return; 
+    }
+    // -----------------------
+    
     // 3. Render giao diện
     renderApiKeysUI();
 }
@@ -180,6 +197,18 @@ function renderApiKeysUI() {
 
     let html = '';
 
+    // Banner quản trị cấp cao
+    html += `
+        <div class="sudo-header-actions">
+            ${isSuperAdmin 
+                ? '<div class="super-admin-badge" title="Tài khoản này nằm trong Danh sách Chủ Tịch"><i class="fas fa-crown"></i> Super Admin (Toàn Quyền)</div><button class="btn-change-pin" onclick="changeSudoPin()"><i class="fas fa-key"></i> Đổi Mã Sudo Mode</button>' 
+                : '<div class="readonly-admin-badge" title="Tài khoản bạn không nằm trong cấu hình Chủ Tịch"><i class="fas fa-eye"></i> Quyền Quản trị viên (Chỉ Xem)</div>'
+            }
+            <div class="sudo-timer" id="sudoCountdownTimer" title="Thời gian Sudo Mode còn lại"><i class="fas fa-clock"></i> <span>--:--</span></div>
+            <button class="btn-change-pin" style="background: rgba(255, 77, 77, 0.15); color: #ff4d4d; border-color: rgba(255, 77, 77, 0.3); margin-left: 10px;" onclick="lockSudoNow()" title="Khóa ngay khu vực này"><i class="fas fa-lock"></i> Khóa Lại</button>
+        </div>
+    `;
+
     // Nếu chưa có bảng
     if (!hasSystemSettingsTable) {
         html += `
@@ -216,6 +245,9 @@ CREATE TABLE system_settings (
     html += '</div>';
     container.innerHTML = html;
     
+    // Khởi động đồng hồ đếm ngược
+    startSudoCountdown();
+
     // Chạy kiểm tra health-check cho tất cả các API Key hiện có
     checkAllApiHealth();
 }
@@ -225,15 +257,21 @@ function generateApiKeyCardInnerHtml(config, isPoolOpen = false) {
     const valueStr = value !== null && value !== undefined ? String(value).trim() : '';
     const isMaskedPreview = valueStr.length > 10 ? valueStr.substring(0, 4) + '******' + valueStr.slice(-4) : (valueStr ? '******' : '');
     
+    // Kiểm tra quyền Super Admin
+    const isLockedByRole = !isSuperAdmin;
+    const isReadonly = config.isReadonly || isLockedByRole;
+
     const badgeSpan = config.isReadonly 
         ? '<span class="api-badge readonly"><i class="fas fa-lock"></i> Cố định trong Code</span>'
-        : (dbSettingsCache[config.id] 
-            ? '<span class="api-badge saved"><i class="fas fa-cloud"></i> Lưu tại Supabase</span>' 
-            : '<span class="api-badge editable"><i class="fas fa-edit"></i> Có thể đổi</span>');
+        : (isLockedByRole 
+            ? '<span class="api-badge readonly-admin-badge" title="Bạn chỉ có quyền Xem"><i class="fas fa-eye"></i> Chỉ Xem</span>'
+            : (dbSettingsCache[config.id] 
+                ? '<span class="api-badge saved"><i class="fas fa-cloud"></i> Lưu tại Supabase</span>' 
+                : '<span class="api-badge editable"><i class="fas fa-edit"></i> Có thể đổi</span>'));
 
-    const inputHtml = config.isReadonly ? `
+    const inputHtml = isReadonly ? `
          <div class="api-key-input-container">
-            <input type="text" class="api-key-input" value="${valueStr}" readonly disabled>
+            <input type="text" class="api-key-input" value="${valueStr}" readonly disabled title="Bạn không có quyền sửa khóa này">
         </div>
     ` : `
         <div class="api-key-input-container">
@@ -244,7 +282,7 @@ function generateApiKeyCardInnerHtml(config, isPoolOpen = false) {
         </div>
     `;
 
-    const actionBtn = config.isReadonly ? '' : `
+    const actionBtn = isReadonly ? '' : `
         <div class="api-key-actions">
             <button class="api-btn-save" id="btnSave_${config.id}" onclick="saveApiKey('${config.id}', '${config.title}')" disabled>
                 <i class="fas fa-save"></i> Lưu Thay Đổi
@@ -827,3 +865,312 @@ async function autoSwitchBackupKey(id) {
     renderSingleApiKeyCard(id);
 }
 
+
+// ==========================================
+// SUDO MODE & SUPER ADMIN FUNCTIONS
+// ==========================================
+
+function checkSudoSession() {
+    if (sudoUnlocked && Date.now() < sudoUnlockExpiredAt) {
+        // Gia hạn thêm 30 phút mỗi khi thao tác thành công
+        sessionStorage.setItem('sudo_api_expired_at', (Date.now() + 30 * 60000).toString());
+        return true;
+    }
+    sudoUnlocked = false;
+    sessionStorage.removeItem('sudo_api_unlocked');
+    return false;
+}
+
+function verifySuperAdmin() {
+    if (typeof currentUser === 'undefined' || !currentUser || !currentUser.email) return false;
+    
+    let allowedEmailsStr = dbSettingsCache['super_admin_emails'];
+    let allowedEmails = [];
+    if (allowedEmailsStr) {
+        allowedEmails = allowedEmailsStr.split(',').map(e => e.trim().toLowerCase());
+    } else {
+        allowedEmails = SUPER_ADMINS_DEFAULT;
+        if (hasSystemSettingsTable && window.supabase) {
+            window.supabase.from('system_settings').upsert({
+                key_name: 'super_admin_emails',
+                key_value: allowedEmails.join(', '),
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'key_name' }).then(()=>{}).catch(()=>{});
+        }
+    }
+    return allowedEmails.includes(currentUser.email.trim().toLowerCase());
+}
+
+function renderSudoLockScreen() {
+    const container = document.getElementById('adminApiKeysContainer');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div class="api-keys-wrapper" style="position: relative; min-height: 400px; display: flex;">
+            <div class="sudo-lock-screen" id="sudoLockScreen">
+                <i class="fas fa-user-shield sudo-lock-icon"></i>
+                <h2 class="sudo-lock-title">Khu Vực Bảo Mật Cấp 2</h2>
+                <p class="sudo-lock-desc">Vui lòng nhập Mã bảo mật Sudo để tiến hành truy cập. Phiên đăng nhập sẽ được mở khóa trong vòng 30 phút.</p>
+                <div class="sudo-pin-container">
+                    <input style="display:none" type="text" name="fake_user" autocomplete="username">
+                    <input style="display:none" type="password" name="fake_password" autocomplete="current-password">
+                    <input type="password" spellcheck="false" autocomplete="new-password" class="sudo-pin-input" id="sudoPinInput" placeholder="******" maxlength="6" onkeyup="if(event.key==='Enter') unlockSudoMode()">
+                    <button type="button" class="sudo-btn-eye" onclick="toggleSudoPinVisibility()" title="Hiện/Ẩn mã PIN">
+                        <i class="fas fa-eye" id="sudoEyeIcon"></i>
+                    </button>
+                </div>
+                <div class="sudo-error-msg" id="sudoErrorMsg"></div>
+                <button class="sudo-unlock-btn" onclick="unlockSudoMode()" id="btnUnlockSudo">
+                    <i class="fas fa-lock-open"></i> Mở Khóa Quản Lý
+                </button>
+                <div style="margin-top: 1.5rem;">
+                    <button type="button" class="btn-forgot-pin" onclick="showForgotPinOptions()" style="background: none; border: none; color: #aaa; text-decoration: underline; cursor: pointer; font-size: 0.9rem; transition: color 0.2s;">
+                        <i class="fas fa-question-circle"></i> Quên Mã PIN?
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    setTimeout(() => {
+        const pinInput = document.getElementById('sudoPinInput');
+        if(pinInput) pinInput.focus();
+    }, 100);
+}
+
+function unlockSudoMode() {
+    const input = document.getElementById('sudoPinInput');
+    const errorMsg = document.getElementById('sudoErrorMsg');
+    const btn = document.getElementById('btnUnlockSudo');
+    
+    if (!input || !errorMsg || !btn) return;
+    
+    const pin = input.value.trim();
+    if (!pin) {
+        errorMsg.innerText = "Vui lòng nhập Mã PIN!";
+        return;
+    }
+    
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xác thực...';
+    btn.disabled = true;
+    errorMsg.innerText = "";
+    
+    let correctPin = dbSettingsCache['admin_api_pin'];
+    if (!correctPin) {
+        correctPin = SUDO_PIN_DEFAULT;
+        if (hasSystemSettingsTable && window.supabase) {
+            window.supabase.from('system_settings').upsert({
+                key_name: 'admin_api_pin',
+                key_value: correctPin,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'key_name' }).then(()=>{}).catch(()=>{});
+        }
+    }
+    
+    setTimeout(() => {
+        if (pin === correctPin) {
+            sudoUnlocked = true;
+            sudoUnlockExpiredAt = Date.now() + 30 * 60000;
+            sessionStorage.setItem('sudo_api_unlocked', 'true');
+            sessionStorage.setItem('sudo_api_expired_at', sudoUnlockExpiredAt.toString());
+            
+            // Re-render
+            renderApiKeysUI();
+        } else {
+            errorMsg.innerText = "❌ Mã PIN Sudo không chính xác!";
+            btn.innerHTML = '<i class="fas fa-lock-open"></i> Mở Khóa Quản Lý';
+            btn.disabled = false;
+            input.value = "";
+            input.focus();
+        }
+    }, 400); // 400ms fake delay cho ngầu
+}
+
+function toggleSudoPinVisibility() {
+    const input = document.getElementById('sudoPinInput');
+    const icon = document.getElementById('sudoEyeIcon');
+    if (!input || !icon) return;
+    
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+
+function changeSudoPin() {
+    if (!isSuperAdmin) {
+        showNotification("Bạn không có quyền Super Admin để đổi Mã PIN!", 'error');
+        return;
+    }
+    
+    openSudoModal(
+        '<i class="fas fa-key"></i> Đổi Mã Sudo Mode',
+        'Vui lòng nhập Mã bảo mật mới (Yêu cầu chính xác 6 ký tự số hoặc chữ):',
+        '<i class="fas fa-save"></i> LƯU THAY ĐỔI',
+        async (newPin) => {
+            const btn = document.getElementById('sudoModalConfirmBtn');
+            const err = document.getElementById('sudoModalError');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Xử lý...';
+            btn.disabled = true;
+            
+            try {
+                const { error } = await window.supabase.from('system_settings').upsert({
+                    key_name: 'admin_api_pin',
+                    key_value: newPin,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'key_name' });
+                
+                if (error) throw error;
+                
+                dbSettingsCache['admin_api_pin'] = newPin;
+                showNotification("Đã bảo mật Mã Sudo Mode mới thành công!", "success");
+                closeSudoModal();
+            } catch(e) {
+                err.innerText = "Lỗi cập nhật: " + e.message;
+                btn.innerHTML = '<i class="fas fa-save"></i> LƯU THAY ĐỔI';
+                btn.disabled = false;
+            }
+        }
+    );
+}
+
+function showForgotPinOptions() {
+    if (!isSuperAdmin) {
+        showNotification("❌ Chỉ có Chủ Tịch (Super Admin) mới có quyền Khôi phục Mã PIN. Vui lòng liên hệ Admin trưởng!", "error");
+        return;
+    }
+    
+    openSudoModal(
+        '<i class="fas fa-life-ring"></i> Khôi phục Mã PIN', 
+        'Hệ thống nhận diện Email của bạn là Chủ Tịch (Super Admin). Bạn có đặc quyền đặt lại Mã Sudo mới ngay bây giờ mà không cần mã cũ.<br><br><b>Nhập Mã PIN mới (6 ký tự):</b>', 
+        '<i class="fas fa-redo"></i> ĐẶT LẠI MÃ MỚI',
+        async (newPin) => {
+            const btn = document.getElementById('sudoModalConfirmBtn');
+            const err = document.getElementById('sudoModalError');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Xử lý...';
+            btn.disabled = true;
+            
+            try {
+                const { error } = await window.supabase.from('system_settings').upsert({
+                    key_name: 'admin_api_pin',
+                    key_value: newPin,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'key_name' });
+                
+                if (error) throw error;
+                
+                dbSettingsCache['admin_api_pin'] = newPin;
+                showNotification("Đã khôi phục thành công! Vui lòng nhập Mã PIN vừa tạo để mở khóa.", "success");
+                closeSudoModal();
+            } catch(e) {
+                err.innerText = "Lỗi khôi phục: " + e.message;
+                btn.innerHTML = '<i class="fas fa-redo"></i> ĐẶT LẠI MÃ MỚI';
+                btn.disabled = false;
+            }
+        }
+    );
+}
+
+// Custom Modal System
+let sudoModalCallback = null;
+
+function openSudoModal(title, desc, confirmText, callback) {
+    let modal = document.getElementById('sudoCustomModal');
+    if (!modal) {
+        const modalHtml = `
+            <div class="sudo-custom-modal" id="sudoCustomModal">
+                <div class="sudo-modal-content">
+                    <h3 id="sudoModalTitle">Đổi Mã Sudo Mode</h3>
+                    <p id="sudoModalDesc">Vui lòng nhập Mã bảo mật mới (Yêu cầu đúng 6 ký tự):</p>
+                    <div class="sudo-pin-container" style="margin: 1.5rem auto 1rem; justify-content: center; width: fit-content;">
+                        <input type="text" spellcheck="false" autocomplete="off" class="sudo-pin-input" id="sudoModalInput" placeholder="******" maxlength="6" onkeyup="if(event.key==='Enter') document.getElementById('sudoModalConfirmBtn').click()">
+                    </div>
+                    <div class="sudo-error-msg" id="sudoModalError"></div>
+                    <div class="sudo-modal-actions">
+                        <button class="btn-sudo-cancel" onclick="closeSudoModal()">Hủy</button>
+                        <button class="btn-sudo-confirm" id="sudoModalConfirmBtn">Xác Nhận</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modal = document.getElementById('sudoCustomModal');
+    }
+    
+    document.getElementById('sudoModalTitle').innerHTML = title;
+    document.getElementById('sudoModalDesc').innerHTML = desc;
+    
+    const btnConfirm = document.getElementById('sudoModalConfirmBtn');
+    btnConfirm.innerHTML = confirmText;
+    btnConfirm.disabled = false;
+    
+    const input = document.getElementById('sudoModalInput');
+    input.value = '';
+    
+    document.getElementById('sudoModalError').innerText = '';
+    
+    // Remove old listeners
+    const newBtn = btnConfirm.cloneNode(true);
+    btnConfirm.parentNode.replaceChild(newBtn, btnConfirm);
+    
+    sudoModalCallback = callback;
+    
+    newBtn.addEventListener('click', () => {
+        const val = input.value.trim();
+        if (val.length !== 6) {
+            document.getElementById('sudoModalError').innerText = "Vui lòng nhập đủ 6 ký tự!";
+            return;
+        }
+        document.getElementById('sudoModalError').innerText = "";
+        if (sudoModalCallback) sudoModalCallback(val);
+    });
+    
+    modal.classList.add('active');
+    setTimeout(() => input.focus(), 100);
+}
+
+function closeSudoModal() {
+    const modal = document.getElementById('sudoCustomModal');
+    if (modal) modal.classList.remove('active');
+    sudoModalCallback = null;
+}
+
+// Timer Logic
+function startSudoCountdown() {
+    if (sudoTimerInterval) clearInterval(sudoTimerInterval);
+    
+    sudoTimerInterval = setInterval(() => {
+        const timerEl = document.querySelector('#sudoCountdownTimer span');
+        if (!timerEl) return;
+        
+        let remainingTime = sudoUnlockExpiredAt - Date.now();
+        if (remainingTime <= 0) {
+            clearInterval(sudoTimerInterval);
+            lockSudoNow();
+            return;
+        }
+        
+        let minutes = Math.floor(remainingTime / 60000);
+        let seconds = Math.floor((remainingTime % 60000) / 1000);
+        timerEl.innerText = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
+        if (remainingTime < 300000) { // < 5 minutes
+            timerEl.parentElement.classList.add('warning');
+        } else {
+            timerEl.parentElement.classList.remove('warning');
+        }
+    }, 1000);
+}
+
+function lockSudoNow() {
+    sudoUnlocked = false;
+    sessionStorage.removeItem('sudo_api_unlocked');
+    sessionStorage.removeItem('sudo_api_expired_at');
+    if (sudoTimerInterval) clearInterval(sudoTimerInterval);
+    renderSudoLockScreen();
+}
