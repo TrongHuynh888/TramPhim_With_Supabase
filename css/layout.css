@@ -398,12 +398,31 @@
   min-width: var(--card-width, 200px);
 }
 
-/* Phim Mới Cập Nhật — PC: đúng 2 hàng, ẩn thừa */
+/* Phim Mới Cập Nhật — PC: Grid tĩnh auto-fill, 2 hàng lấp đầy viewport */
 #newMovies {
-  grid-template-rows: repeat(2, auto);
-  overflow: hidden;
-  /* Giới hạn chiều cao = 2 hàng phim (chiều cao poster + card body + gap) */
-  max-height: calc((300px + 70px) * 2 + var(--spacing-lg));
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)) !important;
+  grid-template-rows: auto auto !important; /* Đúng 2 hàng */
+  grid-auto-flow: row !important;
+  gap: var(--spacing-lg) !important;
+  overflow: visible !important; /* Không cuộn — hiển thị hết */
+  max-height: none !important;
+  padding-bottom: 10px !important;
+}
+
+/* Ẩn thanh cuộn trên PC (không cần nữa) */
+#newMovies::-webkit-scrollbar {
+  display: none;
+}
+#newMovies::-webkit-scrollbar-track {
+  background: transparent;
+}
+#newMovies::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+#newMovies::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
 }
 
 /* Grid danh sách thể loại (New) */
@@ -3434,7 +3453,5 @@ body.has-pseudo-fullscreen::-webkit-scrollbar {
 }
 [data-theme="light"] .site-marquee-close:hover {
   background: rgba(0, 0, 0, 0.15);
-  color: var(--text-primary);
-}
   color: var(--text-primary);
 }

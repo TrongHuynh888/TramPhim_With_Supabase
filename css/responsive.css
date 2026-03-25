@@ -148,7 +148,8 @@ body.watch-party-active #watchPartyPage {
     }
 
     .movie-card-wrapper.active-mobile .movie-popup-nfx {
-      display: block !important;
+      display: flex !important;
+      flex-direction: column !important;
       visibility: visible !important;
       opacity: 1 !important;
       pointer-events: auto !important;
@@ -160,7 +161,8 @@ body.watch-party-active #watchPartyPage {
       /* Kích thước Tablet & Mobile (Mobile sẽ bị override ở dưới) */
       width: 330px !important; 
       max-width: 90vw !important;
-      max-height: 90vh !important;
+      height: auto !important;
+      min-height: auto !important;
       z-index: 950 !important;
       box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
       border: 1px solid var(--accent-primary);
@@ -183,12 +185,14 @@ body.watch-party-active #watchPartyPage {
         z-index: 3000 !important;
     }
 
-    /* FIX STACKING CONTEXT & OVERFLOW: Nâng section chứa popup lên cao nhất và không cắt popup */
+    /* FIX STACKING CONTEXT & OVERFLOW: Nâng section chứa popup lên cao nhất */
     .section-active-popup {
         z-index: 1600 !important;
         position: relative !important;
-        overflow: visible !important; /* Quan trọng: Không cắt popup nếu nó tràn ra ngoài card */
+        overflow: visible !important;
     }
+
+
 
 
     /* Font chữ Popup Tablet */
@@ -271,6 +275,10 @@ body.watch-party-active #watchPartyPage {
 
     /* --- TABLET: LANDSCAPE MOVIE CARD POPUP (16:9) --- */
     .movie-card-landscape.active-mobile .movie-popup-nfx {
+        display: flex !important;
+        flex-direction: column !important;
+        height: auto !important;
+        min-height: auto !important;
         width: 340px !important; /* Thu nhỏ mạnh mẽ hơn nữa để vừa khít tuyệt đối với 3 nút */
     }
     .movie-card-landscape.active-mobile .popup-title-main {
@@ -984,6 +992,11 @@ body.watch-party-active #watchPartyPage {
   /* --- Phim Nổi Bật: Mobile/Tablet cuộn ngang --- */
   .featured-scroll-wrapper {
     padding: 10px 10px 15px !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
   }
   .featured-scroll-wrapper::-webkit-scrollbar {
@@ -991,6 +1004,12 @@ body.watch-party-active #watchPartyPage {
   }
   #featuredMovies {
     gap: 12px !important;
+  }
+  /* Cố định kích thước card phim nổi bật trên mobile */
+  #featuredMovies > .movie-card-wrapper {
+    flex: 0 0 140px !important;
+    min-width: 140px !important;
+    max-width: 140px !important;
   }
 
   /* --- Phim Mới Cập Nhật: Mobile/Tablet cuộn ngang --- */
@@ -1128,6 +1147,7 @@ body.watch-party-active #watchPartyPage {
   .movie-card-wrapper.active-mobile .popup-genres-text {
     display: none;
   }
+
 
   /* --- MOBILE: LANDSCAPE MOVIE CARD POPUP (16:9) --- */
   .movie-card-landscape.active-mobile .movie-popup-nfx {
@@ -2891,4 +2911,23 @@ body[data-theme="light"] .chat-msg .author {
     background: #e50914 !important;
     color: #fff !important;
   }
+}
+
+/* =============================================
+   POPUP FIXED POSITION — Phải nằm SAU TẤT CẢ mobile rules
+   để override position:absolute của .movie-popup-nfx
+   ============================================= */
+.movie-popup-nfx.popup-fixed-position {
+    position: fixed !important;
+    top: var(--popup-fixed-top, 50%) !important;
+    left: var(--popup-fixed-left, 50%) !important;
+    transform: translate(-50%, -50%) !important;
+    z-index: 10001 !important;
+    width: 200px !important;
+    max-height: 70vh !important;
+    overflow-y: auto !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
 }

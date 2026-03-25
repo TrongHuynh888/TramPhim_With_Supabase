@@ -168,8 +168,8 @@ function renderNewMovies() {
   const container = document.getElementById("newMovies");
   if (!container) return;
 
-  // Lấy 8 phim mới nhất
-  const newMovies = [...allMovies]
+  // Render tạm tối đa 24 thẻ để grid tính số cột thực tế
+  const sortedMovies = [...allMovies]
     .sort((a, b) => {
       const dateA = a.createdAt?.toDate
         ? a.createdAt.toDate()
@@ -179,11 +179,24 @@ function renderNewMovies() {
         : new Date(b.createdAt);
       return dateB - dateA;
     })
-    .slice(0, 12);
+    .slice(0, 24);
 
-  container.innerHTML = newMovies
+  container.innerHTML = sortedMovies
     .map((movie) => createMovieCard(movie))
     .join("");
+
+  // Đọc số cột thực tế từ computed grid rồi cắt bớt thẻ dư (chỉ giữ đúng 2 hàng)
+  requestAnimationFrame(() => {
+    const cols = window.getComputedStyle(container).gridTemplateColumns;
+    if (cols && cols !== 'none') {
+      const numCols = cols.split(' ').length;
+      const maxCards = numCols * 2;
+      const cards = container.querySelectorAll(':scope > .movie-card-wrapper');
+      cards.forEach((card, i) => {
+        if (i >= maxCards) card.remove();
+      });
+    }
+  });
 }
 
 /**
@@ -450,6 +463,19 @@ function handleMovieClick(event, movieId) {
     if (parentSection) {
         parentSection.classList.add("section-active-popup");
     }
+
+    // FIX POPUP TRONG SCROLL CONTAINER: Dùng position:fixed để popup thoát overflow
+    const isInScrollContainer = currentWrapper.closest('.featured-scroll-wrapper') || currentWrapper.closest('#newMovies');
+    if (isInScrollContainer) {
+        const popup = currentWrapper.querySelector('.movie-popup-nfx');
+        if (popup) {
+            const cardRect = currentWrapper.getBoundingClientRect();
+            popup.classList.add('popup-fixed-position');
+            // Căn giữa popup trên card (dọc + ngang)
+            popup.style.setProperty('--popup-fixed-top', `${cardRect.top + cardRect.height / 2}px`);
+            popup.style.setProperty('--popup-fixed-left', `${cardRect.left + cardRect.width / 2}px`);
+        }
+    }
   }
 
   // Ngăn click lan ra ngoài
@@ -457,6 +483,13 @@ function handleMovieClick(event, movieId) {
 }
 
 function closeAllPopups() {
+  // Dọn dẹp popup fixed position
+  document.querySelectorAll('.popup-fixed-position').forEach(p => {
+    p.classList.remove('popup-fixed-position');
+    p.style.removeProperty('--popup-fixed-top');
+    p.style.removeProperty('--popup-fixed-left');
+  });
+
   document.querySelectorAll(".movie-card-wrapper").forEach((el) => {
     el.classList.remove("active-mobile", "popup-align-left", "popup-align-right");
   });
@@ -474,6 +507,27 @@ document.addEventListener("click", function (event) {
         closeAllPopups();
     }
 });
+
+// Đóng mọi popup khi cuộn trang dọc
+window.addEventListener("scroll", function () {
+    if (document.querySelector('.movie-card-wrapper.active-mobile')) {
+        closeAllPopups();
+    }
+}, { passive: true });
+
+// Đóng mọi popup khi cuộn ngang scroll containers
+document.addEventListener("scroll", function () {
+    if (document.querySelector('.movie-card-wrapper.active-mobile')) {
+        closeAllPopups();
+    }
+}, { capture: true, passive: true });
+
+// Đóng mọi popup khi swipe (touchmove)
+document.addEventListener("touchmove", function () {
+    if (document.querySelector('.movie-card-wrapper.active-mobile')) {
+        closeAllPopups();
+    }
+}, { passive: true });
 
 /**
  * Search movies
