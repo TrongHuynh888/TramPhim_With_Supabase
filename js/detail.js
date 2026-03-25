@@ -1286,7 +1286,7 @@ function selectEpisode(index) {
   });
   // 👇 THÊM DÒNG NÀY: Lưu lịch sử xem ngay khi chọn tập 👇
   if (currentMovieId) {
-    saveWatchHistory(currentMovieId, index);
+    saveWatchHistory(currentMovieId, index, 0); // Đặt lại 0 giây khi chuyển sang tập mới
   }
   
   // Update versions corresponding to this episode
@@ -3859,11 +3859,8 @@ async function handleMoviePageExit() {
     
     // Chỉ lưu nếu đã xem > 10 giây
     if (currentVideoTime > 10 && currentVideoDuration > 0) {
-        // Lưu progress NGAY (không debounce)
+        // Lưu progress NGAY (không debounce), hàm này đã tự gọi cập nhật UI và lưu history đầy đủ
         await saveWatchProgressImmediate(currentMovieId, currentEpisode, currentVideoTime, currentVideoDuration);
-        
-        // Cập nhật lịch sử với thời gian đã xem - LƯU LUÔN không cần kiểm tra phút
-        await updateWatchHistoryWithTime(currentMovieId, currentEpisode, currentVideoTime);
         
         console.log(`📤 Đã lưu lịch sử khi rời đi: ${Math.floor(currentVideoTime / 60)} phút (${Math.round(currentVideoTime)} giây)`);
     }
@@ -3954,39 +3951,7 @@ function stopVideo() {
     console.log("⏹️ Video đã dừng và giải phóng tài nguyên");
 }
 
-/**
- * Cập nhật lịch sử xem với thời gian đã xem (phút) - Supabase
- */
-async function updateWatchHistoryWithTime(movieId, episodeIndex, currentTime) {
-    if (!currentUser || !supabase || !movieId) return;
-    
-    const minutesWatched = Math.floor(currentTime / 60);
-    const percentage = Math.round((currentTime / 60) * 100); // Ước tính dựa trên 60 phút
-    
-    try {
-        const { error } = await supabase
-            .from('watch_history')
-            .upsert({
-                user_id: currentUser.id,
-                movie_id: movieId,
-                episode_index: episodeIndex,
-                resume_time: currentTime,
-                updated_at: new Date().toISOString(),
-                last_watched_at: new Date().toISOString()
-            }, { onConflict: 'user_id,movie_id' });
-        
-        if (error) throw error;
-        
-        console.log(`✅ Đã cập nhật lịch sử: ${movieId} - Tập ${episodeIndex + 1} - ${minutesWatched} phút`);
-        
-        // ✅ CẬP NHẬT UI PROGRESS BAR NGAY LẬP TỨC
-        if (typeof updateMovieProgressUI === 'function') {
-            updateMovieProgressUI(movieId, percentage);
-        }
-    } catch (error) {
-        console.error("Lỗi cập nhật lịch sử lên Supabase:", error);
-    }
-}
+// Hàm updateWatchHistoryWithTime đã được loại bỏ vì dư thừa so với saveWatchProgressImmediate
 
 /**
  * Kiểm tra và hiển thị modal hỏi xem tiếp khi vào trang phim

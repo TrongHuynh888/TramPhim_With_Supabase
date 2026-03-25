@@ -234,16 +234,22 @@ function updateLikeButtonsUI(movieId, isLiked) {
     }
 }
 
-async function saveWatchHistory(movieId, episodeIndex, resumeTime = 0) {
+async function saveWatchHistory(movieId, episodeIndex, resumeTime = undefined) {
   if (!currentUser || !supabase) return;
   try {
-    const { error } = await supabase.from('watch_history').upsert({
+    const updateData = {
         user_id: currentUser.id,
         movie_id: movieId,
         episode_index: episodeIndex,
-        resume_time: resumeTime,
         last_watched_at: new Date().toISOString()
-    });
+    };
+    
+    // Chỉ cập nhật resume_time nếu được truyền vào rõ ràng (ví dụ: 0 khi đổi tập)
+    if (resumeTime !== undefined) {
+        updateData.resume_time = resumeTime;
+    }
+
+    const { error } = await supabase.from('watch_history').upsert(updateData, { onConflict: 'user_id,movie_id' });
     if (error) throw error;
   } catch (error) {
     console.error("Lỗi lưu lịch sử:", error);
