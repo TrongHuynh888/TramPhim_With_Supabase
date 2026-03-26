@@ -488,16 +488,20 @@ window.deleteVipRequest = async function(requestId) {
 async function loadAdminStats() {
   if (!supabase) return;
   try {
-    // === 1. Tổng số phim ===
-    const totalMovies = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) 
-      ? allAdminMovies.length 
-      : allMovies.length;
-    animateCountUp("statTotalMovies", totalMovies);
+    // === 1. Tổng số phim (đếm trực tiếp từ DB, không phụ thuộc mảng JS bị limit) ===
+    const { count: totalMovies } = await supabase
+      .from('movies')
+      .select('*', { count: 'exact', head: true });
+    animateCountUp("statTotalMovies", totalMovies || 0);
 
-    // === 2. Tổng lượt xem ===
-    const moviesSrc = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) 
-      ? allAdminMovies : allMovies;
-    const totalViews = moviesSrc.reduce((sum, m) => sum + (m.views || 0), 0);
+    // === 2. Tổng lượt xem (đếm từ view_logs DB) ===
+    let totalViews = 0;
+    try {
+      const { count: viewCount } = await supabase
+        .from('view_logs')
+        .select('*', { count: 'exact', head: true });
+      totalViews = viewCount || 0;
+    } catch(e) { /* fallback = 0 */ }
     animateCountUp("statTotalViews", totalViews);
 
     // === 3. Doanh thu ước tính (Từ transactions) ===
@@ -532,8 +536,21 @@ async function loadAdminStats() {
     animateCountUp("statPendingErrors", errorCount || 0);
 
     // === Render các phần phụ ===
+    const chartMovies = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0)
+      ? allAdminMovies : (allMovies || []);
+      
+    // Cập nhật lượt xem thực tế vào mảng phim trước khi vẽ chart
+    try {
+        const viewCountsAll = await queryViewLogsCounts('all');
+        chartMovies.forEach(m => {
+            m.views = viewCountsAll[m.id] || 0;
+        });
+    } catch(err) {
+        console.warn('Lỗi đồng bộ views cho chart:', err);
+    }
+
     renderRecentMovies();
-    renderDashboardCharts(moviesSrc);
+    renderDashboardCharts(chartMovies);
     renderRecentActivities();
 
   } catch (error) {
@@ -720,7 +737,7 @@ async function queryViewLogsCounts(period) {
     const fromDate = getDashPeriodFromDate(period);
     if (fromDate) query = query.gte('viewed_at', fromDate);
 
-    const { data, error } = await query.limit(10000);
+    const { data, error } = await query.limit(50000);
     if (error) throw error;
 
     const counts = {};
@@ -742,6 +759,8 @@ async function renderChartMoviesByCategory(movies, textColor, gridColor, period)
   if (!ctx) return;
 
   if (window._dashCharts.categories) window._dashCharts.categories.destroy();
+  const exist_categories = Chart.getChart("chartMoviesByCategory");
+  if (exist_categories) exist_categories.destroy();
 
   const categories = typeof allCategories !== 'undefined' ? allCategories : [];
 
@@ -844,6 +863,8 @@ async function renderChartViewsDistribution(movies, textColor, gridColor, period
   if (!ctx) return;
 
   if (window._dashCharts.views) window._dashCharts.views.destroy();
+  const exist_views = Chart.getChart("chartViewsRecent");
+  if (exist_views) exist_views.destroy();
 
   let labels, data;
 
@@ -920,6 +941,8 @@ function renderChartMovieTypes(movies, textColor) {
   if (!ctx) return;
 
   if (window._dashCharts.types) window._dashCharts.types.destroy();
+  const exist_types = Chart.getChart("chartMovieTypes");
+  if (exist_types) exist_types.destroy();
 
   const singleCount = movies.filter(m => m.type === 'single' || !m.type).length;
   const seriesCount = movies.filter(m => m.type === 'series').length;
@@ -978,6 +1001,8 @@ async function renderChartTopMovies(movies, textColor, gridColor, period) {
   if (!ctx) return;
 
   if (window._dashCharts.topMovies) window._dashCharts.topMovies.destroy();
+  const exist_topMovies = Chart.getChart("chartTopMovies");
+  if (exist_topMovies) exist_topMovies.destroy();
 
   let labels, data;
 
@@ -1085,21 +1110,32 @@ async function renderRecentActivities() {
       });
     }
 
-    // 3. Báo lỗi gần đây (wrap riêng try-catch vì bảng có thể chưa tồn tại)
+    // 3. Báo lỗi và Auto-fix gần đây (wrap riêng try-catch)
     try {
       const { data: recentErrors } = await supabase
         .from('error_reports')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(3);
+        .limit(8); // Tăng limit lên 8 để lấy đủ cả lỗi và auto-fix
 
       (recentErrors || []).forEach(err => {
-        activities.push({
-          type: 'error',
-          icon: 'fas fa-bug',
-          title: `Báo lỗi: <strong>${err.movie_title || 'Không rõ'}</strong> bởi ${err.user_name || 'Ẩn danh'}`,
-          time: err.created_at,
-        });
+        if (err.error_type && err.error_type.startsWith('auto_fix_')) {
+          const typeName = err.error_type.includes('poster') ? 'Poster' : 'Nền';
+          // Dùng class "success" hoặc "auto_fix" cho CSS riêng
+          activities.push({
+            type: 'auto_fix', 
+            icon: 'fas fa-magic',
+            title: `Auto-Fix: Tự cập nhật ${typeName} cho <strong>${err.movie_title || 'Không rõ'}</strong>`,
+            time: err.created_at,
+          });
+        } else {
+          activities.push({
+            type: 'error',
+            icon: 'fas fa-bug',
+            title: `Báo lỗi: <strong>${err.movie_title || 'Không rõ'}</strong> bởi ${err.user_name || 'Ẩn danh'}`,
+            time: err.created_at,
+          });
+        }
       });
     } catch (e) { /* Bỏ qua nếu bảng chưa có */ }
 
@@ -1527,14 +1563,22 @@ function filterAdminMovies(skipPageReset = false) {
 /**
  * Cập nhật thanh thống kê số lượng phim
  */
-function updateAdminMovieStats(moviesList) {
+async function updateAdminMovieStats(moviesList) {
     const totalEl = document.getElementById("statMoviesTotal");
     const singleEl = document.getElementById("statMoviesSingle");
     const seriesEl = document.getElementById("statMoviesSeries");
 
     if (!totalEl || !singleEl || !seriesEl) return;
 
-    const total = moviesList.length;
+    // Đếm tổng chính xác từ DB (không bị limit bởi mảng JS)
+    let total = moviesList.length;
+    try {
+        if (typeof supabase !== 'undefined') {
+            const { count } = await supabase.from('movies').select('*', { count: 'exact', head: true });
+            if (count !== null && count !== undefined) total = count;
+        }
+    } catch(e) { /* fallback dùng mảng */ }
+
     const singleCount = moviesList.filter(m => m.type === "single").length;
     const seriesCount = moviesList.filter(m => m.type === "series").length;
 
@@ -1726,26 +1770,80 @@ let allAdminMovies = [];
  */
 async function loadAdminMovies(skipPageReset = false) {
   const tbody = document.getElementById("adminMoviesTable");
+  
+  // Kiểm tra quyền hiển thị nút Xóa tất cả phim (chỉ Super Admin mới thấy)
+  const btnDeleteAll = document.getElementById("btnDeleteAllMovies");
+  if (btnDeleteAll) {
+      if (typeof currentUser !== 'undefined' && currentUser && currentUser.email === "huynhphutrong8223@gmail.com") {
+          btnDeleteAll.style.display = "inline-flex";
+      } else {
+          btnDeleteAll.style.display = "none";
+      }
+  }
+
   if (!supabase) return;
 
   try {
-    const { data: movies, error } = await supabase
-        .from('movies')
-        .select('*, episodes(id)')
-        .order('created_at', { ascending: false })
-        .limit(200);
+    // Load tất cả phim — chỉ select cột cần, KHÔNG join episodes (tránh lag)
+    // Supabase giới hạn 1000 rows/query nên loop batch
+    let allMoviesRaw = [];
+    const BATCH = 1000;
+    let from = 0;
+    let keepFetching = true;
+    while (keepFetching) {
+        const { data: batch, error: batchErr } = await supabase
+            .from('movies')
+            .select('id, title, origin_title, poster_url, background_url, type, status, year, quality, country_id, category_ids, total_episodes, price, rating, imdb_rating, api_url_backup, cast_data, tags, versions, part, series_id, duration, age_limit, description, created_at, updated_at')
+            .order('created_at', { ascending: false })
+            .range(from, from + BATCH - 1);
+        if (batchErr) throw batchErr;
+        if (!batch || batch.length === 0) break;
+        allMoviesRaw = allMoviesRaw.concat(batch);
+        if (batch.length < BATCH) break;
+        from += BATCH;
+    }
 
-    if (error) throw error;
-    
-    // Chuẩn hóa dữ liệu và đếm số tập
-    allAdminMovies = (movies || []).map(m => {
+    // Chuẩn hóa dữ liệu — dùng total_episodes sẵn có thay vì join đếm
+    allAdminMovies = allMoviesRaw.map(m => {
         const normalized = typeof normalizeMovieData === 'function' ? normalizeMovieData(m) : m;
-        // Đếm số tập thực tế từ join
-        if (m.episodes && Array.isArray(m.episodes)) {
-            normalized._episodeCount = m.episodes.length;
-        }
+        normalized._episodeCount = m.total_episodes || 0;
         return normalized;
     });
+
+    // [NEW] Lấy server info nhẹ: Chỉ fetch movie_id + sources từ episode đầu tiên
+    try {
+        let allFirstEps = [];
+        let epFrom = 0;
+        const EP_BATCH = 1000;
+        while (true) {
+            const { data: epBatch, error: epErr } = await supabase
+                .from('episodes')
+                .select('movie_id, sources')
+                .eq('episode_index', 0)
+                .range(epFrom, epFrom + EP_BATCH - 1);
+            if (epErr || !epBatch || epBatch.length === 0) break;
+            allFirstEps = allFirstEps.concat(epBatch);
+            if (epBatch.length < EP_BATCH) break;
+            epFrom += EP_BATCH;
+        }
+        // Gán _serverNames vào từng movie (chuẩn hóa tên: rỗng/Unknown → KKPhim)
+        const serverInfoMap = {};
+        allFirstEps.forEach(ep => {
+            if (ep.sources && Array.isArray(ep.sources)) {
+                const servers = [...new Set(ep.sources.map(s => {
+                    const name = (s.server || '').trim();
+                    return (!name || name === 'Unknown') ? 'KKPhim' : name;
+                }))];
+                serverInfoMap[ep.movie_id] = servers;
+            }
+        });
+        allAdminMovies.forEach(m => {
+            m._serverNames = serverInfoMap[m.id] || [];
+        });
+        console.log(`📡 Server info loaded for ${Object.keys(serverInfoMap).length} movies`);
+    } catch (e) {
+        console.warn('⚠️ Không load được server info:', e);
+    }
 
     if (typeof populateAdminMovieFilters === 'function') populateAdminMovieFilters();
     filterAdminMovies(skipPageReset);
@@ -1760,9 +1858,6 @@ async function loadAdminMovies(skipPageReset = false) {
     }
 
     renderRecentMovies();
-
-    const statTotal = document.getElementById("statTotalMovies");
-    if (statTotal) statTotal.textContent = allAdminMovies.length;
   } catch (error) {
     console.error("Lỗi load admin movies Supabase:", error);
   }
@@ -2653,6 +2748,73 @@ async function deleteMovie(movieId) {
     showLoading(false);
   }
 }
+
+/**
+ * Xóa toàn bộ phim trong Database (Làm sạch hoàn toàn)
+ */
+async function deleteAllMoviesConfirm() {
+  if (!supabase) return;
+
+  // Lớp bảo mật cấp 2: Kiểm tra cứng trong logic phòng trường hợp F12 hiện nút
+  if (!currentUser || currentUser.email !== "huynhphutrong8223@gmail.com") {
+      showNotification("Truy cập từ chối: Chỉ Super Admin mới có quyền thực hiện hành động này!", "error");
+      return;
+  }
+
+  const confirmText = await customPrompt("Bạn đang chuẩn bị xóa TOÀN BỘ phim trong hệ thống.\nHành động này KHÔNG THỂ HOÀN TÁC và sẽ xóa toàn bộ dữ liệu bao gồm cả Phim, Tập Phim, và File Ảnh R2 liên quan.\n\nĐể xác nhận, vui lòng gõ chính xác dòng chữ: XOA_TAT_CA", {
+      title: "CẢNH BÁO NGUY HIỂM",
+      placeholder: "Nhập XOA_TAT_CA",
+      confirmText: "Xóa Toàn Bộ",
+      cancelText: "Hủy"
+  });
+  
+  if (confirmText !== "XOA_TAT_CA") {
+      if (confirmText !== null) showNotification("Hủy xóa vì nhập sai mã xác nhận.", "info");
+      return;
+  }
+
+  try {
+    showLoading(true, "Đang xử lý dọn dẹp và xóa toàn bộ phim...");
+
+    // 1. Phải lấy toàn bộ DB để có ID và Link ảnh R2
+    const { data: movies, error: fetchErr } = await supabase.from('movies').select('id, poster_url, background_url');
+    if (fetchErr) throw fetchErr;
+
+    if (movies && movies.length > 0) {
+        // 2. Xóa ảnh R2 (Chạy batch song song 50 request cùng lúc)
+        showNotification(`Phát hiện ${movies.length} phim. Đang dọn dẹp file ảnh Cloudflare R2...`, "info");
+        const chunkSize = 50;
+        for (let i = 0; i < movies.length; i += chunkSize) {
+            const chunk = movies.slice(i, i + chunkSize);
+            await Promise.all(chunk.map(async (m) => {
+                if (m.poster_url) await window.deleteImageFromR2(m.poster_url);
+                if (m.background_url) await window.deleteImageFromR2(m.background_url);
+            }));
+        }
+
+        // 3. Xóa phim khỏi Database
+        showNotification("Hoàn tất dọn R2. Đang xóa bản ghi Database...", "info");
+        
+        // Supabase REST không cho phép delete all trực tiếp nếu thiếu where (bảo vệ an toàn). 
+        // Nên dùng `.in('id', chunkIDs)` để tuân thủ rule API. Bảng `episodes` sẽ tự động cascade delete (do RLS/Foreign Key cài sẵn).
+        for (let i = 0; i < movies.length; i += 200) {
+            const chunkIds = movies.slice(i, i + 200).map(m => m.id);
+            await supabase.from('movies').delete().in('id', chunkIds);
+        }
+    }
+
+    showNotification("Thành công! Đã xóa sạch toàn bộ phim và dọn dẹp Database.", "success");
+    notifyDataChange("movies"); 
+
+    if (typeof loadAdminMovies === 'function') await loadAdminMovies();
+  } catch (error) {
+    console.error("Lỗi xóa toàn bộ phim:", error);
+    showNotification("Lỗi quá trình xóa: " + (error.message || "Lỗi không xác định"), "error");
+  } finally {
+    showLoading(false);
+  }
+}
+
 /**
  * Lọc phim trong dropdown chọn phim (Quản lý Tập)
  */
@@ -2760,10 +2922,28 @@ function renderMovieSelectionGrid(movies) {
             statusHtml = `<span class="episode-badge episode-badge-full" style="background: linear-gradient(135deg, #2ecc71, #27ae60);">Full</span>`;
         }
 
+        // Badge Server - Dùng _serverNames đã preload
+        let serverBadgeHtml = "";
+        const SERVER_ORDER = { 'KKPhim': 1, 'OPhim': 2, 'NguonC': 3 };
+        if (m._serverNames && m._serverNames.length > 0) {
+            const SERVER_COLORS = { 1: '#3b82f6', 2: '#f59e0b', 3: '#a855f7' };
+            // Sắp xếp: server đã biết trước, chưa biết sau
+            const sorted = [...m._serverNames].sort((a, b) => (SERVER_ORDER[a] || 99) - (SERVER_ORDER[b] || 99));
+            let nextNum = Math.max(...Object.values(SERVER_ORDER), 0) + 1;
+            const badges = sorted.map(name => {
+                    let num = SERVER_ORDER[name];
+                    if (!num) { num = nextNum++; }
+                    const color = SERVER_COLORS[num] || '#6b7280';
+                    return `<span style="background: ${color}; color: #fff; font-size: 0.6rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">S${num}</span>`;
+                }).join(' ');
+            serverBadgeHtml = `<div style="position: absolute; bottom: 4px; left: 4px; display: flex; gap: 3px; flex-wrap: wrap;">${badges}</div>`;
+        }
+
         return `
             <div class="movie-selection-card" onclick="loadEpisodesForMovie('${m.id}')">
                 <div class="poster-wrapper">
                     ${statusHtml}
+                    ${serverBadgeHtml}
                     <img src="${m.posterUrl || m.poster_url || ''}" alt="${m.title}" loading="lazy" onerror="this.src='https://placehold.co/200x300?text=No+Poster'">
                 </div>
                 <div class="info">
@@ -3542,7 +3722,7 @@ async function processBulkDubbedLinks() {
 /**
  * Thêm một dòng nhập source video
  */
-function addSourceInput(type = "hls", source = "", label = "") {
+function addSourceInput(type = "hls", source = "", label = "", server = "KKPhim") {
   const container = document.getElementById("sourceListContainer");
   const id = new Date().getTime() + Math.random().toString(36).substr(2, 9);
   
@@ -3570,10 +3750,16 @@ function addSourceInput(type = "hls", source = "", label = "") {
   // Xác định emoji/màu cho label hiện tại
   const currentLabelObj = standardLabels.find(l => l.value === defaultLabel);
   const dotColor = currentLabelObj ? currentLabelObj.color : '#aaa';
-  const dotEmoji = currentLabelObj ? currentLabelObj.emoji : '⚪';
 
   const html = `
-    <div class="source-item" id="source-${id}" style="display: grid; grid-template-columns: 180px 100px 1fr auto; gap: 10px; align-items: center; background: rgba(255,255,255,0.06); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-color, #444);">
+    <div class="source-item" id="source-${id}" style="display: grid; grid-template-columns: 100px 140px 90px 1fr auto; gap: 8px; align-items: center; background: rgba(255,255,255,0.06); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-color, #444);">
+        <div>
+            <select class="form-select source-server" style="font-weight: bold;">
+                <option value="KKPhim" ${server === 'KKPhim' ? 'selected' : ''} style="color: #3b82f6;">S1 (KKPhim)</option>
+                <option value="OPhim" ${server === 'OPhim' ? 'selected' : ''} style="color: #f59e0b;">S2 (OPhim)</option>
+                <option value="NguonC" ${server === 'NguonC' ? 'selected' : ''} style="color: #10b981;">S3 (NguonC)</option>
+            </select>
+        </div>
         <div style="display: flex; align-items: center; gap: 6px;">
             <span class="source-dot" style="width: 10px; height: 10px; border-radius: 50%; background: ${dotColor}; display: inline-block; flex-shrink: 0;"></span>
             <select class="form-select source-label" style="flex: 1;">
@@ -3734,7 +3920,7 @@ function openEpisodeModal(index = null) {
       if (episode.sources && Array.isArray(episode.sources) && episode.sources.length > 0) {
         // Dữ liệu mới (Multi-source) - field chuẩn là 'source'
         episode.sources.forEach(src => {
-            addSourceInput(src.type, src.source || '', src.label);
+            addSourceInput(src.type, src.source || '', src.label, src.server || 'KKPhim');
         });
       } else {
         // Dữ liệu cũ (Single source) -> Convert sang 1 dòng source
@@ -3846,6 +4032,7 @@ async function handleEpisodeSubmit(event) {
   
   sourceItems.forEach(item => {
       sources.push({
+          server: item.querySelector(".source-server") ? item.querySelector(".source-server").value : 'KKPhim',
           label: item.querySelector(".source-label").value,
           type: item.querySelector(".source-type").value,
           source: item.querySelector(".source-url").value
@@ -5908,14 +6095,15 @@ function renderAdminPagination(containerId, totalItems, currentPage, perPage, ch
       </button>
     </div>
     <div class="pagination-jump">
-      <span>Đến trang</span>
+      <span>Trang ${currentPage} / ${totalPages}</span>
       <input type="number" class="jump-input" min="1" max="${totalPages}" value="${currentPage}" 
+        placeholder="Số trang"
         onkeydown="if(event.key==='Enter') { 
           const val = parseInt(this.value); 
           if(val >= 1 && val <= ${totalPages}) window.${changePageFuncName}(val);
-          else showNotification('Số trang không hợp lệ', 'warning');
+          else showNotification('Số trang không hợp lệ (1-${totalPages})', 'warning');
         }">
-      <button class="btn-jump" onclick="const val = parseInt(this.previousElementSibling.value); if(val >= 1 && val <= ${totalPages}) window.${changePageFuncName}(val); else showNotification('Số trang không hợp lệ', 'warning');">Vào</button>
+      <button class="btn-jump" onclick="const val = parseInt(this.previousElementSibling.value); if(val >= 1 && val <= ${totalPages}) window.${changePageFuncName}(val); else showNotification('Số trang không hợp lệ (1-${totalPages})', 'warning');">Vào</button>
     </div>
   `;
 

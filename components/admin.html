@@ -370,6 +370,22 @@
         </div>
         
         <div class="api-keys-wrapper">
+          <!-- Cloudflare R2 Config (đầu trang) -->
+          <div style="margin-bottom: 20px; padding: 18px 20px; background: rgba(0,210,255,0.04); border: 1px solid rgba(0,210,255,0.15); border-radius: 12px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <i class="fas fa-cloud-upload-alt" style="color:#00d2ff; font-size:1.2rem;"></i>
+                <div>
+                  <div style="font-weight:700; font-size:0.9rem; color:#fff;">Cloudflare R2 Worker</div>
+                  <div style="font-size:0.75rem; color:var(--text-muted);">Upload ảnh phim lên Cloudflare R2 Storage</div>
+                </div>
+              </div>
+              <button class="btn btn-sm" onclick="openR2ConfigModal()" title="Cấu hình R2 Worker URL" style="background:rgba(0,210,255,0.1);border:1px solid rgba(0,210,255,0.25);color:#00d2ff;font-size:0.75rem;">
+                <i class="fas fa-cog"></i> Cấu hình URL
+              </button>
+            </div>
+          </div>
+
           <div class="api-keys-header-info">
             <h3><i class="fas fa-shield-alt"></i> Quản lý khóa API Hệ thống</h3>
             <p>Tại đây bạn có thể quản lý các API Key được dùng trên toàn trạm phim. Các key quan trọng (Cơ sở dữ liệu, Xác thực) bắt buộc phải cấu hình trực tiếp qua code File để đảm bảo an toàn kết nối, chỉ cho phép hiển thị. Các key mở rộng có thể được thay đổi theo thời gian thực.</p>
@@ -506,9 +522,12 @@
             <i class="fas fa-chevron-right"></i>
           </button>
           <h2 class="admin-panel-title">Quản lý Phim</h2>
-          <div class="header-actions">
+          <div class="header-actions" style="display: flex; gap: 8px;">
             <button class="btn btn-secondary" onclick="syncAllMoviesActors()" title="Đồng bộ ID diễn viên cho toàn bộ phim">
               <i class="fas fa-sync-alt"></i> Đồng bộ Diễn viên
+            </button>
+            <button id="btnDeleteAllMovies" class="btn" onclick="deleteAllMoviesConfirm()" title="Làm sạch Database - Xóa toàn bộ phim" style="display: none; background-color: rgba(229, 9, 20, 0.2); color: #ff4444; border: 1px solid rgba(229, 9, 20, 0.4);">
+              <i class="fas fa-bomb"></i> Xóa tất cả phim
             </button>
             <button class="btn btn-primary" onclick="openMovieModal()">
               <i class="fas fa-plus"></i> Thêm phim mới
@@ -2110,6 +2129,22 @@
             </div>
           </div>
 
+          <!-- Tìm kiếm Keyword API -->
+          <div class="api-filter-row" style="margin-bottom: 15px;">
+            <div class="api-filter-group" style="flex: 1;">
+              <label class="api-label">Tìm kiếm phim (Bỏ trống để xem danh sách mới nhất)</label>
+              <div class="api-search-wrapper" style="position: relative; display: flex; gap: 0;">
+                <div style="position: relative; flex: 1;">
+                  <input type="text" class="form-input" id="apiSearchKeyword" onkeypress="if(event.key === 'Enter') callApiList()" placeholder="Nhập tên phim cần tìm kiếm trực tiếp trên Nguồn API..." style="width: 100%; padding-left: 40px; padding-right: 15px; border-radius: 8px 0 0 8px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-right: none; color: #fff; height: 42px;">
+                  <i class="fas fa-search" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.4);"></i>
+                </div>
+                <button type="button" onclick="const _k=document.getElementById('apiSearchKeyword'); if(!_k||!_k.value.trim()){if(typeof showNotification==='function')showNotification('Vui lòng nhập tên phim để tìm kiếm!','warning');_k&&_k.focus();return;} callApiList();" style="display: inline-flex; align-items: center; gap: 6px; padding: 0 18px; height: 42px; border: none; border-radius: 0 8px 8px 0; background: linear-gradient(135deg, #00d2ff, #3a7bd5); color: #fff; font-weight: 600; font-size: 0.82rem; cursor: pointer; white-space: nowrap; transition: filter 0.2s;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter='brightness(1)'">
+                  <i class="fas fa-search"></i> Tìm kiếm
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Bộ lọc tham số -->
           <div class="api-filter-row" id="apiFilterRow">
             <div class="api-filter-group">
@@ -2155,7 +2190,7 @@
             </div>
             <div class="api-filter-group api-filter-action">
               <label class="api-label">&nbsp;</label>
-              <button class="btn btn-primary api-call-btn" onclick="callApiList()" id="btnCallApi">
+              <button class="btn btn-primary api-call-btn" onclick="const _s=document.getElementById('apiSearchKeyword'); if(_s) _s.value=''; callApiList();" id="btnCallApi">
                 <i class="fas fa-bolt"></i> Gọi API
               </button>
             </div>
@@ -2233,12 +2268,28 @@
             </button>
             <!-- END NÚT TEST -->
 
+            <!-- NÚT QUÉT ĐA NGUỒN (Bulk Scan) -->
+            <button id="btnBulkScanSources" onclick="bulkScanAllMoviesSources()"
+              title="Quét tất cả phim hiện có trên web, bổ sung nguồn từ mọi API"
+              style="font-size:0.72rem;font-weight:700;padding:4px 11px;border-radius:8px;cursor:pointer;border:1px solid rgba(16,185,129,0.4);background:rgba(16,185,129,0.1);color:#10b981;white-space:nowrap;transition:all 0.2s;">
+              <i class="fas fa-satellite-dish"></i> Quét Đa Nguồn
+            </button>
+            <button id="btnAbortBulkScan" onclick="abortBulkScan()"
+              style="display:none;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,107,107,0.3);cursor:pointer;background:rgba(255,107,107,0.12);color:#ff6b6b;white-space:nowrap;">
+              <i class="fas fa-stop-circle"></i> Dừng quét
+            </button>
+
+            <!-- NÚT SỬA SERVER RỖNG -->
+            <button id="btnFixEmptyServers" onclick="fixEmptyServerNames()"
+              title="Sửa tất cả tập phim có server rỗng hoặc sai → Detect lại đúng chuẩn"
+              style="font-size:0.72rem;font-weight:700;padding:4px 11px;border-radius:8px;cursor:pointer;border:1px solid rgba(59,130,246,0.4);background:rgba(59,130,246,0.1);color:#3b82f6;white-space:nowrap;transition:all 0.2s;">
+              <i class="fas fa-wrench"></i> Fix Server rỗng
+            </button>
+
             <button class="btn btn-sm api-r2-toggle-btn active" id="btnToggleR2Mode" onclick="toggleImportR2Mode()" title="Bật/tắt upload ảnh lên Cloudflare R2">
               <i class="fas fa-cloud-upload-alt"></i> Ảnh: Cloudflare R2
             </button>
-            <button class="btn btn-sm" onclick="openR2ConfigModal()" title="Cấu hình R2 Worker URL" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:var(--text-muted);">
-              <i class="fas fa-cog"></i>
-            </button>
+
           </div>
 
         </div>
@@ -2284,6 +2335,27 @@
 
           <!-- Tab: Grid Card -->
           <div class="api-tab-content active" id="apiTabGrid">
+            <!-- Panel Log Tiến Trình Import -->
+            <div id="importProgressPanel" style="display:none; margin-bottom: 16px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; backdrop-filter: blur(8px);">
+              <div style="display:flex; align-items:center; justify-content:space-between; padding: 10px 16px; background: rgba(59,130,246,0.15); border-bottom: 1px solid rgba(255,255,255,0.06);">
+                <span style="font-weight:700; font-size:0.82rem; color:#60a5fa; display:flex; align-items:center; gap:8px;">
+                  <i class="fas fa-terminal"></i> Tiến trình Import
+                  <span id="importProgressSpinner" style="display:none;"><i class="fas fa-spinner fa-spin" style="color:#60a5fa;"></i></span>
+                </span>
+                <div style="display:flex; gap:6px;">
+                  <button onclick="document.getElementById('importLogBody').style.display = document.getElementById('importLogBody').style.display==='none'?'block':'none';" style="background:none;border:none;color:rgba(255,255,255,0.5);cursor:pointer;font-size:0.75rem;padding:2px 6px;" title="Thu gọn / Mở rộng">
+                    <i class="fas fa-chevron-up"></i>
+                  </button>
+                  <button onclick="document.getElementById('importProgressPanel').style.display='none';" style="background:none;border:none;color:rgba(255,255,255,0.4);cursor:pointer;font-size:0.8rem;padding:2px 6px;" title="Đóng">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+              </div>
+              <div id="importLogBody" style="max-height: 220px; overflow-y: auto; padding: 8px 12px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.72rem; line-height: 1.7;">
+                <!-- Log entries sẽ được JS inject vào đây -->
+              </div>
+            </div>
+
             <div id="apiMovieGrid" class="api-movie-grid">
               <!-- Trạng thái rỗng ban đầu -->
               <div class="api-empty-state" id="apiEmptyState">

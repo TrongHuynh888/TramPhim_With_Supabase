@@ -23,6 +23,10 @@ const API_PROVIDERS = {
             if (year) url += `&year=${year}`;
             return url;
         },
+        // Tạo URL tìm kiếm phim bằng từ khóa
+        buildSearchUrl(keyword, page = 1) {
+            return `${this.baseUrl}/v1/api/tim-kiem?keyword=${encodeURIComponent(keyword)}&limit=24&page=${page}`;
+        },
         // Tạo URL gọi chi tiết phim
         buildDetailUrl(slug) {
             return `${this.baseUrl}/phim/${slug}`;
@@ -73,13 +77,191 @@ const API_PROVIDERS = {
         ],
     },
     // ─────────────────────────────────────────────────────────────
-    // Thêm nguồn mới ở đây theo cùng cấu trúc trên. Ví dụ:
-    // ophim: {
-    //   id: 'ophim', name: 'OPhim', color: '#f59e0b', baseUrl: 'https://ophim1.com',
-    //   buildListUrl(p) { ... }, buildDetailUrl(slug) { ... },
-    //   mapItem(raw) { ... }, parseListResponse(data) { ... }, typeOptions: [...],
-    // },
+    // NGUỒN 2: OPhim (ophim1.com) — cấu trúc tương tự KKPhim
     // ─────────────────────────────────────────────────────────────
+    ophim: {
+        id: 'ophim',
+        name: 'OPhim',
+        color: '#f59e0b',
+        baseUrl: 'https://ophim1.com',
+        cdnImgUrl: 'https://img.ophim.live/uploads/movies',
+        badge: 'FREE',
+        // Tạo URL gọi danh sách phim
+        buildListUrl(params) {
+            const { type, lang, year, limit, page } = params;
+            let url = `${this.baseUrl}/v1/api/danh-sach/${type}?page=${page}&sort_field=modified.time&sort_type=desc&limit=${limit}`;
+            if (lang) url += `&sort_lang=${lang}`;
+            if (year) url += `&year=${year}`;
+            return url;
+        },
+        // Tạo URL tìm kiếm phim bằng từ khóa
+        buildSearchUrl(keyword, page = 1) {
+            return `${this.baseUrl}/v1/api/tim-kiem?keyword=${encodeURIComponent(keyword)}&limit=24&page=${page}`;
+        },
+        // Tạo URL gọi chi tiết phim
+        buildDetailUrl(slug) {
+            return `${this.baseUrl}/phim/${slug}`;
+        },
+        // Build URL ảnh: OPhim trả về tên file, cần ghép với CDN
+        buildImgUrl(url) {
+            if (!url) return '';
+            if (url.startsWith('http')) return url;
+            return `${this.cdnImgUrl}/${url}`;
+        },
+        // Chuẩn hóa item dữ liệu về schema chung
+        mapItem(raw) {
+            return {
+                slug: raw.slug,
+                name: raw.name,
+                origin_name: raw.origin_name || '',
+                poster: this.buildImgUrl(raw.poster_url) || this.buildImgUrl(raw.thumb_url),
+                thumb: this.buildImgUrl(raw.thumb_url),
+                year: raw.year,
+                type: raw.type,
+                lang: raw.lang || '',
+                status: raw.episode_current || '',
+                category: (raw.category || []).map(c => c.name).join(', '),
+                country: (raw.country || []).map(c => c.name).join(', '),
+            };
+        },
+        // Chuẩn hóa response list — cấu trúc giống KKPhim
+        parseListResponse(data) {
+            const d = data.data || {};
+            const pagination = d.params?.pagination || {};
+            return {
+                items: (d.items || []).map(i => this.mapItem(i)),
+                totalItems: pagination.totalItems || 0,
+                totalPages: pagination.totalPages || Math.ceil((pagination.totalItems || 0) / (pagination.totalItemsPerPage || 24)),
+                currentPage: pagination.currentPage || 1,
+            };
+        },
+        // Kiểu danh sách hỗ trợ (giống KKPhim)
+        typeOptions: [
+            { value: 'phim-bo', label: 'Phim bộ' },
+            { value: 'phim-le', label: 'Phim lẻ' },
+            { value: 'tv-shows', label: 'TV Shows' },
+            { value: 'hoat-hinh', label: 'Hoạt hình' },
+            { value: 'phim-vietsub', label: 'Vietsub' },
+            { value: 'phim-thuyet-minh', label: 'Thuyết minh' },
+            { value: 'phim-long-tieng', label: 'Lồng tiếng' },
+        ],
+    },
+    // ─────────────────────────────────────────────────────────────
+    // NGUỒN 3: NguonC (phim.nguonc.com) — cấu trúc khác biệt
+    // ─────────────────────────────────────────────────────────────
+    nguonc: {
+        id: 'nguonc',
+        name: 'NguonC',
+        color: '#10b981',
+        baseUrl: 'https://phim.nguonc.com',
+        badge: 'FREE',
+        // Tạo URL gọi danh sách phim
+        buildListUrl(params) {
+            const { type, lang, year, limit, page } = params;
+            let url = `${this.baseUrl}/api/films/danh-sach/${type}?page=${page}`;
+            // NguonC không hỗ trợ limit/lang/year qua query params
+            return url;
+        },
+        // Tạo URL gọi tìm kiếm phim
+        buildSearchUrl(keyword, page = 1) {
+            return `${this.baseUrl}/api/films/search?keyword=${encodeURIComponent(keyword)}&page=${page}`;
+        },
+        // Tạo URL gọi chi tiết phim
+        buildDetailUrl(slug) {
+            return `${this.baseUrl}/api/film/${slug}`;
+        },
+        // Build URL ảnh: NguonC trả URL đầy đủ, không cần ghép CDN
+        buildImgUrl(url) {
+            return url || '';
+        },
+        // Chuẩn hóa item dữ liệu về schema chung
+        mapItem(raw) {
+            return {
+                slug: raw.slug,
+                name: raw.name,
+                origin_name: raw.original_name || raw.origin_name || '',
+                poster: raw.poster_url || raw.thumb_url || '',
+                thumb: raw.thumb_url || '',
+                year: this._extractYear(raw),
+                type: this._detectType(raw),
+                lang: raw.language || '',
+                status: raw.current_episode || '',
+                category: this._extractCategories(raw),
+                country: this._extractCountry(raw),
+            };
+        },
+        // Trích xuất năm từ category group "Năm"
+        _extractYear(raw) {
+            if (raw.year) return raw.year;
+            const cat = raw.category;
+            if (!cat) return '';
+            for (const key of Object.keys(cat)) {
+                const group = cat[key];
+                if (group?.group?.name === 'Năm' && group.list?.length) {
+                    return parseInt(group.list[0].name) || '';
+                }
+            }
+            return '';
+        },
+        // Detect loại phim từ category group "Định dạng"
+        _detectType(raw) {
+            const cat = raw.category;
+            if (!cat) return 'series';
+            for (const key of Object.keys(cat)) {
+                const group = cat[key];
+                if (group?.group?.name === 'Định dạng' && group.list?.length) {
+                    const names = group.list.map(l => l.name?.toLowerCase());
+                    if (names.some(n => n?.includes('phim lẻ') || n?.includes('phim le'))) return 'single';
+                }
+            }
+            return 'series';
+        },
+        // Trích xuất thể loại từ category group "Thể loại"
+        _extractCategories(raw) {
+            const cat = raw.category;
+            if (!cat) return '';
+            for (const key of Object.keys(cat)) {
+                const group = cat[key];
+                if (group?.group?.name === 'Thể loại' && group.list?.length) {
+                    return group.list.map(l => l.name).join(', ');
+                }
+            }
+            return '';
+        },
+        // Trích xuất quốc gia từ category group "Quốc gia"
+        _extractCountry(raw) {
+            const cat = raw.category;
+            if (!cat) return '';
+            for (const key of Object.keys(cat)) {
+                const group = cat[key];
+                if (group?.group?.name === 'Quốc gia' && group.list?.length) {
+                    return group.list.map(l => l.name).join(', ');
+                }
+            }
+            return '';
+        },
+        // Chuẩn hóa response list — NguonC cấu trúc khác biệt
+        parseListResponse(data) {
+            const paginate = data.paginate || {};
+            return {
+                items: (data.items || []).map(i => this.mapItem(i)),
+                totalItems: paginate.total_items || 0,
+                totalPages: paginate.total_page || 1,
+                currentPage: paginate.current_page || 1,
+            };
+        },
+        // Kiểu danh sách hỗ trợ
+        typeOptions: [
+            { value: 'phim-bo', label: 'Phim bộ' },
+            { value: 'phim-le', label: 'Phim lẻ' },
+            { value: 'phim-dang-chieu', label: 'Đang chiếu' },
+            { value: 'phim-sap-chieu', label: 'Sắp chiếu' },
+            { value: 'phim-hoat-hinh', label: 'Hoạt hình' },
+            { value: 'phim-vietsub', label: 'Vietsub' },
+            { value: 'phim-thuyet-minh', label: 'Thuyết minh' },
+            { value: 'phim-long-tieng', label: 'Lồng tiếng' },
+        ],
+    },
 };
 
 /** State nội bộ của API Explorer */
@@ -197,35 +379,91 @@ async function callApiList() {
         page: _apiState.currentPage,
     };
 
+    const keyword = document.getElementById('apiSearchKeyword') ? document.getElementById('apiSearchKeyword').value.trim() : '';
+
     const startTime = performance.now();
 
     try {
-        const url = provider.buildListUrl(params);
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const raw = await res.json();
+        if (keyword) {
+            // TÌM KIẾM ĐA NGUỒN (MULTI-PROVIDER SEARCH)
+            const fetchPromises = Object.values(API_PROVIDERS).map(async (prov) => {
+                try {
+                    const url = prov.buildSearchUrl(keyword, params.page);
+                    const res = await fetch(url);
+                    if (!res.ok) return null;
+                    const raw = await res.json();
+                    const parsed = prov.parseListResponse(raw);
+                    // Gắn tag nguồn vào từng item để UI biết nó của API nào
+                    parsed.items.forEach(i => i._providerId = prov.id);
+                    return parsed;
+                } catch (e) {
+                    console.warn(`[Multi-Search] Lỗi nguồn ${prov.id}:`, e);
+                    return null;
+                }
+            });
 
-        const elapsed = Math.round(performance.now() - startTime);
-        _apiState.lastRawData = raw;
+            const results = await Promise.all(fetchPromises);
+            
+            let allItems = [];
+            let totalItemsCount = 0;
+            let maxTotalPages = 1;
 
-        const parsed = provider.parseListResponse(raw);
-        _apiState.totalPages = parsed.totalPages;
+            results.forEach(res => {
+                if (res && res.items) {
+                    allItems = allItems.concat(res.items);
+                    totalItemsCount += res.totalItems;
+                    if (res.totalPages > maxTotalPages) maxTotalPages = res.totalPages;
+                }
+            });
 
-        // Cập nhật stats
-        document.getElementById('apiStatsRow').style.display = 'flex';
-        document.getElementById('apiStatCount').textContent = parsed.items.length;
-        document.getElementById('apiStatTotalPages').textContent = parsed.totalPages;
-        document.getElementById('apiStatTotalItems').textContent = parsed.totalItems.toLocaleString();
-        document.getElementById('apiResponseTime').textContent = `${elapsed}ms`;
-        document.getElementById('apiCurrentPage').textContent = `Trang ${_apiState.currentPage}`;
-        document.getElementById('btnApiPrev').disabled = _apiState.currentPage <= 1;
-        document.getElementById('btnApiNext').disabled = _apiState.currentPage >= _apiState.totalPages;
+            const elapsed = Math.round(performance.now() - startTime);
+            _apiState.totalPages = maxTotalPages;
 
-        // Render card phim
-        renderApiMovieCards(parsed.items);
+            // Cập nhật stats
+            document.getElementById('apiStatsRow').style.display = 'flex';
+            document.getElementById('apiStatCount').textContent = allItems.length;
+            document.getElementById('apiStatTotalPages').textContent = maxTotalPages;
+            document.getElementById('apiStatTotalItems').innerHTML = `${totalItemsCount.toLocaleString()} <span style="font-size:0.7rem; opacity:0.7">(Đa nguồn)</span>`;
+            document.getElementById('apiResponseTime').textContent = `${elapsed}ms`;
+            document.getElementById('apiCurrentPage').textContent = `Trang ${_apiState.currentPage}`;
+            document.getElementById('btnApiPrev').disabled = _apiState.currentPage <= 1;
+            document.getElementById('btnApiNext').disabled = _apiState.currentPage >= _apiState.totalPages;
 
-        // Cập nhật JSON viewer
-        document.getElementById('apiJsonViewer').innerHTML = _syntaxHighlightJson(JSON.stringify(raw, null, 2));
+            // Render card phim hỗn hợp
+            renderApiMovieCards(allItems);
+            
+            document.getElementById('apiJsonViewer').innerHTML = _syntaxHighlightJson(JSON.stringify({ multi_search_results: allItems.length, timestamp: new Date().toISOString() }, null, 2));
+
+        } else {
+            // LOAD DANH SÁCH MỘT NGUỒN (SINGLE-PROVIDER LIST)
+            const provider = API_PROVIDERS[_apiState.currentProvider];
+            const url = provider.buildListUrl(params);
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const raw = await res.json();
+
+            const elapsed = Math.round(performance.now() - startTime);
+            _apiState.lastRawData = raw;
+
+            const parsed = provider.parseListResponse(raw);
+            _apiState.totalPages = parsed.totalPages;
+
+            // Cập nhật stats
+            document.getElementById('apiStatsRow').style.display = 'flex';
+            document.getElementById('apiStatCount').textContent = parsed.items.length;
+            document.getElementById('apiStatTotalPages').textContent = parsed.totalPages;
+            document.getElementById('apiStatTotalItems').textContent = parsed.totalItems.toLocaleString();
+            document.getElementById('apiResponseTime').textContent = `${elapsed}ms`;
+            document.getElementById('apiCurrentPage').textContent = `Trang ${_apiState.currentPage}`;
+            document.getElementById('btnApiPrev').disabled = _apiState.currentPage <= 1;
+            document.getElementById('btnApiNext').disabled = _apiState.currentPage >= _apiState.totalPages;
+
+            // Render card phim
+            renderApiMovieCards(parsed.items);
+
+            // Cập nhật JSON viewer
+            document.getElementById('apiJsonViewer').innerHTML = _syntaxHighlightJson(JSON.stringify(raw, null, 2));
+        }
 
     } catch (err) {
         console.error('[API Explorer] Lỗi:', err);
@@ -268,7 +506,7 @@ function renderApiMovieCards(items) {
         const card = document.createElement('div');
         card.className = 'api-movie-card';
         card.title = item.name;
-        card.onclick = () => callApiDetail(item.slug);
+        card.onclick = () => callApiDetail(item.slug, item._providerId);
 
         // --- Poster: dùng DOM img để gán onerror an toàn ---
         if (item.poster) {
@@ -302,11 +540,18 @@ function renderApiMovieCards(items) {
         const typeClass = item.type === 'series' ? 'type-series' : 'type-single';
         const typeLabel = item.type === 'series' ? 'Bộ' : 'Lẻ';
 
+        let providerBadgeHtml = '';
+        if (item._providerId && API_PROVIDERS[item._providerId]) {
+            const p = API_PROVIDERS[item._providerId];
+            providerBadgeHtml = `<span class="api-badge" style="background:${p.color}20;color:${p.color};font-size:0.65rem;border:1px solid ${p.color}40;margin-right:4px;">${p.name}</span>`;
+        }
+
         const info = document.createElement('div');
         info.className = 'api-movie-card-info';
         info.innerHTML = `
             <div class="api-movie-card-name">${item.name}</div>
             <div class="api-movie-card-meta">
+                ${providerBadgeHtml}
                 <span class="api-badge ${typeClass}">${typeLabel}</span>
                 ${item.year ? `<span class="api-badge year">${item.year}</span>` : ''}
                 ${item.status ? `<span class="api-badge" style="background:rgba(52,211,153,0.1);color:#34d399;font-size:0.65rem;">${item.status}</span>` : ''}
@@ -318,10 +563,11 @@ function renderApiMovieCards(items) {
 }
 
 /**
- * Gọi API chi tiết 1 phim theo slug.
+ * Gọi API chi tiết 1 phim theo slug và nguồn chỉ định.
  */
-async function callApiDetail(slug) {
-    const provider = API_PROVIDERS[_apiState.currentProvider];
+async function callApiDetail(slug, forceProviderId = null) {
+    const providerId = forceProviderId || _apiState.currentProvider;
+    const provider = API_PROVIDERS[providerId];
     if (!provider) return;
 
     const drawer = document.getElementById('apiDetailDrawer');
@@ -335,6 +581,10 @@ async function callApiDetail(slug) {
         <i class="fas fa-spinner fa-spin fa-2x"></i>
         <p style="margin-top:12px;">Đang tải chi tiết phim...</p>
     </div>`;
+
+    // Gán dữ liệu cho việc Save/Sync trong Drawer biết nó thuộc nguồn API nào
+    drawer.dataset.currentSlug = slug;
+    drawer.dataset.currentProviderId = providerId;
 
     drawer.classList.add('open');
     overlay.classList.add('open');
@@ -362,46 +612,112 @@ async function callApiDetail(slug) {
 
 /**
  * Render nội dung chi tiết phim vào drawer.
+ * Hỗ trợ multi-provider: KKPhim, OPhim, NguonC.
  */
 function renderApiMovieDetail(raw, provider) {
     const titleEl = document.getElementById('apiDetailTitle');
     const body = document.getElementById('apiDetailBody');
     if (!body) return;
 
-    // KKPhim detail trả về { movie: {...}, episodes: [...] }
+    // Lấy thông tin phim: KKPhim/OPhim trả { movie: {}, episodes: [] }, NguonC trả { movie: { episodes: [] } }
     const movie = raw.movie || raw;
-    const episodes = raw.episodes || [];
+    const episodes = raw.episodes || movie.episodes || [];
 
     const name = movie.name || movie.title || 'Không rõ';
     if (titleEl) titleEl.textContent = name;
 
-    // Build URL ảnh đúng: detect xem đã là URL đầy đủ hay chỉ path
-    function _buildImg(u) { if (!u) return ''; return u.startsWith('http') ? u : `https://phimimg.com/${u}`; }
+    // Build URL ảnh: ưu tiên dùng provider.buildImgUrl nếu có, fallback phimimg.com
+    function _buildImg(u) {
+        if (!u) return '';
+        if (typeof provider.buildImgUrl === 'function') return provider.buildImgUrl(u);
+        return u.startsWith('http') ? u : `https://phimimg.com/${u}`;
+    }
     const posterUrl = _buildImg(movie.poster_url) || _buildImg(movie.thumb_url);
-    const thumbUrl  = _buildImg(movie.thumb_url)  || posterUrl;  // ảnh nền/background
-    const categories = (movie.category || []).map(c => c.name).join(', ') || 'N/A';
-    const countries = (movie.country || []).map(c => c.name).join(', ') || 'N/A';
-    const actors = (movie.actor || []).join(', ') || 'N/A';
-    const directors = (movie.director || []).join(', ') || 'N/A';
+    const thumbUrl  = _buildImg(movie.thumb_url)  || posterUrl;
+
+    // Categories: hỗ trợ cả array (KKPhim/OPhim) lẫn group object (NguonC)
+    let categories = 'N/A';
+    if (Array.isArray(movie.category)) {
+        categories = movie.category.map(c => c.name).join(', ') || 'N/A';
+    } else if (movie.category && typeof movie.category === 'object') {
+        const catArr = [];
+        for (const key of Object.keys(movie.category)) {
+            const group = movie.category[key];
+            if (group?.group?.name === 'Thể loại' && group.list?.length) {
+                group.list.forEach(l => catArr.push(l.name));
+            }
+        }
+        categories = catArr.join(', ') || 'N/A';
+    }
+
+    // Countries: hỗ trợ array lẫn group object
+    let countries = 'N/A';
+    if (Array.isArray(movie.country)) {
+        countries = movie.country.map(c => c.name).join(', ') || 'N/A';
+    } else if (movie.category && typeof movie.category === 'object') {
+        const countryArr = [];
+        for (const key of Object.keys(movie.category)) {
+            const group = movie.category[key];
+            if (group?.group?.name === 'Quốc gia' && group.list?.length) {
+                group.list.forEach(l => countryArr.push(l.name));
+            }
+        }
+        if (countryArr.length) countries = countryArr.join(', ');
+    }
+
+    // Actors + Directors: hỗ trợ array (KKPhim/OPhim) lẫn string (NguonC)
+    let actors = 'N/A';
+    if (Array.isArray(movie.actor)) {
+        actors = movie.actor.join(', ') || 'N/A';
+    } else if (typeof movie.casts === 'string' && movie.casts) {
+        actors = movie.casts;
+    }
+
+    let directors = 'N/A';
+    if (Array.isArray(movie.director)) {
+        directors = movie.director.join(', ') || 'N/A';
+    } else if (typeof movie.director === 'string' && movie.director) {
+        directors = movie.director;
+    }
+
+    // Normalize episodes: NguonC dùng items[] thay vì server_data[], field m3u8/embed thay link_m3u8/link_embed
+    const normalizedEpisodes = episodes.map(srv => {
+        const srvData = srv.server_data || srv.items || [];
+        return {
+            server_name: srv.server_name || 'Server',
+            server_data: srvData.map(ep => ({
+                name: ep.name,
+                link_m3u8: ep.link_m3u8 || ep.m3u8 || '',
+                link_embed: ep.link_embed || ep.embed || '',
+            })),
+        };
+    });
 
     let totalEps = 0;
     let serverNames = [];
-    episodes.forEach(srv => {
-        serverNames.push(srv.server_name || 'Server');
-        totalEps = Math.max(totalEps, (srv.server_data || []).length);
+    normalizedEpisodes.forEach(srv => {
+        serverNames.push(srv.server_name);
+        totalEps = Math.max(totalEps, srv.server_data.length);
     });
 
-    const descShort = (movie.content || '').substring(0, 300) + (movie.content?.length > 300 ? '...' : '');
+    // Mô tả ngắn: hỗ trợ cả content (KKPhim/OPhim) và description (NguonC)
+    const movieDesc = movie.content || movie.description || '';
+    const descShort = movieDesc.substring(0, 300) + (movieDesc.length > 300 ? '...' : '');
+
+    // Tổng tập: hỗ trợ cả 2 field name
+    const movieTotalEps = movie.episode_total || movie.total_episodes || totalEps || 'N/A';
+    const epCurrent = movie.episode_current || movie.current_episode || 'N/A';
+    const movieLang = movie.lang || movie.language || '';
+    const movieOriginName = movie.origin_name || movie.original_name || '';
 
     // --- Render TẤT CẢ servers + link video (compact grid) ---
     let allServersHtml = '';
-    episodes.forEach(server => {
-        const srvName = server.server_name || 'Server';
-        const srvData = server.server_data || [];
+    normalizedEpisodes.forEach(server => {
+        const srvName = server.server_name;
+        const srvData = server.server_data;
         if (srvData.length === 0) return;
 
         const epCards = srvData.map(ep => {
-            // Tránh "Tập Tập": ep.name đôi khi đã có chữ "Tập"
             const epLabel = /^tập\s*/i.test(String(ep.name)) ? ep.name : `Tập ${ep.name}`;
             const m3u8  = (ep.link_m3u8  || '').replace(/'/g, "\\'");
             const embed = (ep.link_embed || '').replace(/'/g, "\\'");
@@ -422,40 +738,39 @@ function renderApiMovieDetail(raw, provider) {
         </div>`;
     });
 
+    const safePostUrl = posterUrl ? posterUrl.replace(/'/g, "\\'") : '';
+    const safeThumbUrl = thumbUrl ? thumbUrl.replace(/'/g, "\\'") : '';
+    const safeDetailUrl = provider.buildDetailUrl(movie.slug).replace(/'/g, "\\'");
+
     body.innerHTML = `
-        <!-- Poster + Ảnh nền + Copy links -->
         <div class="api-img-preview-row">
-            <!-- Poster -->
             <div class="api-img-preview-item">
                 <div class="api-img-preview-label">Poster</div>
                 ${posterUrl
                     ? `<img class="api-detail-poster" src="${posterUrl}" alt="poster" onerror="this.style.display='none'">`
                     : '<div class="api-detail-poster" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);"><i class="fas fa-image"></i></div>'}
-                ${posterUrl ? `<button class="api-img-copy-btn" onclick="_copyEpLink('${posterUrl.replace(/'/g,"\\'")}\'','Poster')" title="${posterUrl}"><i class="fas fa-copy"></i> Copy Poster</button>` : ''}
+                ${posterUrl ? `<button class="api-img-copy-btn" onclick="_copyEpLink('${safePostUrl}','Poster')" title="${posterUrl}"><i class="fas fa-copy"></i> Copy Poster</button>` : ''}
             </div>
-            <!-- Background / Thumb -->
             <div class="api-img-preview-item">
                 <div class="api-img-preview-label">Background</div>
                 ${thumbUrl
                     ? `<img class="api-detail-thumb" src="${thumbUrl}" alt="background" onerror="this.style.display='none'">`
                     : '<div class="api-detail-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);"><i class="fas fa-image"></i></div>'}
-                ${thumbUrl ? `<button class="api-img-copy-btn" onclick="_copyEpLink('${thumbUrl.replace(/'/g,"\\'")}\'','Background')" title="${thumbUrl}"><i class="fas fa-copy"></i> Copy Background</button>` : ''}
+                ${thumbUrl ? `<button class="api-img-copy-btn" onclick="_copyEpLink('${safeThumbUrl}','Background')" title="${thumbUrl}"><i class="fas fa-copy"></i> Copy Background</button>` : ''}
             </div>
-            <!-- Meta chính -->
             <div class="api-detail-meta" style="flex:2;">
                 <div class="api-detail-title-big">${name}</div>
-                ${movie.origin_name ? `<div class="api-detail-subtitle">${movie.origin_name}</div>` : ''}
+                ${movieOriginName ? `<div class="api-detail-subtitle">${movieOriginName}</div>` : ''}
                 <div class="api-detail-badges">
                     ${movie.year ? `<span class="api-badge year">${movie.year}</span>` : ''}
                     ${movie.type === 'series' ? `<span class="api-badge type-series">Phim bộ</span>` : `<span class="api-badge type-single">Phim lẻ</span>`}
-                    ${movie.lang ? `<span class="api-badge">${movie.lang}</span>` : ''}
+                    ${movieLang ? `<span class="api-badge">${movieLang}</span>` : ''}
                     ${movie.quality ? `<span class="api-badge" style="background:rgba(251,191,36,0.15);color:#fbbf24;">${movie.quality}</span>` : ''}
-                    <span class="api-badge" style="background:rgba(52,211,153,0.1);color:#34d399;">${movie.episode_current || 'N/A'}</span>
+                    <span class="api-badge" style="background:rgba(52,211,153,0.1);color:#34d399;">${epCurrent}</span>
                 </div>
             </div>
         </div>
 
-        <!-- Fields ngang -->
         <div class="api-detail-section">
             <h4><i class="fas fa-info-circle"></i> Thông tin</h4>
             <div class="api-detail-field-grid">
@@ -466,7 +781,7 @@ function renderApiMovieDetail(raw, provider) {
                 <div class="api-detail-field" style="grid-column:1/-1;">
                     <div class="field-label" style="display:flex;align-items:center;justify-content:space-between;">
                         Link API
-                        <span onclick="_copyEpLink('${provider.buildDetailUrl(movie.slug)}','API')"
+                        <span onclick="_copyEpLink('${safeDetailUrl}','API')"
                               style="font-size:0.7rem;color:#00d2ff;cursor:pointer;display:flex;align-items:center;gap:4px;background:rgba(0,210,255,0.1);padding:2px 8px;border-radius:5px;border:1px solid rgba(0,210,255,0.2);">
                             <i class="fas fa-copy"></i> copy
                         </span>
@@ -479,7 +794,7 @@ function renderApiMovieDetail(raw, provider) {
                 </div>
                 <div class="api-detail-field">
                     <div class="field-label">Tổng tập</div>
-                    <div class="field-value">${movie.episode_total || totalEps || 'N/A'}</div>
+                    <div class="field-value">${movieTotalEps}</div>
                 </div>
                 <div class="api-detail-field">
                     <div class="field-label">Servers</div>
@@ -504,18 +819,14 @@ function renderApiMovieDetail(raw, provider) {
             </div>
         </div>
 
-        <!-- Nội dung phim -->
         ${descShort ? `
         <div class="api-detail-section">
             <h4><i class="fas fa-align-left"></i> Nội dung</h4>
             <div class="api-detail-desc">${descShort}</div>
         </div>` : ''}
 
-        <!-- Tất cả servers + link video -->
         ${allServersHtml}
 
-
-        <!-- JSON section (toggle) -->
         <div class="api-detail-json" id="apiDetailJsonView">
             <div class="api-detail-section" style="margin-top:16px;">
                 <h4><i class="fas fa-code"></i> JSON đầy đủ</h4>

@@ -4543,3 +4543,108 @@ body.modal-open .scroll-top-btn {
     font-size: 0.85rem;
   }
 }
+
+/* ==========================================
+   TMDB TRAILER MODAL
+   ========================================== */
+.tmdb-trailer-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.88);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    backdrop-filter: blur(6px);
+}
+.tmdb-trailer-overlay.active {
+    display: flex;
+    animation: fadeIn 0.25s ease;
+}
+.tmdb-trailer-container {
+    background: #111;
+    border-radius: 14px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 900px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tmdb-trailer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    background: linear-gradient(135deg, #c00, #900);
+}
+.tmdb-trailer-title {
+    margin: 0;
+    font-size: 15px;
+    color: #fff;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.tmdb-trailer-close {
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    color: #fff;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+.tmdb-trailer-close:hover { background: rgba(255, 255, 255, 0.3); }
+.tmdb-trailer-body {
+    position: relative;
+    padding-bottom: 56.25%; /* 16:9 */
+    height: 0;
+    overflow: hidden;
+}
+.tmdb-trailer-body iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+/* N�t Trailer trong toolbar trang xem phim */
+.btn-trailer-tmdb {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 0, 0, 0.15);
+    color: #ff4444;
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.btn-trailer-tmdb:hover {
+    background: rgba(255, 0, 0, 0.28);
+    border-color: rgba(255, 0, 0, 0.6);
+    transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+    .tmdb-trailer-container { max-width: 100%; border-radius: 10px; }
+    .tmdb-trailer-header { padding: 12px 14px; }
+    .tmdb-trailer-title { font-size: 13px; }
+}
+
+/* Tự do phóng to Trailer trên PC */
+.tmdb-trailer-container { max-width: 1200px !important; width: 92vw !important; }
+

@@ -924,6 +924,13 @@
                         <div class="version-list-modern" id="versionListModern">
                             <!-- JS sẽ render các bản (Vietsub, Thuyết minh) vào đây -->
                         </div>
+
+                        <div class="divider-vertical" id="serverDivider" style="display: none;"></div>
+
+                        <!-- Servers List -->
+                        <div class="version-list-modern" id="serverListModern">
+                            <!-- JS sẽ render các server (KKPhim, OPhim) vào đây -->
+                        </div>
                     </div>
                 </div>
 
@@ -1197,6 +1204,7 @@
     <script src="js/contact-admin.js?v=1"></script>
 
     <script src="js/upgrade.js?v=2"></script>
+    <script src="js/tmdb.js?v=1"></script>
     <script src="js/intro.js?v=2"></script>
     <!-- watch-party.js → LAZY LOAD khi vào Xem Chung -->
     <!-- community.js → LAZY LOAD khi vào Cộng Đồng -->
@@ -1277,6 +1285,10 @@
         // Load yêu cầu liên hệ khi mở tab
         if (panelName === "contactRequests") {
             loadContactRequests();
+        }
+        // Khởi tạo API Explorer khi mở tab Quản lý API (render nút nguồn, năm, loại)
+        if (panelName === "apiExplorer" && typeof initApiExplorer === "function") {
+            initApiExplorer();
         }
 
         // 4. [NEW] Tự động đóng menu trên Mobile sau khi chọn

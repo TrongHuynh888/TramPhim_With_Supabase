@@ -127,25 +127,6 @@ replyStyles.innerHTML = `
 `;
 document.head.appendChild(replyStyles);
 
-// --- GHI NHỚ TRẠNG THÁI PAUSE/PLAY CỦA USER ---
-// Khi user nhấn pause/play, lưu vào sessionStorage để giữ trạng thái khi quay lại trang.
-// Các web phim chuyên nghiệp đều dùng cách này để tôn trọng ý định người dùng.
-document.addEventListener('DOMContentLoaded', function() {
-    const html5Player = document.getElementById('html5Player');
-    if (!html5Player) return;
-
-    html5Player.addEventListener('pause', function() {
-        // Chỉ ghi nhận pause khi video đang thực sự hoạt động (có duration > 0)
-        if (html5Player.duration > 0 && !html5Player.ended) {
-            sessionStorage.setItem('userPausedVideo', 'true');
-        }
-    });
-
-    html5Player.addEventListener('play', function() {
-        sessionStorage.removeItem('userPausedVideo');
-    });
-});
-
 /**
  * Xem chi tiết phim (Đã nâng cấp: Tự động nhớ tập đang xem dở)
  */
@@ -168,9 +149,7 @@ async function viewMovieDetail(movieId, updateHistory = true) {
   }
   
   // [MOD] Chỉ reset tập về 0 nếu không phải đang ở Mini Player của chính phim này
-  // Hoặc không phải đang chuyển phiên bản (version switching)
   const isSeamless = (typeof isMiniPlayerActive !== 'undefined' && isMiniPlayerActive && currentMovieId === movieId);
-  const isVersionSwitch = (window.isSwitchingVersion === true && currentMovieId === movieId);
   window.isSeamlessTransition = isSeamless;
   
   if (isSeamless) {
@@ -181,11 +160,6 @@ async function viewMovieDetail(movieId, updateHistory = true) {
           window.miniPlayerEpisodeIndex = currentEpisode;
           disableMiniPlayer(false); 
       }
-  } else if (isVersionSwitch) {
-      // Chuyển phiên bản: giữ nguyên tập đang xem, chỉ đổi nguồn video
-      console.log("🔄 [VERSION SWITCH] Keeping current episode:", currentEpisode + 1);
-      window.isSwitchingVersion = false; // Reset flag
-      currentMovieId = movieId;
   } else {
       currentMovieId = movieId;
       currentEpisode = 0;
@@ -201,7 +175,7 @@ async function viewMovieDetail(movieId, updateHistory = true) {
         .from('movies')
         .select('*, episodes(*)')
         .eq('id', movieId)
-        .order('episode_index', { foreignTable: 'episodes', ascending: true })
+        .order('episode_number', { foreignTable: 'episodes', ascending: true })
         .single();
       
       if (data) {
@@ -221,7 +195,7 @@ async function viewMovieDetail(movieId, updateHistory = true) {
         .from('episodes')
         .select('*')
         .eq('movie_id', movieId)
-        .order('episode_index', { ascending: true });
+        .order('episode_number', { ascending: true });
       
       if (data) {
         movie.episodes = data;
@@ -229,6 +203,21 @@ async function viewMovieDetail(movieId, updateHistory = true) {
     } catch (error) {
       console.error("Lỗi load episodes từ Supabase:", error);
     }
+  }
+
+  // Đảm bảo các tập phim luôn được sắp xếp theo đúng thứ tự số (Fix lỗi "Tập 1, Tập 10...")
+  if (movie && movie.episodes && Array.isArray(movie.episodes)) {
+      movie.episodes.sort((a, b) => {
+          const parseEp = (ep) => {
+              let n = ep.episode_number !== undefined ? ep.episode_number : (ep.episodeNumber !== undefined ? ep.episodeNumber : ep.title);
+              if (typeof n === 'string') {
+                  const match = n.match(/\d+/);
+                  return match ? parseInt(match[0], 10) : 99999;
+              }
+              return typeof n === 'number' ? n : 99999;
+          };
+          return parseEp(a) - parseEp(b);
+      });
   }
 
   // Gán vào biến toàn cục để các hàm khác (như Skip Intro) có thể truy cập
@@ -266,8 +255,8 @@ async function viewMovieDetail(movieId, updateHistory = true) {
           console.log("📍 Resume từ Supabase:", resumeTime, "giây, tập:", lastEp + 1);
         }
         
-        // Gán episode (nếu có) - Bỏ qua khi đang chuyển phiên bản để giữ tập đang xem
-        if (lastEp !== undefined && !isVersionSwitch) {
+        // Gán episode (nếu có)
+        if (lastEp !== undefined) {
           currentEpisode = lastEp;
           console.log(
             `🔄 Đã khôi phục: Bạn đang xem tập ${currentEpisode + 1}`,
@@ -333,7 +322,7 @@ async function viewMovieDetail(movieId, updateHistory = true) {
               return found ? found.name : (movie.category || "N/A");
           })();
   }
-  if (document.getElementById("detailRating")) document.getElementById("detailRating").textContent = movie.imdbRating ? `IMDb ${movie.imdbRating}` : (movie.rating || 0);
+  if (document.getElementById("detailRating")) document.getElementById("detailRating").textContent = movie.rating || 0;
   if (document.getElementById("detailViews")) document.getElementById("detailViews").textContent = formatNumber(movie.views || 0);
   if (document.getElementById("detailDescription")) document.getElementById("detailDescription").textContent = movie.description || "Chưa có mô tả";
 
@@ -506,43 +495,6 @@ function renderDetailActorSidebar(movie) {
             </div>
         `;
     }).join("");
-
-    // --- Bắt đầu phần thêm nút Xem thêm ---
-    const sidebar = grid.closest('.detail-actor-sidebar');
-    if (sidebar) {
-        // Xóa nút cũ nếu có (tránh trùng khi click load detail phim khác)
-        const oldBtn = sidebar.querySelector('.btn-toggle-actors');
-        if (oldBtn) oldBtn.remove();
-
-        // Mặc định luôn thu gọn khi load phim
-        grid.classList.remove('expanded');
-        sidebar.classList.remove('expanded-layout');
-
-        // Hiện nút nếu vượt quá sức chứa mặc định của 3 hàng (9 diễn viên) trên PC
-        if (actorsToRender.length > 9) {
-            const toggleBtn = document.createElement('button');
-            toggleBtn.className = 'btn-toggle-actors';
-            toggleBtn.innerHTML = 'Xem đầy đủ <i class="fas fa-chevron-down" style="margin-left: 5px;"></i>';
-            toggleBtn.onclick = function() {
-                const isExpanded = grid.classList.toggle('expanded');
-                if (isExpanded) {
-                    sidebar.classList.add('expanded-layout');
-                    toggleBtn.innerHTML = 'Ẩn bớt <i class="fas fa-chevron-up" style="margin-left: 5px;"></i>';
-                } else {
-                    toggleBtn.innerHTML = 'Xem đầy đủ <i class="fas fa-chevron-down" style="margin-left: 5px;"></i>';
-                    // Trì hoãn gỡ bỏ layout 3 hàng bằng với thời gian CSS transition max-height (0.4s)
-                    // để không làm nảy (jump) chiều cao của cột thông tin (Row 2) khi đang thu hồi.
-                    setTimeout(() => {
-                        // Double check nhỡ user click liên tục
-                        if (!grid.classList.contains('expanded')) {
-                            sidebar.classList.remove('expanded-layout');
-                        }
-                    }, 400);
-                }
-            };
-            sidebar.appendChild(toggleBtn);
-        }
-    }
 }
 
 // --- LOGIC ẨN HIỆN TOOLBAR TRONG CINEMA MODE ---
@@ -1254,8 +1206,8 @@ function renderEpisodes(episodes) {
       container.innerHTML = episodes
         .map((ep, index) => {
             const isActive = index === currentEpisode;
-            const epLabel = ep.title || ep.episode_name || ep.episode_number || ep.episodeNumber || (index + 1);
-            const label = String(epLabel).toLowerCase().includes("tập") ? epLabel : `Tập ${epLabel}`;
+            const epNum = ep.episode_number !== undefined ? ep.episode_number : (ep.episodeNumber !== undefined ? ep.episodeNumber : index + 1);
+            const label = String(epNum).toLowerCase().includes("tập") ? epNum : `Tập ${epNum}`;
             return `
                 <div class="episode-item ${isActive ? "active" : ""}" 
                      data-index="${index}"
@@ -1302,8 +1254,8 @@ function renderEpisodes(episodes) {
     .map((ep, index) => {
         const realIndex = startIdx + index;
         const isActive = realIndex === currentEpisode;
-        const epLabel = ep.title || ep.episode_name || ep.episode_number || ep.episodeNumber || (realIndex + 1);
-        const label = String(epLabel).toLowerCase().includes("tập") ? epLabel : `Tập ${epLabel}`;
+        const epNum = ep.episode_number !== undefined ? ep.episode_number : (ep.episodeNumber !== undefined ? ep.episodeNumber : index + 1);
+        const label = String(epNum).toLowerCase().includes("tập") ? epNum : `Tập ${epNum}`;
         return `
             <div class="episode-item ${isActive ? "active" : ""}" 
                  data-index="${realIndex}"
@@ -1333,8 +1285,6 @@ function selectEpisode(index) {
   // ✅ RESET RESUME DATA: Khi chuyển tập mới, không dùng lại thời gian của tập cũ
   window.hasResumeHistory = false;
   window.resumeTimeData = null;
-  // ✅ Reset trạng thái pause khi chọn tập mới (cho phép auto-play tập mới)
-  sessionStorage.removeItem('userPausedVideo');
   
   currentEpisode = index;
 
@@ -1344,7 +1294,7 @@ function selectEpisode(index) {
   });
   // 👇 THÊM DÒNG NÀY: Lưu lịch sử xem ngay khi chọn tập 👇
   if (currentMovieId) {
-    saveWatchHistory(currentMovieId, index, 0); // Đặt lại 0 giây khi chuyển sang tập mới
+    saveWatchHistory(currentMovieId, index);
   }
   
   // Update versions corresponding to this episode
@@ -1376,13 +1326,10 @@ async function checkAndUpdateVideoAccess() {
   let hasAccess = false;
 
   // Lấy thông tin phim hiện tại để kiểm tra giá
-  // Ưu tiên biến global `currentMovie` (let từ globals.js, đã được set trong viewMovieDetail)
-  // LƯU Ý: currentMovie là `let` global, KHÔNG phải window.currentMovie (let không tạo property window)
-  // Fallback sang allMovies.find() nếu currentMovie chưa được set (bảo toàn cho trường hợp cũ)
-  const movieData = currentMovie || allMovies.find(m => m.id === currentMovieId);
-  if (!movieData) return;
+  const currentMovie = allMovies.find(m => m.id === currentMovieId);
+  if (!currentMovie) return;
   
-  const isFreeMovie = !movieData.price || movieData.price === 0;
+  const isFreeMovie = !currentMovie.price || currentMovie.price === 0;
   
   // 1. Admin luôn có quyền xem
   if (isAdmin) {
@@ -1428,7 +1375,7 @@ async function checkAndUpdateVideoAccess() {
              buyTicketBtn.classList.add("btn-success");
         }
     } else {
-        buyTicketBtn.innerHTML = `<i class="fas fa-ticket-alt"></i> Mua Vé Xem Phim (${movieData.price} CRO)`;
+        buyTicketBtn.innerHTML = `<i class="fas fa-ticket-alt"></i> Mua Vé Xem Phim (${currentMovie.price} CRO)`;
         buyTicketBtn.disabled = false;
         buyTicketBtn.classList.add("btn-primary");
         buyTicketBtn.classList.remove("btn-success");
@@ -1448,20 +1395,47 @@ async function checkAndUpdateVideoAccess() {
     // Khởi tạo sự kiện cho trình phát tùy chỉnh (Sẽ gọi ở cuối sau khi xác định videoType)
 
     // 👇 LOGIC LOAD VIDEO 👇
-    if (movieData.episodes && movieData.episodes[currentEpisode]) {
-      const episode = movieData.episodes[currentEpisode];
+    if (currentMovie.episodes && currentMovie.episodes[currentEpisode]) {
+      const episode = currentMovie.episodes[currentEpisode];
       
       let videoType = "youtube";
       let videoSource = "";
       
-      // LOGIC ĐA PHIÊN BẢN (MULTI-VERSION)
+      // LOGIC ĐA PHIÊN BẢN & ĐA NGUỒN (MULTI-VERSION & MULTI-SERVER)
       if (episode.sources && Array.isArray(episode.sources) && episode.sources.length > 0) {
           const preferredLabel = localStorage.getItem("preferredSourceLabel");
-          let sourceObj = episode.sources.find(s => s.label === preferredLabel);
-          if (!sourceObj) sourceObj = episode.sources[0];
+          const preferredServer = localStorage.getItem("preferredServer");
+          
+          let sourceObj = null;
+          
+          // Lọc các source đúng version (Label) trước
+          let validSources = episode.sources;
+          if (preferredLabel) {
+              const withLabel = episode.sources.filter(s => {
+                  const base = (s.label || '').replace(/\s*dự phòng$/i, '').trim();
+                  return base === preferredLabel || s.label === preferredLabel;
+              });
+              if (withLabel.length > 0) validSources = withLabel;
+          }
+          
+          // Ưu tiên Server đã lưu
+          if (preferredServer) {
+              sourceObj = validSources.find(s => s.server === preferredServer || (!s.server && preferredServer === 'Unknown'));
+          }
+          
+          // Fallback: Lấy Server đầu tiên
+          if (!sourceObj) {
+              sourceObj = validSources[0];
+          }
+          
+          // Lưu lại server đang chạy
+          if (sourceObj && sourceObj.server) {
+              localStorage.setItem("preferredServer", sourceObj.server);
+          } else if (sourceObj && !sourceObj.server) {
+              localStorage.setItem("preferredServer", "Unknown");
+          }
           
           videoType = sourceObj.type || "youtube";
-          // Đọc field source (chuẩn hóa) - data cũ dùng url đã được migrate
           videoSource = sourceObj.source ? String(sourceObj.source) : "";
       } else {
           videoType = episode.videoType || "youtube";
@@ -1481,7 +1455,7 @@ async function checkAndUpdateVideoAccess() {
       const isMiniActive = (typeof isMiniPlayerActive !== 'undefined' && isMiniPlayerActive);
       const isSameEpisode = (typeof window.miniPlayerEpisodeIndex !== 'undefined' && window.miniPlayerEpisodeIndex === currentEpisode);
       
-      if (isMiniActive && movieData && movieData.id === currentMovieId && isSameEpisode) {
+      if (isMiniActive && movie && movie.id === currentMovieId && isSameEpisode) {
           console.log("🎥 [SEAMLESS] Same movie & episode in Mini Player, skip reset/reload");
           if (videoLocked) videoLocked.classList.add("hidden");
           if (videoPlayer && currentVideoType === "youtube") {
@@ -1555,11 +1529,6 @@ async function checkAndUpdateVideoAccess() {
            // Nhận diện link Iframe: 
            // 1. Chứa thẻ <iframe>, 2. Là một link Player có chứa parameters (vd: /player/?url=), 
            // 3. Hoặc link không đuôi chuẩn m3u8/mp4
-           // Guard: chỉ xử lý khi videoSource là string hợp lệ, tránh crash .includes() trên null/undefined
-           if (!videoSource) {
-               showPlayerError("Nguồn video không hợp lệ hoặc chưa được cấu hình.");
-               return;
-           }
            const isEmbedUrl = videoSource.includes("<iframe") || 
                               videoSource.includes("/player/?url=") || 
                               videoSource.includes("player.phimapi.com") || 
@@ -1587,13 +1556,7 @@ async function checkAndUpdateVideoAccess() {
                html5Player.classList.remove("hidden");
                const handleInitialPlayback = (player) => {
                    const isModalActive = document.getElementById("continueWatchingModal")?.classList.contains("active");
-                   if (isModalActive) return;
-                    
-                    // Neu user da chu dich dung video -> khong tu phat lai
-                    if (sessionStorage.getItem('userPausedVideo') === 'true') {
-                        console.log('User da dung video, giu pause.');
-                        return;
-                    } // Chờ người dùng click modal
+                   if (isModalActive) return; // Chờ người dùng click modal
                    
                     if (window.hasResumeHistory && window.resumeTimeData && window.resumeTimeData.timeWatched > 0) {
                         resumeVideoAtTime(window.resumeTimeData.timeWatched);
@@ -1656,13 +1619,7 @@ async function checkAndUpdateVideoAccess() {
           
           const handleInitialPlayback = (player) => {
               const isModalActive = document.getElementById("continueWatchingModal")?.classList.contains("active");
-              if (isModalActive) return;
-                    
-                    // Neu user da chu dich dung video -> khong tu phat lai
-                    if (sessionStorage.getItem('userPausedVideo') === 'true') {
-                        console.log('User da dung video, giu pause.');
-                        return;
-                    } // Chờ người dùng click modal
+              if (isModalActive) return; // Chờ người dùng click modal
               
                if (window.hasResumeHistory && window.resumeTimeData && window.resumeTimeData.timeWatched > 0) {
                    resumeVideoAtTime(window.resumeTimeData.timeWatched);
@@ -1964,7 +1921,7 @@ function initCustomControls(video) {
                 progressBar.style.width = percent + "%";
             }
             if (currentTimeEl) currentTimeEl.textContent = formatTime(current);
-            if (durationEl) durationEl.textContent = formatTime(total - current);
+            if (durationEl) durationEl.textContent = formatTime(total);
 
             // Cập nhật Progress Bar và Thời gian cho Mini Player
             const miniProgressBar = document.getElementById("miniPlayerProgressBar");
@@ -1976,7 +1933,7 @@ function initCustomControls(video) {
                 miniProgressBar.style.width = percent + "%";
             }
             if (miniCurrentTimeEl) miniCurrentTimeEl.textContent = formatTime(current);
-            if (miniDurationEl) miniDurationEl.textContent = formatTime(total - current);
+            if (miniDurationEl) miniDurationEl.textContent = formatTime(total);
 
             // Buffer bar (Chỉ cho HTML5)
             if (currentVideoType !== 'youtube' && video.buffered && video.buffered.length > 0) {
@@ -2029,75 +1986,23 @@ function initCustomControls(video) {
             } else if (video) {
                 video.currentTime = time;
             }
-            // Thả focus để nhường lại các phím tắt bàn phím (Space, ArrowLeft, ArrowRight) cho document
-            e.target.blur(); 
-        });
-    }
-
-    // [FIX] Sửa lỗi click mốc thời gian bị lệch: Xử lý click/touch trực tiếp trên thanh gộp
-    const progressContainer = document.getElementById("progressContainer");
-    if (progressContainer) {
-        const handleProgressSeek = (e) => {
-            // Ngăn chặn hành vi cuộn hoặc nhấp nháy trên mobile khi vuốt thanh tiến trình
-            if (e.type === 'touchstart' || e.type === 'touchmove') e.preventDefault(); 
-            
-            const rect = progressContainer.getBoundingClientRect();
-            // Xác định tọa độ X dựa trên click chuột hay touch
-            const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
-            
-            // Tính chính xác vị trí click thay vì dựa vào value của thẻ input
-            let pos = (clientX - rect.left) / rect.width;
-            if (pos < 0) pos = 0;
-            if (pos > 1) pos = 1;
-            
-            const total = (currentVideoType === 'youtube' && window.ytPlayer) ? window.ytPlayer.getDuration() : video.duration;
-            if (total > 0) {
-                const time = pos * total;
-                // Cập nhật giao diện (kéo đến đâu sáng đến đó)
-                if (slider) slider.value = time;
-                document.getElementById("progressBar").style.width = `${pos * 100}%`;
-                document.getElementById("currentTime").textContent = formatTime(time);
-                
-                // Nếu là đang kéo (touchmove/input) thì tạm thời đánh dấu isDragging
-                if (e.type === 'touchmove') {
-                    isDragging = true;
-                    return; // Chưa seek vội khi đang vuốt cho mượt
-                }
-                
-                // Khi nhấc tay lên hoặc click (touchend/click) mới thực hiện Tua phim
-                isDragging = false;
-                if (currentVideoType === 'youtube' && window.ytPlayer && typeof window.ytPlayer.seekTo === 'function') {
-                    window.ytPlayer.seekTo(time, true);
-                } else if (video) {
-                    video.currentTime = time;
-                }
-            }
-        };
-
-        progressContainer.addEventListener("click", handleProgressSeek);
-        progressContainer.addEventListener("touchstart", handleProgressSeek, { passive: false });
-        progressContainer.addEventListener("touchmove", handleProgressSeek, { passive: false });
-        progressContainer.addEventListener("touchend", (e) => {
-             // Phát lại bình thường sau khi vuốt xong trên mobile
-             isDragging = false; 
         });
     }
 
     // Handle Tooltip (Hover Progress)
+    const progressContainer = document.getElementById("progressContainer");
     const tooltip = document.getElementById("progressTooltip");
-    if (progressContainer) {
-        progressContainer.addEventListener("mousemove", (e) => {
-            const rect = progressContainer.getBoundingClientRect();
-            const pos = (e.clientX - rect.left) / rect.width;
-            const time = pos * video.duration;
-            tooltip.style.left = `${e.clientX - rect.left}px`;
-            tooltip.textContent = formatTime(time);
-            tooltip.style.display = "block";
-        });
-        progressContainer.addEventListener("mouseleave", () => {
-            tooltip.style.display = "none";
-        });
-    }
+    progressContainer.addEventListener("mousemove", (e) => {
+        const rect = progressContainer.getBoundingClientRect();
+        const pos = (e.clientX - rect.left) / rect.width;
+        const time = pos * video.duration;
+        tooltip.style.left = `${e.clientX - rect.left}px`;
+        tooltip.textContent = formatTime(time);
+        tooltip.style.display = "block";
+    });
+    progressContainer.addEventListener("mouseleave", () => {
+        tooltip.style.display = "none";
+    });
 
     // Play/Pause Icon Update & Container State
     video.addEventListener("play", () => {
@@ -2131,17 +2036,10 @@ function initCustomControls(video) {
 
     // Volume Slider
     const volSlider = document.getElementById("volumeSlider");
-    if (volSlider) {
-        volSlider.addEventListener("input", (e) => {
-            video.volume = e.target.value;
-            updateVolumeIcon(video.volume);
-        });
-        
-        // Nhả focus để trả quyền điều khiển phím tắt cho thẻ document
-        volSlider.addEventListener("change", (e) => {
-            e.target.blur();
-        });
-    }
+    volSlider.addEventListener("input", (e) => {
+        video.volume = e.target.value;
+        updateVolumeIcon(video.volume);
+    });
 
     // Show/Hide Controls on Hover/Activity
     container.addEventListener("mousemove", () => {
@@ -2337,15 +2235,10 @@ function resetHideTimer() {
     }, 5000); // Giữ nguyên 5 giây theo yêu cầu
 }
 
-// Định dạng thời gian: nếu >= 60 phút thì hiển thị dạng "Xh MM:SS", còn lại hiển thị "MM:SS"
 function formatTime(seconds) {
     if (!seconds || isNaN(seconds)) return "00:00";
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
+    const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
-    if (h > 0) {
-        return `${h}:${m < 10 ? "0" + m : m}:${s < 10 ? "0" + s : s}`;
-    }
     return `${m < 10 ? "0" + m : m}:${s < 10 ? "0" + s : s}`;
 }
 
@@ -2723,11 +2616,10 @@ function checkSkipIntro(currentTime) {
 
     // 1. Xử lý Bỏ qua Intro
     if (btnSkip) {
-        const introEnd = Number(episode.intro_end || episode.introEndTime) || 0;
-        const introBegin = Number(episode.intro_begin) || 0;
+        const introEnd = Number(episode.introEndTime) || 0;
         if (introEnd > 0) {
-            // Hiển thị nút từ intro_begin cho đến khi đạt mốc introEnd
-            if (currentTime >= introBegin && currentTime < introEnd) {
+            // Hiển thị nút từ bắt đầu video (0s) cho đến khi đạt mốc introEnd
+            if (currentTime < introEnd) {
                 btnSkip.classList.remove("hidden");
             } else {
                 btnSkip.classList.add("hidden");
@@ -2740,10 +2632,12 @@ function checkSkipIntro(currentTime) {
     // 2. Xử lý Chuyển tập tiếp theo (Outro)
     if (btnNext) {
         const hasNextEpisode = currentEpisode < currentMovie.episodes.length - 1;
-        const outroStart = Number(episode.intro_start || episode.outroStartTime) || 0;
+        const outroStart = Number(episode.outroStartTime) || 0;
         
         if (outroStart > 0 && hasNextEpisode) {
-            const introEnd = Number(episode.intro_end || episode.introEndTime) || 0;
+            // Hiển thị nút nếu currentTime đã đến mốc outro
+            // Thêm điều kiện outroStart > introEnd để tránh hiện nhầm ở đầu phim nếu Admin nhập sai
+            const introEnd = Number(episode.introEndTime) || 0;
             if (currentTime >= outroStart && currentTime > introEnd) { 
                 btnNext.classList.remove("hidden");
             } else {
@@ -2786,7 +2680,7 @@ window.handleSkipIntro = function() {
     if (!currentMovie || !currentMovie.episodes) return;
     
     const episode = currentMovie.episodes[currentEpisode];
-    const introEnd = Number(episode?.intro_end || episode?.introEndTime) || 0;
+    const introEnd = Number(episode?.introEndTime) || 0;
     if (!episode || introEnd === 0) return;
     
     // Thực hiện nhảy tới thời gian kết thúc intro
@@ -3287,11 +3181,12 @@ async function updateMovieViews(movieId) {
   if (!supabase) return;
 
   try {
-    // Tăng lượt xem (giữ nguyên logic cũ)
+    // Tăng lượt xem (Dùng RPC nếu có, hoặc fetch then update)
+    // 👇 3. LOGIC MỚI: TĂNG LƯỢT XEM (Supabase) 👇
   if (!window.viewedMovies) window.viewedMovies = new Set();
   if (!window.viewedMovies.has(movieId)) {
     window.viewedMovies.add(movieId);
-    // Cập nhật lượt xem lên Supabase
+    // Thực hiện cập nhật lượt xem lên Supabase
     const movie = allMovies.find(m => m.id === movieId);
     const currentViews = (movie && movie.views) ? movie.views : 0;
     
@@ -3303,18 +3198,6 @@ async function updateMovieViews(movieId) {
       .eq('id', movieId);
       
     if (movie) movie.views = currentViews + 1;
-
-    // Ghi log lượt xem vào bảng view_logs (thống kê theo thời gian)
-    const countryId = movie ? (movie.countryId || movie.country_id || movie.country || null) : null;
-    const userId = (typeof currentUser !== 'undefined' && currentUser && currentUser.id) ? String(currentUser.id) : null;
-    
-    supabase.from('view_logs').insert({
-      movie_id: String(movieId),
-      user_id: userId,
-      country_id: countryId ? String(countryId) : null
-    }).then(({ error }) => {
-      if (error) console.warn('Lỗi ghi view_log:', error.message);
-    });
   }    
   } catch (error) {
     console.error("Lỗi cập nhật views lên Supabase:", error);
@@ -3512,7 +3395,7 @@ function createCommentHtml(comment) {
                 <div class="comment-header">
                     <span class="comment-author">${comment.userName || "Ẩn danh"}</span>
                     <span class="comment-rating">
-                        ${comment.rating ? `<i class="fas fa-star"></i> ${comment.rating}/5` : ""}
+                        ${comment.rating ? `<i class="fas fa-star"></i> ${comment.rating}/10` : ""}
                     </span>
                 </div>
                 <p class="comment-text">${escapeHtml(comment.content)}</p>
@@ -3805,7 +3688,7 @@ async function submitComment() {
     document.getElementById("commentContent").value = "";
     selectedRating = 0;
     updateRatingStars(0);
-    document.getElementById("ratingValue").textContent = "0/5";
+    document.getElementById("ratingValue").textContent = "0/10";
 
     // Reload comments
     await loadComments(currentMovieId);
@@ -3929,8 +3812,11 @@ async function handleMoviePageExit() {
     
     // Chỉ lưu nếu đã xem > 10 giây
     if (currentVideoTime > 10 && currentVideoDuration > 0) {
-        // Lưu progress NGAY (không debounce), hàm này đã tự gọi cập nhật UI và lưu history đầy đủ
+        // Lưu progress NGAY (không debounce)
         await saveWatchProgressImmediate(currentMovieId, currentEpisode, currentVideoTime, currentVideoDuration);
+        
+        // Cập nhật lịch sử với thời gian đã xem - LƯU LUÔN không cần kiểm tra phút
+        await updateWatchHistoryWithTime(currentMovieId, currentEpisode, currentVideoTime);
         
         console.log(`📤 Đã lưu lịch sử khi rời đi: ${Math.floor(currentVideoTime / 60)} phút (${Math.round(currentVideoTime)} giây)`);
     }
@@ -3984,44 +3870,61 @@ function getCurrentVideoDuration() {
  * Dừng video đang chơi
  */
 function stopVideo() {
-    // 1. Dừng HTML5 player và giải phóng tài nguyên
+    // Dừng HTML5 player
     const html5Player = document.getElementById("html5Player");
     if (html5Player) {
         html5Player.pause();
-        html5Player.removeAttribute("src"); // Xóa src để dừng tải dữ liệu ngầm
-        html5Player.load(); // Buộc trình duyệt giải phóng buffer
     }
     
-    // 2. Hủy HLS instance nếu có (giải phóng băng thông)
-    if (window.hlsInstance) {
-        window.hlsInstance.destroy();
-        window.hlsInstance = null;
-    }
-    
-    // 3. Dừng YouTube player
-    if (window.ytPlayer && typeof window.ytPlayer.stopVideo === 'function') {
+    // Dừng YouTube player (nếu có)
+    if (window.ytPlayer && typeof window.ytPlayer.pauseVideo === 'function') {
         try {
-            window.ytPlayer.stopVideo();
+            window.ytPlayer.pauseVideo();
         } catch(e) {}
     }
     
-    // 4. Clear YouTube tracking interval
-    if (window.ytPlayerInterval) {
-        clearInterval(window.ytPlayerInterval);
-        window.ytPlayerInterval = null;
-    }
-    
-    // 5. Xóa Iframe src để dừng hoàn toàn video embed
+    // Clear Iframe src to completely stop background logic for embed types
     const iframePlayer = document.getElementById("videoPlayer");
     if (iframePlayer) {
         iframePlayer.src = "";
-        iframePlayer.classList.add("hidden");
     }
     
-    console.log("⏹️ Video đã dừng và giải phóng tài nguyên");
+    console.log("⏹️ Video đã dừng");
 }
 
-// Hàm updateWatchHistoryWithTime đã được loại bỏ vì dư thừa so với saveWatchProgressImmediate
+/**
+ * Cập nhật lịch sử xem với thời gian đã xem (phút) - Supabase
+ */
+async function updateWatchHistoryWithTime(movieId, episodeIndex, currentTime) {
+    if (!currentUser || !supabase || !movieId) return;
+    
+    const minutesWatched = Math.floor(currentTime / 60);
+    const percentage = Math.round((currentTime / 60) * 100); // Ước tính dựa trên 60 phút
+    
+    try {
+        const { error } = await supabase
+            .from('watch_history')
+            .upsert({
+                user_id: currentUser.id,
+                movie_id: movieId,
+                episode_index: episodeIndex,
+                resume_time: currentTime,
+                updated_at: new Date().toISOString(),
+                last_watched_at: new Date().toISOString()
+            }, { onConflict: 'user_id,movie_id' });
+        
+        if (error) throw error;
+        
+        console.log(`✅ Đã cập nhật lịch sử: ${movieId} - Tập ${episodeIndex + 1} - ${minutesWatched} phút`);
+        
+        // ✅ CẬP NHẬT UI PROGRESS BAR NGAY LẬP TỨC
+        if (typeof updateMovieProgressUI === 'function') {
+            updateMovieProgressUI(movieId, percentage);
+        }
+    } catch (error) {
+        console.error("Lỗi cập nhật lịch sử lên Supabase:", error);
+    }
+}
 
 /**
  * Kiểm tra và hiển thị modal hỏi xem tiếp khi vào trang phim
@@ -4285,8 +4188,7 @@ function resumeVideoAtTime(timeWatched) {
     console.log("📍 Resume video at:", timeWatched, "seconds", "(" + formatTime(timeWatched) + ")");
     
     const html5Player = document.getElementById("html5Player");
-    // Kiểm tra html5Player đang hiển thị VÀ có source hợp lệ trước khi resume
-    if (html5Player && !html5Player.classList.contains("hidden") && html5Player.src && html5Player.src !== window.location.href) {
+    if (html5Player) {
         // HTML5 Player - đợi video ready rồi mới set time
         const doResume = () => {
             // Dừng video trước (nếu đang phát)
@@ -4313,7 +4215,7 @@ function resumeVideoAtTime(timeWatched) {
             }, { once: true });
         }
     } else {
-        // YouTube Player hoặc html5Player không có source hợp lệ
+        // YouTube Player
         seekYouTubeVideo(timeWatched);
     }
 }
@@ -4426,16 +4328,6 @@ document.addEventListener("DOMContentLoaded", function() {
             }
         });
     };
-
-    // Lazy load YouTube IFrame API (chỉ load khi cần, tránh lỗi postMessage trên localhost)
-    if (!window.YT && !document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-        const ytTag = document.createElement('script');
-        ytTag.src = 'https://www.youtube.com/iframe_api';
-        document.body.appendChild(ytTag);
-    } else if (window.YT && window.YT.Player) {
-        // API đã load sẵn → gọi callback ngay
-        window.onYouTubeIframeAPIReady();
-    }
 });
 
 console.log("✅ Watch History & Navigation Handling Loaded");
@@ -4645,18 +4537,13 @@ window.toggleEpisodePanel = function() {
     if (!panel) return;
     
     const isOpen = panel.classList.contains('open');
-    const episodeBtn = document.getElementById("episodeListBtn");
     
     if (isOpen) {
         panel.classList.remove('open');
-        // Hiện lại nút "Danh sách tập" khi đóng panel
-        if (episodeBtn) episodeBtn.style.display = '';
     } else {
         // Render danh sách tập trước khi mở
         renderEpisodePanel();
         panel.classList.add('open');
-        // Ẩn nút "Danh sách tập" khi panel đang mở
-        if (episodeBtn) episodeBtn.style.display = 'none';
         // Giữ controls hiện khi panel mở
         showControls();
     }
@@ -4856,6 +4743,7 @@ function renderRecommendedMovies(movie) {
 
 /**
  * Render danh sách các phiên bản phim (Vietsub, Thuyết minh...) - Bản Modern
+ * Đã nâng cấp: Gom nhóm label duy nhất + render Server selector
  */
 function renderDetailVersions(episode) {
   const row = document.getElementById("movieExtraControlsRow");
@@ -4863,7 +4751,6 @@ function renderDetailVersions(episode) {
   if (!row || !list) return;
 
   list.innerHTML = "";
-  // row.style.display handles overall visibility (if both parts and versions exist or just one)
 
   if (!episode) return;
 
@@ -4876,34 +4763,122 @@ function renderDetailVersions(episode) {
 
   if (sources.length > 0) {
       row.style.display = "block";
-      const preferredLabel = localStorage.getItem("preferredSourceLabel");
       
-      sources.forEach((src) => {
+      // Lấy danh sách label duy nhất - gom nhóm bỏ suffix "dự phòng"
+      const uniqueLabels = [...new Set(sources.map(s => {
+          return (s.label || '').replace(/\s*dự phòng$/i, '').trim() || s.label;
+      }))];
+      
+      let preferredLabel = localStorage.getItem("preferredSourceLabel");
+      if (preferredLabel) {
+          preferredLabel = preferredLabel.replace(/\s*dự phòng$/i, '').trim();
+      }
+      if (!preferredLabel || !uniqueLabels.includes(preferredLabel)) {
+          preferredLabel = uniqueLabels[0];
+          localStorage.setItem("preferredSourceLabel", preferredLabel);
+      }
+      
+      uniqueLabels.forEach((label) => {
           const btn = document.createElement("button");
-          const isActive = (src.label === preferredLabel) || (!preferredLabel && sources.indexOf(src) === 0);
-          
+          const isActive = label === preferredLabel;
           btn.className = `version-btn-modern ${isActive ? 'active' : ''}`;
-          btn.innerHTML = `<i class="fas fa-desktop"></i> <span>${src.label}</span>`;
-          
+          btn.innerHTML = `<i class="fas fa-closed-captioning"></i> <span>${label}</span>`;
           btn.onclick = () => {
-              if (src.label === preferredLabel) return; 
-              localStorage.setItem("preferredSourceLabel", src.label);
-              
+              if (label === preferredLabel) return; 
+              localStorage.setItem("preferredSourceLabel", label);
               if (currentMovieId) {
                  const video = document.getElementById("html5Player");
-                 let time = (!video.classList.contains("hidden")) ? video.currentTime : 0;
+                 let time = (video && !video.classList.contains("hidden")) ? video.currentTime : 0;
                  saveWatchProgressImmediate(currentMovieId, currentEpisode, time, 0);
               }
-              
-              // Set flag để giữ nguyên currentEpisode khi chuyển phiên bản
               window.isSwitchingVersion = true;
-              setTimeout(() => {
-                  viewMovieDetail(currentMovieId);
-              }, 50);
+              setTimeout(() => { viewMovieDetail(currentMovieId); }, 50);
           };
           list.appendChild(btn);
       });
+      
+      // Gọi render danh sách Server cho label hiện tại
+      renderDetailServers(episode, preferredLabel);
+  } else {
+      // Không có sources → ẩn server list
+      const serverList = document.getElementById("serverListModern");
+      const serverDivider = document.getElementById("serverDivider");
+      if (serverList) serverList.innerHTML = "";
+      if (serverDivider) serverDivider.style.display = "none";
   }
+}
+
+/**
+ * Render danh sách Server (Nguồn) cho 1 phiên bản cụ thể
+ * Hiện bên cạnh nút chọn phiên bản (Vietsub, Thuyết minh...)
+ */
+function renderDetailServers(episode, currentLabel) {
+    const list = document.getElementById("serverListModern");
+    const divider = document.getElementById("serverDivider");
+    if (!list || !divider) return;
+    list.innerHTML = "";
+    if (!episode || !episode.sources) { divider.style.display = "none"; return; }
+    
+    // Lấy tất cả sources cùng label (bao gồm cả "dự phòng")
+    const sameLabelSources = episode.sources.filter(s => {
+        const baseLabel = (s.label || '').replace(/\s*dự phòng$/i, '').trim();
+        return baseLabel === currentLabel;
+    });
+    
+    // Gom server duy nhất
+    const serverMap = new Map();
+    sameLabelSources.forEach(src => {
+        const name = src.server || 'Unknown';
+        if (!serverMap.has(name)) serverMap.set(name, src);
+    });
+    
+    // Bảng thứ tự cố định theo nguồn API (KKPhim=1, OPhim=2, NguonC=3)
+    const SERVER_ORDER = { 'KKPhim': 1, 'OPhim': 2, 'NguonC': 3 };
+    // Sắp xếp server theo thứ tự cố định
+    const sortedServers = [...serverMap.entries()].sort((a, b) => {
+        return (SERVER_ORDER[a[0]] || 99) - (SERVER_ORDER[b[0]] || 99);
+    });
+    const sortedMap = new Map(sortedServers);
+    
+    if (sortedMap.size > 0) {
+        divider.style.display = "block";
+        let preferredServer = localStorage.getItem("preferredServer");
+        const validServers = [...sortedMap.keys()];
+        if (!preferredServer || !validServers.includes(preferredServer)) {
+            preferredServer = validServers[0];
+        }
+        let serverIndex = 0;
+        sortedMap.forEach((src, serverName) => {
+            serverIndex++;
+            const btn = document.createElement("button");
+            const isActive = serverName === preferredServer;
+            btn.className = `version-btn-modern ${isActive ? 'active' : ''}`;
+            if (isActive) {
+                btn.style.borderColor = '#10b981';
+                btn.style.color = '#10b981';
+                btn.style.background = 'rgba(16, 185, 129, 0.1)';
+            } else {
+                btn.style.opacity = '0.7';
+            }
+            // Số thứ tự cố định: KKPhim=1, OPhim=2, NguonC=3
+            const fixedNum = SERVER_ORDER[serverName] || serverIndex;
+            btn.innerHTML = `<i class="fas fa-satellite-dish"></i> <span>Server ${fixedNum}</span>`;
+            btn.onclick = () => {
+                if (serverName === preferredServer) return;
+                localStorage.setItem("preferredServer", serverName);
+                if (currentMovieId) {
+                   const video = document.getElementById("html5Player");
+                   let time = (video && !video.classList.contains("hidden")) ? video.currentTime : 0;
+                   saveWatchProgressImmediate(currentMovieId, currentEpisode, time, 0);
+                }
+                window.isSwitchingVersion = true;
+                setTimeout(() => { viewMovieDetail(currentMovieId); }, 50);
+            };
+            list.appendChild(btn);
+        });
+    } else {
+        divider.style.display = "none";
+    }
 }
 
 /**
@@ -5104,47 +5079,20 @@ window.enableMiniPlayer = function() {
     window.isMiniPlayerActive = true;
     
     // Cập nhật DOM (chuyển video sang mini player)
-    // Việc appendChild sẽ làm thẻ <video> bị ngắt quãng ngắn (mobile/safari tự động pause)
     if (isIframeVisible) {
         miniWrapper.appendChild(iframe);
     } else if (isHtml5Visible) {
         miniWrapper.appendChild(html5);
-        // [FIX] Khôi phục trạng thái phát trên Mobile/Tablet sau khi move DOM
-        if (isPlaying) {
-            setTimeout(() => {
-                const playPromise = html5.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(error => {
-                        console.log("Auto-play prevented after moving to mini player on mobile:", error);
-                        if (typeof updateDetailPlayButtonState === 'function') updateDetailPlayButtonState("paused");
-                    });
-                }
-            }, 50); // Delay nhỏ để trình duyệt gắn DOM và sẵn sàng
-        }
     }
     
     // Cập nhật Title
     const miniTitle = document.getElementById("miniPlayerTitle");
     if (miniTitle && typeof currentMovie !== 'undefined' && currentMovie) {
         let displayTitle = currentMovie.title || "Đang phát...";
-        // Chỉ hiển thị tên tập nếu có episode hợp lệ
         if (typeof currentEpisode !== 'undefined' && currentMovie.episodes && currentMovie.episodes[currentEpisode]) {
-            const ep = currentMovie.episodes[currentEpisode];
-            // Ưu tiên đọc title (nơi admin lưu tên tập/FULL), sau đó episode_name, rồi episodeNumber
-            let epNum = ep.title || ep.episode_name || ep.episodeNumber || ep.episode_number;
-            // Nếu vẫn không có hoặc là "0" (index), fallback sang currentEpisode + 1
-            if (epNum === undefined || epNum === null || String(epNum).trim() === "" || String(epNum) === "0") {
-                epNum = currentEpisode + 1;
-            }
-            const epStr = String(epNum).toLowerCase();
-            // Phim lẻ hoặc tập có nhãn FULL: chỉ hiện "Full" thay vì "Tập Full"
-            if (epStr === "full" || epStr.includes("full")) {
-                displayTitle += ` | Full`;
-            } else {
-                // Nếu đã chứa chữ "Tập" thì không thêm prefix
-                let epLabel = epStr.includes("tập") ? epNum : `Tập ${epNum}`;
-                displayTitle += ` | ${epLabel}`;
-            }
+            let epNum = currentMovie.episodes[currentEpisode].episode_number || (currentEpisode + 1);
+            let epLabel = String(epNum).includes("Tập") ? epNum : `Tập ${epNum}`;
+            displayTitle += ` | ${epLabel}`;
         }
         miniTitle.textContent = displayTitle;
     }
@@ -5171,17 +5119,6 @@ window.disableMiniPlayer = function(resumeToWatchPage = false) {
     const html5 = document.getElementById("html5Player");
     const miniContainer = document.getElementById("miniPlayerContainer");
     
-    // [NEW] Kiểm tra trạng thái phát hiện tại TRƯỚC KHI chuyển DOM
-    const isIframeVisible = iframe && !iframe.classList.contains("hidden") && iframe.src;
-    const isHtml5Visible = html5 && !html5.classList.contains("hidden") && html5.src;
-    
-    let isPlaying = false;
-    if (isHtml5Visible) {
-        isPlaying = !html5.paused && !html5.ended && html5.readyState > 2;
-    } else if (isIframeVisible && window.ytPlayer && typeof window.ytPlayer.getPlayerState === 'function') {
-        isPlaying = window.ytPlayer.getPlayerState() === 1; // 1 = playing
-    }
-    
     // Trả video về vị trí cũ (ngay sau thẻ error hoặc đầu container)
     const errOverlay = document.getElementById("videoError");
     if (errOverlay && errOverlay.parentNode === videoContainer) {
@@ -5190,19 +5127,6 @@ window.disableMiniPlayer = function(resumeToWatchPage = false) {
     } else if (videoContainer) {
         if (iframe && iframe.parentNode !== videoContainer) videoContainer.appendChild(iframe);
         if (html5 && html5.parentNode !== videoContainer) videoContainer.appendChild(html5);
-    }
-    
-    // [FIX] Khôi phục trạng thái phát sau khi trả video về DOM cũ
-    if (isHtml5Visible && isPlaying) {
-        setTimeout(() => {
-            const playPromise = html5.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    console.log("Auto-play prevented after restoring from mini player on mobile:", error);
-                    if (typeof updateDetailPlayButtonState === 'function') updateDetailPlayButtonState("paused");
-                });
-            }
-        }, 50);
     }
     
     // Ẩn Mini Player

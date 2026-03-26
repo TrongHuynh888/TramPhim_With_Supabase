@@ -24,6 +24,63 @@ const _importState = {
     newOnlyFilterActive: false, // true = ẩn phím đã có trong DB
 };
 
+/**
+ * Thêm 1 dòng log vào panel tiến trình import inline.
+ * @param {string} msg    - Nội dung log (có thể có emoji)
+ * @param {'info'|'success'|'warning'|'error'|'done'} type - Loại log
+ */
+function _addImportLog(msg, type = 'info') {
+    const panel = document.getElementById('importProgressPanel');
+    const body = document.getElementById('importLogBody');
+    const spinner = document.getElementById('importProgressSpinner');
+    if (!panel || !body) return;
+
+    // Hiện panel nếu đang ẩn
+    panel.style.display = 'block';
+    if (spinner) spinner.style.display = (type === 'done') ? 'none' : 'inline';
+
+    // Màu theo loại
+    const colors = {
+        info:    '#60a5fa',
+        success: '#34d399',
+        warning: '#fbbf24',
+        error:   '#f87171',
+        done:    '#a78bfa',
+    };
+    const icons = {
+        info:    'fas fa-circle-notch fa-spin',
+        success: 'fas fa-check-circle',
+        warning: 'fas fa-exclamation-triangle',
+        error:   'fas fa-times-circle',
+        done:    'fas fa-flag-checkered',
+    };
+
+    const color = colors[type] || colors.info;
+    const icon = icons[type] || icons.info;
+
+    // Timestamp
+    const now = new Date();
+    const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+    const line = document.createElement('div');
+    line.style.cssText = `color: ${color}; padding: 1px 0; display: flex; align-items: flex-start; gap: 8px;`;
+    line.innerHTML = `<span style="color:rgba(255,255,255,0.25); min-width:52px;">${ts}</span><i class="${icon}" style="margin-top:3px; font-size:0.65rem;"></i><span style="flex:1;">${msg}</span>`;
+    body.appendChild(line);
+
+    // Auto-scroll xuống cuối
+    body.scrollTop = body.scrollHeight;
+}
+
+/**
+ * Xóa sạch log panel và hiện panel sẵn sàng cho phiên import mới.
+ */
+function _clearImportLog() {
+    const body = document.getElementById('importLogBody');
+    if (body) body.innerHTML = '';
+    const panel = document.getElementById('importProgressPanel');
+    if (panel) panel.style.display = 'block';
+}
+
 /* ─── CẤU HÌNH R2 ─── */
 
 /**
@@ -105,11 +162,16 @@ async function _uploadImgToR2(imgUrl, folder, filename) {
 }
 
 /**
- * Build URL ảnh đầy đủ từ API KKPhim (có thể là path hoặc URL đầy đủ).
+ * Build URL ảnh đầy đủ từ API nguồn (hỗ trợ KKPhim, OPhim, NguonC).
+ * @param {string} url - URL ảnh hoặc filename
+ * @param {string} [providerId] - ID nguồn API ('kkphim', 'ophim', 'nguonc')
  */
-function _buildApiImgUrl(url) {
+function _buildApiImgUrl(url, providerId) {
     if (!url) return '';
     if (url.startsWith('http')) return url;
+    // OPhim: CDN ảnh riêng
+    if (providerId === 'ophim') return `https://img.ophim.live/uploads/movies/${url}`;
+    // KKPhim (mặc định)
     return `https://phimimg.com/${url}`;
 }
 
@@ -239,15 +301,24 @@ function _findCountryIdByName(name) {
  */
 async function _checkMovieExistsBySlug(slug) {
     if (!slug || typeof supabase === 'undefined') return null;
-    // Chuẩn hóa: luôn dùng URL đầy đủ để check
-    const fullUrl = slug.startsWith('http') ? slug : `https://phimapi.com/phim/${slug}`;
-    const shortSlug = slug.startsWith('http') ? slug.replace(/.*\/phim\//, '').split('?')[0].replace(/\/$/, '') : slug;
+    // Trích xuất slug thuần từ URL (nếu là URL đầy đủ)
+    const shortSlug = slug.startsWith('http')
+        ? slug.replace(/.*\/(phim|film)\//, '').split('?')[0].replace(/\/$/, '')
+        : slug;
+    // Build tất cả URL có thể từ 3 nguồn API
+    const possibleUrls = [
+        `https://phimapi.com/phim/${shortSlug}`,
+        `https://ophim1.com/phim/${shortSlug}`,
+        `https://phim.nguonc.com/api/film/${shortSlug}`,
+        shortSlug,
+    ];
     try {
-        // Tìm cả 2 dạng để tương thích với dữ liệu cũ trong DB
+        // Tìm slug trên tất cả nguồn API đã import
+        const orFilter = possibleUrls.map(u => `api_url_backup.eq.${u}`).join(',');
         const { data } = await supabase
             .from('movies')
             .select('id')
-            .or(`api_url_backup.eq.${fullUrl},api_url_backup.eq.${shortSlug}`)
+            .or(orFilter)
             .maybeSingle();
         return data?.id || null;
     } catch { return null; }
@@ -363,15 +434,31 @@ async function _resolveActorsForImport(actorNames) {
                     .replace(/\s+/g, '-');
                 const newId = slug + '-' + Math.floor(Math.random() * 10000);
 
+                // --- Tự động Fetch TMDb cho diễn viên mới ---
+                let tmdbData = {};
+                // Chỉ fetch nếu có tmdb.js trong ngữ cảnh
+                if (typeof searchTmdbPerson === 'function' && typeof getTmdbPersonDetails === 'function') {
+                    try {
+                        const searchRes = await searchTmdbPerson(name);
+                        if (searchRes && searchRes.id) {
+                            const details = await getTmdbPersonDetails(searchRes.id);
+                            if (details) tmdbData = details;
+                        }
+                    } catch (e) {
+                        console.warn('[Actor TMDb] Lỗi fetch:', name, e.message);
+                    }
+                }
+
                 const newActor = {
                     id:           newId,
                     name:         name,
-                    avatar:       '',
-                    dob:          null,
-                    gender:       '',
-                    role:         'actor',
+                    avatar:       tmdbData.profile_path ? buildTmdbImageUrl(tmdbData.profile_path, 'w185') : '',
+                    dob:          tmdbData.birthday || null,
+                    gender:       tmdbData.gender === 1 ? 'Nữ' : (tmdbData.gender === 2 ? 'Nam' : ''),
+                    role:         tmdbData.known_for_department === 'Directing' ? 'director' : 'actor',
                     alt_names:    '',
-                    bio:          '',
+                    bio:          tmdbData.biography || '',
+                    country:      tmdbData.place_of_birth ? tmdbData.place_of_birth.split(',').pop().trim() : '',
                     auto_created: true,
                     created_at:   new Date().toISOString(),
                 };
@@ -381,6 +468,7 @@ async function _resolveActorsForImport(actorNames) {
                     if (!error) {
                         castData.push({ id: newId, name });
                         existingMap[lower] = { id: newId, name }; // Cache tránh tạo trùng
+                        console.log(`[Actor] Tạo mới + TMDb info: ${name}`);
                     } else {
                         console.warn('[Actor] Lỗi tạo diễn viên:', name, error.message);
                         castData.push({ id: null, name }); // Vẫn lưu tên dù không có ID
@@ -407,7 +495,7 @@ async function _resolveActorsForImport(actorNames) {
  * @param {string} movieDuration - duration của phim VD: "70 phút"
  * @param {string} movieQuality  - chất lượng phim VD: 'HD', 'FHD', '1080p'
  */
-async function _importEpisodesForMovie(movieId, episodesData, movieDuration = '', movieQuality = 'HD') {
+async function _importEpisodesForMovie(movieId, episodesData, movieDuration = '', movieQuality = 'HD', providerName = '') {
     if (!movieId || !episodesData?.length || typeof supabase === 'undefined') return;
 
     // Map FHD/FullHD/raw → giá trị chuẩn của dropdown quality trong form admin
@@ -468,14 +556,14 @@ async function _importEpisodesForMovie(movieId, episodesData, movieDuration = ''
                 };
             }
 
-            // Gộp sources từ server này vào record (không trùng link)
+            // Gộp sources từ server này vào record (không trùng link) + gắn tên nguồn (server)
             if (ep.link_m3u8) {
                 const already = episodeMap[epKey].sources.some(s => s.source === ep.link_m3u8);
-                if (!already) episodeMap[epKey].sources.push({ label: mainLabel,  type: 'hls',   source: ep.link_m3u8 });
+                if (!already) episodeMap[epKey].sources.push({ label: mainLabel, type: 'hls', source: ep.link_m3u8, server: providerName || '' });
             }
             if (ep.link_embed) {
                 const already = episodeMap[epKey].sources.some(s => s.source === ep.link_embed);
-                if (!already) episodeMap[epKey].sources.push({ label: embedLabel, type: 'embed', source: ep.link_embed });
+                if (!already) episodeMap[epKey].sources.push({ label: embedLabel, type: 'embed', source: ep.link_embed, server: providerName || '' });
             }
         });
     });
@@ -509,44 +597,69 @@ async function _importEpisodesForMovie(movieId, episodesData, movieDuration = ''
  * @returns {Promise<{success: boolean, movieId: string|null, message: string, duplicate: boolean}>}
  */
 async function importSingleMovieFromApi(slug, opts = {}) {
-    // Kiểm tra tiền điều kiện
-    const provider = typeof API_PROVIDERS !== 'undefined' && typeof _apiState !== 'undefined'
-        ? API_PROVIDERS[_apiState.currentProvider]
-        : null;
+    // Luôn ưu tiên providerId truyền rõ ràng (từ Multi-Search), nếu không có mới lấy tab hiện hành
+    const pid = opts.providerId || (typeof _apiState !== 'undefined' ? _apiState.currentProvider : null);
+    const provider = typeof API_PROVIDERS !== 'undefined' ? API_PROVIDERS[pid] : null;
+
     if (!provider) return { success: false, message: 'Không có API provider' };
     if (typeof supabase === 'undefined') return { success: false, message: 'Supabase chưa sẵn sàng' };
 
-    if (!opts.silent && typeof showLoading === 'function') showLoading(true, `Đang tải chi tiết "${slug}"...`);
+    // Progress hiện qua panel inline, không cần overlay spinner
 
     try {
         // 1. Lấy chi tiết phim từ API
+        if (!opts.silent) _clearImportLog(); // Chỉ xóa log khi import đơn, bulk đã clear ở đầu
+        _addImportLog(`📡 Đang tải chi tiết "${slug}" từ ${provider.name}...`, 'info');
         const res = await fetch(provider.buildDetailUrl(slug));
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const raw = await res.json();
         const movie    = raw.movie || raw;
-        const episodes = raw.episodes || [];
+        // NguonC: episodes nằm trong movie.episodes thay vì raw.episodes
+        const episodes = raw.episodes || movie.episodes || [];
         if (!movie?.slug) throw new Error('Dữ liệu API không hợp lệ (thiếu slug)');
 
-        // 2. Kiểm tra trùng lặp bằng api_url_backup = slug
+        // 2. Kiểm tra trùng lặp → Nếu đã có thì MERGE NGUỒN thay vì bỏ qua
         const existingId = await _checkMovieExistsBySlug(movie.slug);
         if (existingId) {
+            // Phim đã tồn tại → Merge nguồn mới vào episodes cũ
+            const providerName = provider.name || provider.id || 'Unknown';
+
+            const mergeResult = await _mergeEpisodesSources(existingId, episodes, providerName);
+
+            // ★ Trigger cross-fetch sang các nguồn khác (giống import mới)
+            if (!opts.skipCrossFetch && mergeResult.added > 0) {
+                try {
+                    await _crossFetchFromAllProviders(existingId, movie.slug, providerName, movie.name || '');
+                } catch (e) {
+                    console.warn('[CrossFetch on Merge] Lỗi:', e.message);
+                }
+            }
+
+            // Cập nhật versions dựa trên sources thực tế trong DB
+            await _syncMovieVersionsFromEpisodes(existingId);
+
+
             return {
-                success: false, movieId: existingId, duplicate: true,
-                message: `"${movie.name}" đã tồn tại trong database`,
+                success: mergeResult.added > 0,
+                movieId: existingId,
+                duplicate: mergeResult.added === 0,
+                message: mergeResult.added > 0
+                    ? `✅ Đã gộp ${mergeResult.added} nguồn "${providerName}" vào "${movie.name}"`
+                    : `"${movie.name}" đã có đủ nguồn từ "${providerName}"`,
             };
         }
 
-        // 3. Chuẩn bị URL ảnh gốc từ API
-        const rawPoster = _buildApiImgUrl(movie.poster_url) || _buildApiImgUrl(movie.thumb_url);
-        const rawThumb  = _buildApiImgUrl(movie.thumb_url)  || rawPoster;
+        // 3. Chuẩn bị URL ảnh gốc từ API (truyền providerId để dùng đúng CDN)
+        const _pid = provider.id || 'kkphim';
+        const rawPoster = _buildApiImgUrl(movie.poster_url, _pid) || _buildApiImgUrl(movie.thumb_url, _pid);
+        const rawThumb  = _buildApiImgUrl(movie.thumb_url, _pid)  || rawPoster;
         const safeSlug  = (movie.slug || slug).replace(/[^a-z0-9-]/gi, '-').toLowerCase();
 
         // 4. Upload ảnh lên Cloudflare R2 (hoặc dùng URL gốc nếu tắt R2)
-        if (!opts.silent && typeof showLoading === 'function') {
-            showLoading(true, _importState.useR2
-                ? `Upload ảnh → Cloudflare R2...`
-                : 'Chuẩn bị dữ liệu ảnh...');
-        }
+
+        _addImportLog(_importState.useR2
+            ? '☁️ Đang upload ảnh poster & background lên Cloudflare R2...'
+            : '🔗 Đang lấy ảnh poster & background từ URL gốc...', 'info');
         const [posterUrl, backgroundUrl] = await Promise.all([
             _uploadImgToR2(rawPoster, 'movies/posters',     `${safeSlug}-poster`),
             _uploadImgToR2(rawThumb,  'movies/backgrounds', `${safeSlug}-bg`),
@@ -564,20 +677,34 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             if (countryId) break;
         }
 
-        // 7. Resolve diễn viên + tra cứu IMDb song song (tạo mới trong DB nếu chưa có)
-        if (!opts.silent && typeof showLoading === 'function') showLoading(true, 'Xử lý diễn viên & tra cứu IMDb...');
+        // 7. Resolve diễn viên + tra cứu IMDb + tra cứu TMDb trailer song song
+
+        _addImportLog('🎭 Đang xử lý diễn viên, điểm IMDb & trailer TMDb...', 'info');
         const actorNames = (movie.actor || []).slice(0, 20); // Giới hạn 20 diễn viên
-        const [castData, imdbRating] = await Promise.all([
+        
+        // Wrap hàm lấy trailer TMDb để an toàn (không lỗi ngắt import)
+        const fetchTrailerSafe = async () => {
+            try {
+                if (typeof searchTmdbByTitle !== 'function' || typeof getTmdbTrailer !== 'function') return null;
+                const searchTitle = movie.origin_name || movie.name || '';
+                const tmdbResult = await searchTmdbByTitle(searchTitle, movie.year);
+                if (!tmdbResult) return null;
+                return await getTmdbTrailer(tmdbResult.id, tmdbResult.media_type || 'movie');
+            } catch(e) { return null; }
+        };
+
+        const [castData, imdbRating, tmdbTrailerKey] = await Promise.all([
             _resolveActorsForImport(actorNames),
             // Sử dụng hàm Global trong utils.js hỗ trợ Cơ chế Tự Dụng Pool Khi Quá Tải
-            _fetchImdbRatingGlobal(movie.origin_name || movie.name || '', movie.year)
+            _fetchImdbRatingGlobal(movie.origin_name || movie.name || '', movie.year),
+            fetchTrailerSafe() // Tự động lấy trailer
         ]);
 
         // 8. Build movieData - theo đúng whitelist bảng movies Supabase
         // whitelist: id, title, origin_title, poster_url, background_url, description,
         //   year, type, duration, quality, status, age_limit, series_id, price, rating,
         //   total_episodes, api_url_backup, cast_data, tags, versions, category_id, country_id,
-        //   created_at, updated_at, view_count
+        //   created_at, updated_at, view_count, tmdb_trailer_key
         const movieId = `${safeSlug}-${Date.now().toString().slice(-6)}`;
 
 
@@ -638,7 +765,7 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             origin_title:   movie.origin_name || movie.origin_title || '',
             poster_url:     posterUrl,
             background_url: backgroundUrl,
-            description:    movie.content || '',
+            description:    (movie.content || movie.description || '').replace(/<[^>]*>/g, '').trim(),
             year:           movie.year ? parseInt(movie.year) : null,
             type:           movie.type === 'series' ? 'series' : 'single',
             quality:        movie.quality || 'HD',
@@ -658,7 +785,8 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             country_id:     countryId,
             part:           _detectMoviePart(movie.name || '', movie.origin_name || ''),
             series_id:      _buildSeriesId(movie.slug || safeSlug, ''), // Tất cả phim đều có series_id
-            api_url_backup: `https://phimapi.com/phim/${movie.slug}`, // Luôn lưu dạng URL đầy đủ
+            api_url_backup: provider.buildDetailUrl(movie.slug), // Lưu URL đúng theo provider đang dùng
+            tmdb_trailer_key: tmdbTrailerKey, // Trailer key lưu tự động
             created_at:     new Date().toISOString(),
             updated_at:     new Date().toISOString(),
         };
@@ -668,7 +796,7 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             'id', 'title', 'origin_title', 'poster_url', 'background_url', 'description',
             'year', 'type', 'duration', 'quality', 'status', 'age_limit', 'series_id',
             'price', 'rating', 'imdb_rating', 'total_episodes', 'api_url_backup', 'cast_data', 'tags',
-            'versions', 'category_ids', 'country_id', 'part',
+            'versions', 'category_ids', 'country_id', 'part', 'tmdb_trailer_key',
             'created_at', 'updated_at',
         ];
         const _NUM_FIELDS = ['year', 'price', 'rating', 'imdb_rating', 'total_episodes'];
@@ -685,34 +813,85 @@ async function importSingleMovieFromApi(slug, opts = {}) {
         });
 
         // 9. Insert phim vào Supabase
-        if (!opts.silent && typeof showLoading === 'function') showLoading(true, 'Đang lưu vào database...');
+
+        _addImportLog(`💾 Đang lưu "${movie.name}" vào database...`, 'info');
         const { error: insertErr } = await supabase.from('movies').insert(finalMovieData);
         if (insertErr) throw new Error(insertErr.message);
+        _addImportLog('✅ Đã lưu phim vào database thành công!', 'success');
 
 
         // 10. Import tập phim (nếu có)
+        let totalEpCount = 0;
         if (episodes.length > 0) {
-            if (!opts.silent && typeof showLoading === 'function') {
-                const totalEpCount = episodes.reduce((sum, s) => sum + (s.server_data?.length || 0), 0);
-                showLoading(true, `Import ${totalEpCount} tập phìm...`);
-            }
+            // Normalize episodes: NguonC dùng items[] thay vì server_data[], m3u8/embed thay link_m3u8/link_embed
+            const normalizedEps = episodes.map(srv => {
+                const srvData = srv.server_data || srv.items || [];
+                return {
+                    server_name: srv.server_name || 'Server',
+                    server_data: srvData.map(ep => ({
+                        name: ep.name,
+                        link_m3u8: ep.link_m3u8 || ep.m3u8 || '',
+                        link_embed: ep.link_embed || ep.embed || '',
+                    })),
+                };
+            });
+
+            // Đếm số tập duy nhất (lấy server đầu tiên, các server khác là bản chiếu khác)
+            const _primaryEpCount = normalizedEps.length > 0 ? (normalizedEps[0].server_data?.length || 0) : 0;
+            totalEpCount = _primaryEpCount;
+            _addImportLog(`📀 Import ${_primaryEpCount} tập phim...`, 'info');
+
+            // Gắn tên server (provider) vào mỗi source trước khi import
+            const _currentProviderName = provider.name || provider.id || 'Unknown';
             // Truyền duration và quality phìm xuống từng tập (API không có duration riêng cho từng tập)
-            await _importEpisodesForMovie(movieId, episodes, parsedDuration, movie.quality || 'HD');
+            await _importEpisodesForMovie(movieId, normalizedEps, parsedDuration, movie.quality || 'HD', _currentProviderName);
+
+            // ★ AUTO CROSS-FETCH: Quét thêm nguồn từ các API khác (ngầm, không block)
+            if (!opts.skipCrossFetch) {
+                try {
+
+                    _addImportLog('🌐 Bắt đầu quét đa nguồn tự động...', 'info');
+                    const _crossProviders = await _crossFetchFromAllProviders(movieId, movie.slug, _currentProviderName, movie.name || '');
+                    _addImportLog('🎉 Hoàn tất quét đa nguồn!', 'success');
+                    // Lưu _crossProviders cho summary
+                    var _mergedProviderNames = _crossProviders || [];
+                } catch (e) {
+                    console.warn('[CrossFetch] Lỗi quét chéo:', e.message);
+                }
+            }
+
+            // Sync versions dựa trên sources thực tế sau cross-fetch
+            await _syncMovieVersionsFromEpisodes(movieId);
         }
 
-        // 11. Đồng bộ sync cache và refresh admin lists ngay lập tức
+        // 11. Đồng bộ sync cache và refresh admin lists
         if (typeof notifyDataChange === 'function') await notifyDataChange('movies');
-
-        // Refresh danh sách quản lý phím và dropdown quản lý tập không cần F5
         _refreshAdminLists();
 
-        return { success: true, movieId, message: `✅ Đã import "${movie.name}" thành công!` };
+        // Trước khi return, đếm số nguồn thực tế đã gộp
+        let summaryMsg = `✅ Import "${movie.name}" thành công!`;
+        try {
+            const { count: realEpCount } = await supabase.from('episodes').select('id', { count: 'exact', head: true }).eq('movie_id', movieId);
+            const { data: verData } = await supabase.from('movies').select('versions').eq('id', movieId).single();
+            const vers = verData?.versions || [];
+            // Build chi tiết nguồn
+            const sourceDetails = [`${provider.name}: ${totalEpCount} tập`];
+            if (typeof _mergedProviderNames !== 'undefined' && _mergedProviderNames.length > 0) {
+                _mergedProviderNames.forEach(p => {
+                    sourceDetails.push(`${p.name}: ${p.epCount} tập`);
+                });
+            }
+            summaryMsg = `✅ "${movie.name}" - ${realEpCount || '?'} tập | ${vers.length} phiên bản (${vers.join(', ')}) | Nguồn: ${sourceDetails.join(', ')}`;
+        } catch(e) { /* ignore */ }
+
+        _addImportLog(summaryMsg, 'done');
+
+        return { success: true, movieId, message: summaryMsg };
 
     } catch (err) {
         console.error('[Import Movie] Lỗi:', err);
+        _addImportLog(`❌ Lỗi import: ${err.message}`, 'error');
         return { success: false, message: err.message || 'Lỗi không xác định' };
-    } finally {
-        if (!opts.silent && typeof showLoading === 'function') showLoading(false);
     }
 }
 
@@ -769,12 +948,14 @@ async function importBulkMoviesFromApi() {
 
     const total = slugs.length;
     let done = 0, successCount = 0, dupCount = 0, failCount = 0;
+    const _bulkResults = []; // Lưu kết quả từng phim cho tổng kết cuối
+    const _bulkStartTime = Date.now();
 
     const btnBulk  = document.getElementById('btnBulkImport');
     const btnAbort = document.getElementById('btnAbortImport');
     if (btnBulk)  { btnBulk.disabled = true; btnBulk.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang import...'; }
     if (btnAbort) btnAbort.style.display = 'inline-flex';
-
+    _clearImportLog();
     _showImportProgress(0, total, 'Đang bắt đầu...');
 
     for (const slug of slugs) {
@@ -784,12 +965,30 @@ async function importBulkMoviesFromApi() {
         }
 
         _showImportProgress(done, total, `Xử lý: ${slug}`);
-        const result = await importSingleMovieFromApi(slug, { silent: true });
+        
+        // Tìm providerId từ DOM (vì multi-search có nhiều tab)
+        const cb = document.querySelector(`.api-card-select-cb[data-slug="${slug}"]`);
+        const pId = cb ? cb.dataset.providerId : null;
+
+        // Separator giữa các phim trong log
+        if (done > 0) _addImportLog(`── Phim ${done + 1}/${total} ──`, 'info');
+
+        const result = await importSingleMovieFromApi(slug, { silent: true, providerId: pId });
         done++;
 
-        if (result.success) successCount++;
-        else if (result.duplicate) dupCount++;
-        else failCount++;
+        if (result.success) {
+            successCount++;
+            _addImportLog(`✅ [${done}/${total}] ${result.message}`, 'success');
+            _bulkResults.push({ slug, status: 'success', msg: result.message });
+        } else if (result.duplicate) {
+            dupCount++;
+            _addImportLog(`🔁 [${done}/${total}] ${slug}: đã tồn tại`, 'warning');
+            _bulkResults.push({ slug, status: 'duplicate', msg: 'Đã tồn tại' });
+        } else {
+            failCount++;
+            _addImportLog(`❌ [${done}/${total}] ${slug}: ${result.message}`, 'error');
+            _bulkResults.push({ slug, status: 'error', msg: result.message });
+        }
 
         // Cập nhật badge trạng thái trên card tương ứng
         _updateCardImportBadge(slug, result);
@@ -809,8 +1008,29 @@ async function importBulkMoviesFromApi() {
     if (btnBulk)  { btnBulk.disabled = false; btnBulk.innerHTML = `<i class="fas fa-file-import"></i> Import đã chọn (${slugs.length})`; }
     if (btnAbort) btnAbort.style.display = 'none';
 
+    // ═══ TỔNG KẾT CHI TIẾT ═══
+    const elapsedMs = Date.now() - _bulkStartTime;
+    const _h = Math.floor(elapsedMs / 3600000);
+    const _m = Math.floor((elapsedMs % 3600000) / 60000);
+    const _s = Math.floor((elapsedMs % 60000) / 1000);
+    const elapsedStr = (_h > 0 ? `${_h} giờ ` : '') + (_m > 0 ? `${_m} phút ` : '') + `${_s} giây`;
+    _addImportLog(``, 'info'); // dòng trống
+
+    _addImportLog(`═══════════ TỔNG KẾT IMPORT ═══════════`, 'done');
+    _addImportLog(`⏱ Thời gian: ${elapsedStr} | Tổng: ${done}/${total} phim`, 'info');
+    _addImportLog(`✅ Thành công: ${successCount} | 🔁 Đã có: ${dupCount} | ❌ Lỗi: ${failCount}`, 'done');
+
+    // Liệt kê từng phim
+    _bulkResults.forEach((r, i) => {
+        const icon = r.status === 'success' ? '✅' : r.status === 'duplicate' ? '🔁' : '❌';
+        _addImportLog(`  ${icon} ${i + 1}. ${r.msg}`, r.status === 'success' ? 'success' : r.status === 'duplicate' ? 'warning' : 'error');
+    });
+
+    _addImportLog(`════════════════════════════════════`, 'done');
+
     if (typeof showNotification === 'function') {
-        showNotification(`Import hoàn tất: ${msg}`, successCount > 0 ? 'success' : 'error');
+        const summary = `🎬 Import ${done}/${total} phim (${elapsedStr}): ✅ ${successCount} | 🔁 ${dupCount} | ❌ ${failCount}`;
+        showNotification(summary, successCount > 0 ? 'success' : 'error', 5000);
     }
 }
 
@@ -820,6 +1040,7 @@ async function importBulkMoviesFromApi() {
 async function importCurrentDetailMovie() {
     const drawer = document.getElementById('apiDetailDrawer');
     const slug   = drawer?.dataset?.currentSlug;
+    const pId    = drawer?.dataset?.currentProviderId || _apiState.currentProvider;
     if (!slug) {
         if (typeof showNotification === 'function') showNotification('Không có phim nào để import!', 'error');
         return;
@@ -827,7 +1048,7 @@ async function importCurrentDetailMovie() {
     const btn = document.getElementById('btnDetailImport');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang import...'; }
 
-    const result = await importSingleMovieFromApi(slug);
+    const result = await importSingleMovieFromApi(slug, { providerId: pId });
 
     if (btn) {
         if (result.success) {
@@ -856,14 +1077,15 @@ async function importCurrentDetailMovie() {
  * Import nhanh 1 phim từ nút trên card (nút ➕ nhỏ ở góc card).
  * @param {string} slug
  * @param {HTMLElement} btn
+ * @param {string} providerId
  */
-async function importQuickFromCard(slug, btn) {
+async function importQuickFromCard(slug, btn, providerId = null) {
     if (!slug || !btn || btn.disabled) return;
     const origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-    const result = await importSingleMovieFromApi(slug);
+    const result = await importSingleMovieFromApi(slug, { providerId });
 
     if (result.success) {
         btn.innerHTML = '<i class="fas fa-check"></i>';
@@ -950,8 +1172,14 @@ async function _markImportedCards(items) {
     if (!slugs.length) return;
 
     try {
-        // Lấy tất cả các api_url_backup khớp (dạng URL đầy đủ hoặc slug ngắn)
-        const fullUrls = slugs.map(s => `https://phimapi.com/phim/${s}`);
+        // Lấy tất cả các api_url_backup khớp (dạng URL đầy đủ của cả 3 nguồn hoặc slug ngắn)
+        const fullUrls = [];
+        slugs.forEach(s => {
+            fullUrls.push(`https://phimapi.com/phim/${s}`);
+            fullUrls.push(`https://ophim1.com/phim/${s}`);
+            fullUrls.push(`https://api.nguonc.com/api/film/${s}`);
+        });
+
         const { data: existingRows } = await supabase
             .from('movies')
             .select('api_url_backup')
@@ -969,37 +1197,55 @@ async function _markImportedCards(items) {
             inDbSet.add(short);
         });
 
+        // Xác định provider chính từ api_url_backup (domain → providerId)
+        const primaryProviderMap = {}; // slug → providerId gốc
+        existingRows.forEach(r => {
+            const val = r.api_url_backup || '';
+            const short = val.replace(/.*\/(phim|film)\//, '').split('?')[0].replace(/\/$/, '');
+            let pid = 'kkphim'; // mặc định
+            if (val.includes('ophim1.com')) pid = 'ophim';
+            else if (val.includes('nguonc.com')) pid = 'nguonc';
+            if (short) primaryProviderMap[short] = pid;
+        });
+
         // Gắn class + badge lên từng card đã import
         slugs.forEach(slug => {
             if (!inDbSet.has(slug)) return;
-            const card = document.querySelector(`.api-movie-card[data-slug="${slug}"]`);
-            if (!card) return;
-            card.dataset.inDb = 'true';
-            card.classList.add('in-db');
+            // Tìm TẤT CẢ card cùng slug (multi-search có thể ra 3 card cùng slug)
+            const cards = document.querySelectorAll(`.api-movie-card[data-slug="${slug}"]`);
+            if (!cards.length) return;
 
-            // 1. Ẩn ô checkbox góc trái
-            const cbWrap = card.querySelector('.api-card-select-wrap');
-            if (cbWrap) cbWrap.style.display = 'none';
+            const primaryPid = primaryProviderMap[slug] || '';
 
-            // 2. Đổi nút ➕ thành icon database (không cho import lại)
-            const importBtn = card.querySelector('.api-card-import-btn');
-            if (importBtn) {
-                importBtn.innerHTML = '<i class="fas fa-database"></i>';
-                importBtn.title = 'Đã có trong database';
-                importBtn.style.background = 'rgba(16,185,129,0.85)';
-                importBtn.style.cursor = 'default';
-                importBtn.onclick = e => { e.stopPropagation(); }; // chặn click
-            }
+            cards.forEach(card => {
+                card.dataset.inDb = 'true';
+                card.classList.add('in-db');
+                const cardPid = card.dataset.providerId || '';
+                const isPrimary = cardPid === primaryPid;
 
-            // 3. Badge "Đã có" góc trên trái
-            if (!card.querySelector('.api-in-db-badge')) {
-                const badge = document.createElement('span');
-                badge.className = 'api-in-db-badge';
-                badge.textContent = 'Đã có';
-                badge.style.cssText = 'position:absolute;top:8px;left:8px;background:rgba(16,185,129,0.9);color:#fff;font-size:0.62rem;font-weight:700;padding:2px 7px;border-radius:5px;z-index:10;letter-spacing:0.4px;pointer-events:none;';
-                card.style.position = card.style.position || 'relative';
-                card.appendChild(badge);
-            }
+                // 1. Ẩn ô checkbox góc trái (cả primary và secondary)
+                const cbWrap = card.querySelector('.api-card-select-wrap');
+                if (cbWrap) cbWrap.style.display = 'none';
+
+                // 2. Ẩn nút ➕ import (cả primary và secondary)
+                const importBtn = card.querySelector('.api-card-import-btn');
+                if (importBtn) importBtn.style.display = 'none';
+
+                // 3. Badge phân biệt vai trò
+                if (!card.querySelector('.api-in-db-badge')) {
+                    const badge = document.createElement('span');
+                    badge.className = 'api-in-db-badge';
+                    if (isPrimary) {
+                        badge.textContent = '⭐ Nguồn chính';
+                        badge.style.cssText = 'position:absolute;top:8px;left:8px;background:rgba(59,130,246,0.92);color:#fff;font-size:0.6rem;font-weight:700;padding:2px 8px;border-radius:5px;z-index:10;letter-spacing:0.3px;pointer-events:none;';
+                    } else {
+                        badge.textContent = '🔗 Đã gộp';
+                        badge.style.cssText = 'position:absolute;top:8px;left:8px;background:rgba(16,185,129,0.9);color:#fff;font-size:0.6rem;font-weight:700;padding:2px 8px;border-radius:5px;z-index:10;letter-spacing:0.3px;pointer-events:none;';
+                    }
+                    card.style.position = card.style.position || 'relative';
+                    card.appendChild(badge);
+                }
+            });
         });
 
         // 4. Nếu drawer đang mở với slug đã có DB → đổi nút Lưu vào DB
@@ -1022,20 +1268,24 @@ function _updateDrawerImportBtnIfInDb(inDbSet) {
     const drawer = document.getElementById('apiDetailDrawer');
     if (!drawer || drawer.style.display === 'none' || !drawer.dataset.currentSlug) return;
     const currentSlug = drawer.dataset.currentSlug;
-    const fullUrl = `https://phimapi.com/phim/${currentSlug}`;
-    if (!inDbSet.has(currentSlug) && !inDbSet.has(fullUrl)) return;
+    const fullUrls = [
+        `https://phimapi.com/phim/${currentSlug}`,
+        `https://ophim1.com/phim/${currentSlug}`,
+        `https://api.nguonc.com/api/film/${currentSlug}`
+    ];
+    if (!inDbSet.has(currentSlug) && !fullUrls.some(u => inDbSet.has(u))) return;
 
     // Tìm nút Lưu vào DB trong drawer
     const importBtn = Array.from(drawer.querySelectorAll('button')).find(b =>
         b.textContent.includes('Lưu') || b.innerHTML.includes('cloud-upload')
     );
     if (!importBtn) return;
-    importBtn.innerHTML = '<i class="fas fa-database"></i> Đã có trong DB';
+    importBtn.innerHTML = '<i class="fas fa-link"></i> Gộp Server';
+    importBtn.title = 'Phim đã có. Nhấn để gộp Server hiện tại vào DB.';
     importBtn.style.background = 'rgba(16,185,129,0.2)';
     importBtn.style.borderColor = 'rgba(16,185,129,0.5)';
     importBtn.style.color = '#34d399';
-    importBtn.style.cursor = 'default';
-    importBtn.onclick = e => e.preventDefault();
+    importBtn.style.cursor = 'pointer';
 }
 
 /**
@@ -1148,6 +1398,7 @@ function _updateCardImportBadge(slug, result) {
             card.className = 'api-movie-card';
             card.dataset.slug = item.slug;
             card.title = item.name;
+            card.dataset.providerId = item._providerId || (typeof _apiState !== 'undefined' ? _apiState.currentProvider : '') || '';
 
             // Checkbox chọn bulk import
             const cbWrap = document.createElement('div');
@@ -1157,6 +1408,7 @@ function _updateCardImportBadge(slug, result) {
             cb.type = 'checkbox';
             cb.className = 'api-card-select-cb';
             cb.dataset.slug = item.slug;
+            if (item._providerId) cb.dataset.providerId = item._providerId;
             cb.onchange = () => toggleImportSelect(item.slug, cb);
             cbWrap.appendChild(cb);
             card.appendChild(cbWrap);
@@ -1192,17 +1444,25 @@ function _updateCardImportBadge(slug, result) {
             importBtn.className = 'api-card-import-btn';
             importBtn.title = 'Import nhanh vào database';
             importBtn.innerHTML = '<i class="fas fa-plus-circle"></i>';
-            importBtn.onclick = e => { e.stopPropagation(); importQuickFromCard(item.slug, importBtn); };
+            importBtn.onclick = e => { e.stopPropagation(); importQuickFromCard(item.slug, importBtn, item._providerId); };
             card.appendChild(importBtn);
 
             // Thông tin phim
             const typeClass = item.type === 'series' ? 'type-series' : 'type-single';
             const typeLabel = item.type === 'series' ? 'Bộ' : 'Lẻ';
+            
+            let providerBadgeHtml = '';
+            if (item._providerId && API_PROVIDERS[item._providerId]) {
+                const p = API_PROVIDERS[item._providerId];
+                providerBadgeHtml = `<span class="api-badge" style="background:${p.color}20;color:${p.color};font-size:0.65rem;border:1px solid ${p.color}40;margin-right:4px;">${p.name}</span>`;
+            }
+
             const info = document.createElement('div');
             info.className = 'api-movie-card-info';
             info.innerHTML = `
                 <div class="api-movie-card-name">${item.name}</div>
                 <div class="api-movie-card-meta">
+                    ${providerBadgeHtml}
                     <span class="api-badge ${typeClass}">${typeLabel}</span>
                     ${item.year ? `<span class="api-badge year">${item.year}</span>` : ''}
                     ${item.status ? `<span class="api-badge" style="background:rgba(52,211,153,0.1);color:#34d399;font-size:0.65rem;">${item.status}</span>` : ''}
@@ -1212,7 +1472,7 @@ function _updateCardImportBadge(slug, result) {
             // Click vào phần nội dung card → xem chi tiết
             card.onclick = e => {
                 if (e.target.closest('.api-card-select-wrap, .api-card-import-btn')) return;
-                if (typeof callApiDetail === 'function') callApiDetail(item.slug);
+                if (typeof callApiDetail === 'function') callApiDetail(item.slug, item._providerId);
             };
 
             grid.appendChild(card);
@@ -1225,19 +1485,23 @@ function _updateCardImportBadge(slug, result) {
         if (_importState.newOnlyFilterActive) applyNewOnlyFilter();
     };
 
-    // Override callApiDetail để lưu slug hiện tại vào drawer
+    // Override callApiDetail để lưu slug và providerId hiện tại vào drawer
     if (typeof callApiDetail === 'function') {
         const _origCallApiDetail = callApiDetail;
-        window.callApiDetail = async function(slug) {
+        window.callApiDetail = async function(slug, providerId) {
             const drawer = document.getElementById('apiDetailDrawer');
-            if (drawer) drawer.dataset.currentSlug = slug;
+            if (drawer) {
+                drawer.dataset.currentSlug = slug;
+                if (providerId) drawer.dataset.currentProviderId = providerId;
+                else delete drawer.dataset.currentProviderId;
+            }
             const btn = document.getElementById('btnDetailImport');
             if (btn) {
                 btn.disabled = false;
                 btn.className = 'btn btn-sm api-detail-import-btn';
                 btn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Lưu vào DB';
             }
-            return _origCallApiDetail(slug);
+            return _origCallApiDetail(slug, providerId);
         };
     }
 })();
@@ -1456,6 +1720,26 @@ async function autoSyncEpisodesIfNeeded() {
         for (const movie of moviesNeedSync) {
             const result = await syncEpisodesForMovie(movie.id, movie.api_url_backup, provider);
             totalAdded += result.added;
+
+            // ★ Cross-fetch đa nguồn: gộp tập từ OPhim, NguonC... nếu có tập mới
+            if (result.added > 0 && typeof _crossFetchFromAllProviders === 'function') {
+                try {
+                    const providerName = provider.name || provider.id || 'KKPhim';
+                    const slug = movie.api_url_backup.startsWith('http')
+                        ? movie.api_url_backup.replace(/.*\/phim\//, '').split('?')[0].replace(/\/$/, '')
+                        : movie.api_url_backup;
+                    console.log(`[AutoSync] 🌐 Cross-fetch đa nguồn cho "${movie.title}"...`);
+                    await _crossFetchFromAllProviders(movie.id, slug, providerName, movie.title || '');
+                    // Cập nhật versions sau khi gộp đa nguồn
+                    if (typeof _syncMovieVersionsFromEpisodes === 'function') {
+                        await _syncMovieVersionsFromEpisodes(movie.id);
+                    }
+                    console.log(`[AutoSync] ✅ Cross-fetch xong cho "${movie.title}".`);
+                } catch (crossErr) {
+                    console.warn(`[AutoSync] ⚠️ Lỗi cross-fetch "${movie.title}":`, crossErr.message);
+                }
+            }
+
             await new Promise(r => setTimeout(r, 600));
         }
 
@@ -1710,3 +1994,466 @@ async function batchUpdateImdbRatings(forceAll = false) {
 // Gắn ra global scope để admin gọi từ DevTools console
 window.batchUpdateImdbRatings = batchUpdateImdbRatings;
 
+/* ═══════════════════════════════════════════════════════════════
+   SYNC VERSIONS & MERGE NGUỒN & CROSS-FETCH & BULK SCAN ĐA NGUỒN
+   ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Quét tất cả sources trong episodes của 1 phim → tự động cập nhật versions trên movies.
+ * Chạy sau khi merge/cross-fetch để đảm bảo cột versions phản ánh đúng thực tế.
+ * @param {string} movieId
+ */
+async function _syncMovieVersionsFromEpisodes(movieId) {
+    if (!movieId || typeof supabase === 'undefined') return;
+    try {
+        const { data: eps } = await supabase
+            .from('episodes')
+            .select('sources')
+            .eq('movie_id', movieId);
+        if (!eps?.length) return;
+
+        // Trích xuất tất cả label duy nhất từ sources
+        const versionSet = new Set();
+        for (const ep of eps) {
+            if (!Array.isArray(ep.sources)) continue;
+            for (const src of ep.sources) {
+                const label = (src.label || '').trim();
+                if (!label) continue;
+                // Chuẩn hóa: bỏ "dự phòng" ở cuối, bỏ suffix server
+                const clean = label.replace(/\s*dự phòng$/i, '').trim();
+                if (clean) versionSet.add(clean);
+            }
+        }
+
+        if (versionSet.size === 0) return;
+        const newVersions = [...versionSet];
+
+        // So sánh với versions hiện tại, chỉ update nếu có thay đổi
+        const { data: movie } = await supabase.from('movies').select('versions').eq('id', movieId).single();
+        const oldVersions = movie?.versions || [];
+        const oldSet = new Set(oldVersions);
+        const hasNew = newVersions.some(v => !oldSet.has(v));
+        if (!hasNew && oldVersions.length >= newVersions.length) return; // Không cần update
+
+        await supabase.from('movies').update({ versions: newVersions }).eq('id', movieId);
+        console.log(`[SyncVersions] ✅ Cập nhật versions cho ${movieId}:`, newVersions);
+    } catch (e) {
+        console.warn('[SyncVersions] Lỗi:', e.message);
+    }
+}
+
+/**
+ * Gộp nguồn video mới từ 1 API vào các tập phim đã có trong DB.
+ * Không xóa dữ liệu cũ, chỉ push thêm source chưa tồn tại.
+ * @param {string} movieId       - ID phim trong Supabase
+ * @param {Array}  episodesData  - Mảng episodes từ API [{server_name, server_data/items}]
+ * @param {string} providerName  - Tên nguồn API (VD: 'KKPhim', 'OPhim')
+ * @returns {Promise<{added: number}>}
+ */
+async function _mergeEpisodesSources(movieId, episodesData, providerName) {
+    if (!movieId || !episodesData?.length || typeof supabase === 'undefined') return { added: 0 };
+
+    try {
+        // Hàm chuẩn hóa số tập: "Tập 01" → "1", "Episode 5" → "5", "1" → "1", "01" → "1"
+        function _normalizeEpNumber(raw) {
+            const s = String(raw || '').trim().toLowerCase();
+            // Loại bỏ prefix "tập", "tap", "episode", "ep" + khoảng trắng/dấu
+            const cleaned = s.replace(/^(tập|tap|episode|ep)[\s._-]*/i, '').trim();
+            // Trích xuất số đầu tiên tìm thấy
+            const numMatch = cleaned.match(/(\d+(\.\d+)?)/);
+            return numMatch ? String(parseFloat(numMatch[1])) : s;
+        }
+
+        // 1. Lấy tất cả tập hiện có của phim này từ DB
+        const { data: existingEps } = await supabase
+            .from('episodes')
+            .select('id, episode_number, sources')
+            .eq('movie_id', movieId);
+
+        if (!existingEps || existingEps.length === 0) return { added: 0 };
+
+        // Map episode_number (chuẩn hóa) → DB record để tra nhanh
+        // Lưu cả bản gốc và bản chuẩn hóa để khớp linh hoạt giữa các provider
+        const epMap = {};
+        existingEps.forEach(ep => {
+            // Key gốc (chính xác)
+            epMap[String(ep.episode_number)] = ep;
+            // Key chuẩn hóa (số thuần túy)
+            const norm = _normalizeEpNumber(ep.episode_number);
+            if (!epMap[norm]) epMap[norm] = ep; // Ưu tiên key gốc nếu trùng
+        });
+
+        let totalAdded = 0;
+
+        // 2. Duyệt episodesData mới từ API
+        for (const server of episodesData) {
+            const serverName = server.server_name || '';
+            const lower = serverName.toLowerCase();
+
+            // Map tên server → label chuẩn (giống _importEpisodesForMovie)
+            let mainLabel = 'Vietsub';
+            if (lower.includes('thuyet-minh') || lower.includes('thuyết minh') || lower.includes('thuyet minh') || lower.includes('tm')) {
+                mainLabel = 'Thuyết minh';
+            } else if (lower.includes('long-tieng') || lower.includes('lồng tiếng') || lower.includes('long tieng') || lower.includes('lt')) {
+                mainLabel = 'Lồng tiếng';
+            } else if (lower.includes('ban-goc') || lower.includes('bản gốc') || lower.includes('raw') || lower.includes('original')) {
+                mainLabel = 'Bản gốc';
+            }
+
+            const srvData = server.server_data || server.items || [];
+            for (const ep of srvData) {
+                const epName = String(ep.name || '').trim();
+                // Thử khớp: (1) tên gốc chính xác, (2) tên chuẩn hóa (số thuần)
+                const dbEp = epMap[epName] || epMap[_normalizeEpNumber(epName)];
+                if (!dbEp) continue; // Tập này không tồn tại trong DB → bỏ qua
+
+                const currentSources = Array.isArray(dbEp.sources) ? [...dbEp.sources] : [];
+                let addedForThisEp = 0;
+
+                const m3u8Link = ep.link_m3u8 || ep.m3u8 || '';
+                const embedLink = ep.link_embed || ep.embed || '';
+
+                // Push m3u8 nếu chưa có link này
+                if (m3u8Link && !currentSources.some(s => s.source === m3u8Link)) {
+                    currentSources.push({ label: mainLabel, type: 'hls', source: m3u8Link, server: providerName });
+                    addedForThisEp++;
+                }
+                // Push embed nếu chưa có link này
+                if (embedLink && !currentSources.some(s => s.source === embedLink)) {
+                    currentSources.push({ label: mainLabel + ' dự phòng', type: 'embed', source: embedLink, server: providerName });
+                    addedForThisEp++;
+                }
+
+                // Chỉ update DB nếu thực sự có thêm nguồn mới
+                if (addedForThisEp > 0) {
+                    await supabase.from('episodes')
+                        .update({ sources: currentSources, updated_at: new Date().toISOString() })
+                        .eq('id', dbEp.id);
+                    totalAdded += addedForThisEp;
+                    // Cập nhật cache local để các tập sau cùng phim không bị trùng
+                    dbEp.sources = currentSources;
+                }
+            }
+        }
+
+        if (totalAdded > 0) {
+            console.log(`[MergeSources] ✅ Đã gộp ${totalAdded} nguồn "${providerName}" vào movieId: ${movieId}`);
+        }
+        return { added: totalAdded };
+    } catch (err) {
+        console.error('[MergeSources] Lỗi:', err);
+        return { added: 0 };
+    }
+}
+
+/**
+ * Quét chéo tất cả API providers khác để lấy thêm nguồn video cho 1 phim.
+ * Chiến lược "Search-Then-Detail": Tìm kiếm theo tên phim trên từng Provider
+ * để tìm đúng slug tương ứng, rồi mới fetch chi tiết.
+ * @param {string} movieId          - ID phim đã lưu trong DB
+ * @param {string} slug             - Slug phim gốc (dùng làm fallback)
+ * @param {string} excludeProvider  - Tên/ID provider đã import (bỏ qua)
+ * @param {string} movieName        - Tên phim gốc để Search (optional, lấy từ DB nếu thiếu)
+ */
+async function _crossFetchFromAllProviders(movieId, slug, excludeProvider, movieName = '') {
+    const _fetchedProviders = []; // Danh sách provider gộp thành công
+    if (!movieId || !slug || typeof API_PROVIDERS === 'undefined') return _fetchedProviders;
+
+    // Nếu chưa có tên phim → thử lấy từ DB
+    if (!movieName) {
+        try {
+            const { data } = await supabase.from('movies').select('title').eq('id', movieId).single();
+            movieName = data?.title || '';
+        } catch(e) { /* ignore */ }
+    }
+
+    const providerKeys = Object.keys(API_PROVIDERS);
+    for (const key of providerKeys) {
+        const otherProvider = API_PROVIDERS[key];
+        // Bỏ qua provider đã import
+        if (otherProvider.name === excludeProvider || otherProvider.id === excludeProvider) continue;
+
+        try {
+            let resolvedSlug = slug; // Mặc định thử slug gốc
+            let foundViaSearch = false;
+
+            // ★ Progress: Đang quét nguồn
+                _addImportLog(`🔍 Đang tìm "${movieName || slug}" trên ${otherProvider.name}...`, 'info');
+
+            // ★ BƯỚC 1: Thử tìm kiếm theo tên phim trên Provider này
+            if (movieName && typeof otherProvider.buildSearchUrl === 'function') {
+                try {
+                    const searchUrl = otherProvider.buildSearchUrl(movieName, 1);
+                    const searchRes = await fetch(searchUrl);
+                    if (searchRes.ok) {
+                        const searchRaw = await searchRes.json();
+                        const parsed = otherProvider.parseListResponse(searchRaw);
+                        
+                        if (parsed.items && parsed.items.length > 0) {
+                            // Tìm item có slug trùng khớp chính xác trước
+                            let match = parsed.items.find(i => i.slug === slug);
+                            
+                            // Nếu không trùng khớp slug → tìm theo tên (so sánh lowercase)
+                            if (!match) {
+                                const lowerName = movieName.toLowerCase().trim();
+                                match = parsed.items.find(i => 
+                                    (i.name || '').toLowerCase().trim() === lowerName ||
+                                    (i.origin_name || '').toLowerCase().trim() === lowerName
+                                );
+                            }
+                            
+                            // Nếu vẫn không → lấy kết quả đầu tiên (gần nhất)
+                            if (!match && parsed.items.length === 1) {
+                                match = parsed.items[0];
+                            }
+                            
+                            if (match && match.slug) {
+                                resolvedSlug = match.slug;
+                                foundViaSearch = true;
+                                _addImportLog(`✅ Tìm thấy trên ${otherProvider.name}: "${match.name || resolvedSlug}"`, 'success');
+                            }
+                        }
+                    }
+                } catch (searchErr) {
+                    console.warn(`[CrossFetch] Search lỗi trên ${otherProvider.name}:`, searchErr.message);
+                }
+            }
+
+            // ★ BƯỚC 2: Gọi Detail API với slug đã giải quyết
+            const url = otherProvider.buildDetailUrl(resolvedSlug);
+            const res = await fetch(url);
+            
+            if (!res.ok) {
+                _addImportLog(`⚠️ ${otherProvider.name}: Không tìm thấy phim này`, 'warning');
+                console.log(`[CrossFetch] ${otherProvider.name}: Không tìm thấy slug "${resolvedSlug}" (HTTP ${res.status})`);
+                continue;
+            }
+            
+            const raw = await res.json();
+
+            // Kiểm tra dữ liệu hợp lệ
+            const movieData = raw.movie || raw;
+            const apiEpisodes = raw.episodes || movieData.episodes || [];
+            if (!apiEpisodes.length) continue;
+
+            // Normalize episodes cho NguonC (items[] thay vì server_data[])
+            const normalizedEps = apiEpisodes.map(srv => ({
+                server_name: srv.server_name || 'Server',
+                server_data: (srv.server_data || srv.items || []).map(ep => ({
+                    name: ep.name,
+                    link_m3u8: ep.link_m3u8 || ep.m3u8 || '',
+                    link_embed: ep.link_embed || ep.embed || '',
+                })),
+            }));
+
+            // Progress: Đang gộp
+            // Đếm số tập duy nhất (lấy từ server đầu tiên vì mỗi server có cùng số tập)
+            const _uniqueEpCount = normalizedEps.length > 0 ? (normalizedEps[0].server_data?.length || 0) : 0;
+            const totalEps = normalizedEps.reduce((s, srv) => s + (srv.server_data?.length || 0), 0);
+            _addImportLog(`📥 Đang gộp ${_uniqueEpCount} tập từ ${otherProvider.name}...`, 'info');
+
+            // Gộp nguồn từ API này vào DB
+            const result = await _mergeEpisodesSources(movieId, normalizedEps, otherProvider.name || otherProvider.id);
+            if (result.added > 0) {
+                console.log(`[CrossFetch] ✅ Thêm ${result.added} nguồn từ "${otherProvider.name}" cho slug: ${resolvedSlug}${foundViaSearch ? ' (tìm qua Search)' : ''}`);
+                _addImportLog(`✅ Gộp thành công ${result.added} nguồn từ ${otherProvider.name}!`, 'success');
+                _fetchedProviders.push({ name: otherProvider.name, epCount: _uniqueEpCount });
+            } else {
+                _addImportLog(`ℹ️ ${otherProvider.name}: Đã có đủ nguồn, không cần thêm`, 'info');
+            }
+
+            // Delay nhẹ tránh spam API
+            await new Promise(r => setTimeout(r, 300));
+        } catch (e) {
+            // API kia lỗi hoặc không tìm thấy → bỏ qua, không ảnh hưởng import chính
+            console.warn(`[CrossFetch] ${otherProvider.name}: ${e.message}`);
+        }
+    }
+    return _fetchedProviders;
+}
+
+/**
+ * Quét bổ sung nguồn hàng loạt cho TẤT CẢ phim đã có trên web.
+ * Admin bấm nút từ giao diện "Quản lý API".
+ * Duyệt từng phim, check slug trên tất cả API, merge nguồn mới.
+ */
+async function bulkScanAllMoviesSources() {
+    if (typeof supabase === 'undefined') return;
+    if (_importState.isImporting) {
+        if (typeof showNotification === 'function') showNotification('Đang có tiến trình import khác đang chạy!', 'warning');
+        return;
+    }
+
+    // Lấy tất cả phim có api_url_backup (đã import từ API)
+    const { data: movies, error } = await supabase
+        .from('movies')
+        .select('id, title, api_url_backup')
+        .not('api_url_backup', 'is', null)
+        .neq('api_url_backup', '');
+
+    if (error || !movies?.length) {
+        if (typeof showNotification === 'function') showNotification('Không có phim nào cần quét hoặc lỗi kết nối!', 'warning');
+        return;
+    }
+
+    _importState.isImporting = true;
+    _importState.importAbort = false;
+
+    const total = movies.length;
+    let done = 0, updatedCount = 0;
+
+    // Hiện UI progress
+    const btnScan = document.getElementById('btnBulkScanSources');
+    const btnAbort = document.getElementById('btnAbortBulkScan');
+    if (btnScan) { btnScan.disabled = true; btnScan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang quét...'; }
+    if (btnAbort) btnAbort.style.display = 'inline-flex';
+    _showImportProgress(0, total, 'Bắt đầu quét đa nguồn...');
+
+    for (const movie of movies) {
+        if (_importState.importAbort) {
+            _showImportProgress(done, total, '⚠️ Đã dừng bởi admin');
+            break;
+        }
+
+        // Trích xuất slug từ api_url_backup
+        const slug = (movie.api_url_backup || '')
+            .replace(/.*\/(phim|film)\//, '').split('?')[0].replace(/\/$/, '');
+
+        if (!slug) { done++; continue; }
+
+        _showImportProgress(done, total, `Quét: ${movie.title || slug}`);
+
+        // Gọi hàm quét chéo thông minh (Search-Then-Detail) cho tất cả providers
+        try {
+            await _crossFetchFromAllProviders(movie.id, slug, '', movie.title || '');
+            updatedCount++;
+        } catch (e) {
+            // Bỏ qua lỗi, tiếp tục phim tiếp theo
+        }
+
+        done++;
+        await new Promise(r => setTimeout(r, 200)); // Delay giữa các phim
+    }
+
+    _importState.isImporting = false;
+    const msg = `✅ Hoàn tất quét ${done}/${total} phim — Cập nhật ${updatedCount} nguồn mới`;
+    _showImportProgress(done, total, msg);
+
+    if (btnScan) { btnScan.disabled = false; btnScan.innerHTML = '<i class="fas fa-satellite-dish"></i> Quét Đa Nguồn'; }
+    if (btnAbort) btnAbort.style.display = 'none';
+    if (typeof showNotification === 'function') showNotification(msg, updatedCount > 0 ? 'success' : 'info');
+}
+
+/** Dừng quét bulk scan */
+function abortBulkScan() {
+    _importState.importAbort = true;
+    if (typeof showNotification === 'function') showNotification('Đang dừng quét...', 'warning');
+}
+
+/**
+ * Fix tất cả tập phim có server rỗng → tự detect từ URL video
+ * Quét toàn bộ bảng episodes, kiểm tra sources JSON, tự xác định nguồn từ URL
+ */
+async function fixEmptyServerNames() {
+    if (!supabase) return;
+    
+    const confirmed = await customConfirm(
+        'Quét tất cả tập phim trong DB và sửa các nguồn có server rỗng.\n\nHệ thống sẽ TỰ DETECT nguồn từ URL video:\n• URL chứa "ophim" → OPhim (Server 2)\n• URL chứa "nguonc" → NguonC (Server 3)\n• Còn lại → KKPhim (Server 1)',
+        { title: 'Fix Server rỗng (Auto Detect)', type: 'info', confirmText: 'Bắt đầu' }
+    );
+    if (!confirmed) return;
+
+    const btn = document.getElementById('btnFixEmptyServers');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang sửa...';
+    }
+
+    // Hàm detect nguồn từ URL video
+    function detectProviderFromUrl(url) {
+        if (!url) return 'KKPhim';
+        const lower = url.toLowerCase();
+        if (lower.includes('ophim') || lower.includes('opstream') || lower.includes('op.supabase')) return 'OPhim';
+        if (lower.includes('nguonc') || lower.includes('streamc')) return 'NguonC';
+        return 'KKPhim';
+    }
+
+    try {
+        showLoading(true, '🔍 Đang quét tất cả tập phim...');
+        
+        let allEps = [];
+        let from = 0;
+        const BATCH = 1000;
+        while (true) {
+            const { data, error } = await supabase
+                .from('episodes')
+                .select('id, sources')
+                .range(from, from + BATCH - 1);
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+            allEps = allEps.concat(data);
+            if (data.length < BATCH) break;
+            from += BATCH;
+        }
+
+        const total = allEps.length;
+        showLoading(true, `📡 Tìm thấy ${total} tập phim. Đang kiểm tra...`);
+
+        let fixedCount = 0;
+        let skippedCount = 0;
+        const detectedStats = { KKPhim: 0, OPhim: 0, NguonC: 0 };
+
+        for (let i = 0; i < allEps.length; i++) {
+            const ep = allEps[i];
+            if (!ep.sources || !Array.isArray(ep.sources)) { skippedCount++; continue; }
+            
+            let needsUpdate = false;
+            const updatedSources = ep.sources.map(src => {
+                const detected = detectProviderFromUrl(src.source);
+                const currentServer = (src.server || '').trim();
+                // Nếu server hiện tại khác với detect → cần sửa
+                if (currentServer !== detected) {
+                    needsUpdate = true;
+                    detectedStats[detected] = (detectedStats[detected] || 0) + 1;
+                    return { ...src, server: detected };
+                }
+                return src;
+            });
+
+            if (needsUpdate) {
+                const { error } = await supabase
+                    .from('episodes')
+                    .update({ sources: updatedSources })
+                    .eq('id', ep.id);
+                if (error) {
+                    console.error('❌ Lỗi update episode ' + ep.id, error);
+                } else {
+                    fixedCount++;
+                }
+            } else {
+                skippedCount++;
+            }
+            
+            if ((i + 1) % 10 === 0 || i === allEps.length - 1) {
+                showLoading(true, `🔧 Đang sửa... ${i + 1}/${total} (Đã fix: ${fixedCount})`);
+            }
+        }
+
+        showLoading(false);
+        const statsStr = Object.entries(detectedStats).filter(([,v]) => v > 0).map(([k,v]) => `${k}: ${v}`).join(', ');
+        showNotification(`✅ Hoàn tất! Sửa ${fixedCount} tập. Detect: ${statsStr || 'Không có gì cần sửa'}`, 'success');
+        console.log('✅ Fix server hoàn tất:', fixedCount, 'sửa,', skippedCount, 'bỏ qua. Stats:', detectedStats);
+
+        if (typeof loadAdminMovies === 'function') await loadAdminMovies(true);
+
+    } catch (err) {
+        console.error('❌ Lỗi fix empty servers:', err);
+        showLoading(false);
+        showNotification('Lỗi: ' + err.message, 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-wrench"></i> Fix Server rỗng';
+        }
+    }
+}

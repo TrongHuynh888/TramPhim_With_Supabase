@@ -8,9 +8,9 @@ let hasSystemSettingsTable = true;
 // Cache settings từ DB
 let dbSettingsCache = {};
 
-// Bảo mật Sudo Mode
-let sudoUnlocked = sessionStorage.getItem('sudo_api_unlocked') === 'true';
-let sudoUnlockExpiredAt = parseInt(sessionStorage.getItem('sudo_api_expired_at') || '0');
+// Bảo mật Sudo Mode (lưu trên Supabase DB - key: sudo_expiry_at)
+let sudoUnlocked = false;
+let sudoUnlockExpiredAt = 0;
 let isSuperAdmin = false;
 let sudoTimerInterval = null;
 
@@ -95,6 +95,17 @@ const API_KEYS_CONFIG = [
         isReadonly: false,
         getValue: () => dbSettingsCache['cloudflare_r2_url'] || defaultCodeKeys.cloudflare,
         category: 'dynamic'
+    },
+    {
+        id: 'tmdb_api_key',
+        title: 'TMDb API Key',
+        service: 'Metadata Phim (The Movie Database)',
+        icon: 'fas fa-database',
+        description: 'Key từ themoviedb.org — bổ sung poster HD, trailer YouTube, thông tin diễn viên. Đăng ký miễn phí tại themoviedb.org/settings/api',
+        isReadonly: false,
+        getValue: () => dbSettingsCache['tmdb_api_key'] || '',
+        category: 'dynamic',
+        hasTmdbToggles: true
     }
 ];
 
@@ -113,8 +124,17 @@ async function initApiKeysManager() {
         await loadSettingsFromDB();
     }
     
-    // --- SUDO MODE CHECK ---
+    // --- SUDO MODE CHECK (từ DB) ---
     isSuperAdmin = verifySuperAdmin();
+    // Đọc expiry từ DB cache (đã load ở bước 2)
+    const dbExpiry = parseInt(dbSettingsCache['sudo_expiry_at'] || '0');
+    if (dbExpiry && dbExpiry > Date.now()) {
+        sudoUnlocked = true;
+        sudoUnlockExpiredAt = dbExpiry;
+    } else {
+        sudoUnlocked = false;
+        sudoUnlockExpiredAt = 0;
+    }
     if (!checkSudoSession()) {
         renderSudoLockScreen();
         return; 
@@ -317,6 +337,12 @@ function generateApiKeyCardInnerHtml(config, isPoolOpen = false) {
         </div>`;
     }
 
+    // --- Render toggle switches cho TMDb features ---
+    let tmdbTogglesHtml = '';
+    if (!isLockedByRole && config.hasTmdbToggles) {
+        tmdbTogglesHtml = renderTmdbToggles();
+    }
+
     return `
         <div class="api-key-card-header">
             <div class="api-key-title-group">
@@ -333,9 +359,99 @@ function generateApiKeyCardInnerHtml(config, isPoolOpen = false) {
             <i class="fas fa-spinner fa-spin api-status-icon"></i>
             <span class="api-status-msg" id="apiStatusMsg_${config.id}">Đang kiểm tra kết nối...</span>
         </div>
+        ${tmdbTogglesHtml}
         ${poolHtml}
         ${actionBtn}
     `;
+}
+
+// ==========================================
+// TMDB FEATURE TOGGLES
+// ==========================================
+
+/**
+ * Render giao diện toggle on/off cho từng loại dữ liệu TMDb
+ */
+function renderTmdbToggles() {
+    const features = [
+        { key: 'poster',   icon: 'fas fa-image',       label: 'Poster dự phòng',   desc: 'Dùng poster TMDb khi ảnh gốc lỗi' },
+        { key: 'backdrop', icon: 'fas fa-panorama',     label: 'Backdrop dự phòng', desc: 'Dùng backdrop TMDb khi ảnh nền gốc lỗi' },
+        { key: 'trailer',  icon: 'fab fa-youtube',      label: 'Trailer YouTube',   desc: 'Hiện nút Xem Trailer trên trang phim & giới thiệu' },
+        { key: 'cast',     icon: 'fas fa-users',        label: 'Thông tin diễn viên', desc: 'Bổ sung ảnh & thông tin diễn viên từ TMDb' },
+    ];
+
+    const items = features.map(f => {
+        const isOn = dbSettingsCache['tmdb_use_' + f.key] === 'true';
+        return `
+            <div class="tmdb-toggle-item">
+                <div class="tmdb-toggle-info">
+                    <i class="${f.icon} tmdb-toggle-icon"></i>
+                    <div>
+                        <span class="tmdb-toggle-label">${f.label}</span>
+                        <span class="tmdb-toggle-desc">${f.desc}</span>
+                    </div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" ${isOn ? 'checked' : ''} onchange="toggleTmdbFeature('${f.key}', this.checked)">
+                    <span class="slider round"></span>
+                </label>
+            </div>`;
+    }).join('');
+
+    return `
+        <div class="tmdb-toggles-wrapper">
+            <div class="tmdb-toggles-header">
+                <i class="fas fa-sliders-h"></i> Bật / Tắt từng loại dữ liệu TMDb
+            </div>
+            <div class="tmdb-toggles-list">
+                ${items}
+            </div>
+            <div style="padding: 10px 14px 12px; border-top: 1px solid rgba(1,180,228,0.12); margin-top: 4px;">
+                <button class="btn-bulk-tmdb-scan" onclick="bulkScanTmdbCast()" title="Quét tất cả phim, tìm actor thiếu ảnh và bổ sung từ TMDb">
+                    <i class="fas fa-magic"></i>
+                    Quét &amp; Bổ sung ảnh diễn viên hàng loạt
+                </button>
+                <button class="btn-bulk-tmdb-scan" onclick="bulkScanTmdbTrailers()" title="Quét trailer YouTube cho toàn bộ phim và lưu vào cache" style="margin-top:8px; background:linear-gradient(135deg,rgba(198,40,40,0.15),rgba(136,14,79,0.15)); border-color:rgba(198,40,40,0.35); color:#ef9a9a;">
+                    <i class="fab fa-youtube"></i>
+                    Quét &amp; Lưu Trailer hàng loạt
+                </button>
+                <p style="margin: 6px 0 0; font-size: 11px; color: #777; line-height: 1.4;">
+                    <i class="fas fa-info-circle"></i> Trailer được lưu vào cache Supabase — bỏ qua phim đã có sẵn
+                </p>
+            </div>
+        </div>`;
+}
+
+/**
+ * Bật/tắt toggle cho từng loại dữ liệu TMDb, lưu vào Supabase
+ * @param {string} feature - 'poster' | 'trailer' | 'backdrop' | 'cast'
+ * @param {boolean} isEnabled
+ */
+async function toggleTmdbFeature(feature, isEnabled) {
+    if (!hasSystemSettingsTable) {
+        showNotification('Cần tạo bảng system_settings trước!', 'error');
+        return;
+    }
+    const keyName = 'tmdb_use_' + feature;
+    const val = isEnabled ? 'true' : 'false';
+
+    try {
+        const { error } = await window.supabase.from('system_settings').upsert({
+            key_name: keyName,
+            key_value: val,
+            description: `TMDb toggle: ${feature}`,
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'key_name' });
+
+        if (error) throw error;
+
+        dbSettingsCache[keyName] = val;
+        const featureNames = { poster: 'Poster dự phòng', backdrop: 'Backdrop dự phòng', trailer: 'Trailer YouTube', cast: 'Thông tin diễn viên' };
+        showNotification(`${isEnabled ? '✅ Đã bật' : '⛔ Đã tắt'} "${featureNames[feature] || feature}"`, 'success');
+    } catch (e) {
+        console.error('Lỗi lưu TMDb toggle:', e);
+        showNotification('Lỗi khi lưu cấu hình TMDb: ' + e.message, 'error');
+    }
 }
 
 function renderSingleApiKeyCard(id) {
@@ -780,6 +896,13 @@ async function checkApiHealth(id, key) {
                 if (!metRes.ok) return { ok: false, msg: metData.error || metData.message || "Invalid API Key" };
                 return { ok: true, msg: "Máy chủ Video Call: Đang hoạt động (Online)" };
                 
+            case 'tmdb_api_key':
+                const tmdbPingRes = await fetch(`https://api.themoviedb.org/3/movie/550?api_key=${key}`);
+                const tmdbPingData = await tmdbPingRes.json();
+                if (tmdbPingData.status_code === 7) return { ok: false, msg: 'API Key không hợp lệ (Invalid API key)' };
+                if (!tmdbPingRes.ok) return { ok: false, msg: tmdbPingData.status_message || 'Lỗi kết nối TMDb' };
+                return { ok: true, msg: `Kết nối TMDb OK — Phim test: "${tmdbPingData.title}" (${tmdbPingData.release_date?.substring(0,4)})` };
+
             case 'cloudflare_r2_url':
                 try {
                     // Cố tình gửi POST trống để ép Worker trả về CORS và HTTP Code (chứng minh server sống)
@@ -872,12 +995,9 @@ async function autoSwitchBackupKey(id) {
 
 function checkSudoSession() {
     if (sudoUnlocked && Date.now() < sudoUnlockExpiredAt) {
-        // Gia hạn thêm 30 phút mỗi khi thao tác thành công
-        sessionStorage.setItem('sudo_api_expired_at', (Date.now() + 30 * 60000).toString());
         return true;
     }
     sudoUnlocked = false;
-    sessionStorage.removeItem('sudo_api_unlocked');
     return false;
 }
 
@@ -971,8 +1091,18 @@ function unlockSudoMode() {
         if (pin === correctPin) {
             sudoUnlocked = true;
             sudoUnlockExpiredAt = Date.now() + 30 * 60000;
-            sessionStorage.setItem('sudo_api_unlocked', 'true');
-            sessionStorage.setItem('sudo_api_expired_at', sudoUnlockExpiredAt.toString());
+            
+            // Lưu lên Supabase DB
+            if (window.supabase && hasSystemSettingsTable) {
+                window.supabase.from('system_settings').upsert({
+                    key_name: 'sudo_expiry_at',
+                    key_value: sudoUnlockExpiredAt.toString(),
+                    description: 'Thời điểm hết hạn Sudo Mode (timestamp ms)',
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'key_name' }).then(() => {
+                    dbSettingsCache['sudo_expiry_at'] = sudoUnlockExpiredAt.toString();
+                }).catch(e => console.warn('Lỗi lưu sudo expiry:', e));
+            }
             
             // Re-render
             renderApiKeysUI();
@@ -1169,8 +1299,19 @@ function startSudoCountdown() {
 
 function lockSudoNow() {
     sudoUnlocked = false;
-    sessionStorage.removeItem('sudo_api_unlocked');
-    sessionStorage.removeItem('sudo_api_expired_at');
+    sudoUnlockExpiredAt = 0;
     if (sudoTimerInterval) clearInterval(sudoTimerInterval);
+    
+    // Xóa khỏi DB
+    if (window.supabase && hasSystemSettingsTable) {
+        window.supabase.from('system_settings').upsert({
+            key_name: 'sudo_expiry_at',
+            key_value: '0',
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'key_name' }).then(() => {
+            dbSettingsCache['sudo_expiry_at'] = '0';
+        }).catch(e => console.warn('Lỗi xóa sudo expiry:', e));
+    }
+    
     renderSudoLockScreen();
 }

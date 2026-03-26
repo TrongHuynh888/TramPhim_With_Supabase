@@ -132,7 +132,7 @@ async function viewMovieIntro(movieId, updateHistory = true) {
     // -- Info New Fields (Cast, Version) — Render dạng avatar chips
     renderIntroCastChips(movie.cast);
     
-    // -- Versions (Dynamic Buttons)
+    // -- Versions (Dynamic Buttons) - Gom nhóm label duy nhất
     const versionContainer = document.getElementById("introVersionList");
     if (versionContainer) {
         versionContainer.innerHTML = "";
@@ -152,25 +152,48 @@ async function viewMovieIntro(movieId, updateHistory = true) {
         if (sources.length === 0) {
              versionContainer.innerHTML = '<span class="info-value">Đang cập nhật...</span>';
         } else {
+            // Gom nhóm label duy nhất - bỏ suffix "dự phòng"
+            const uniqueLabels = [...new Set(sources.map(s => {
+                return (s.label || '').replace(/\s*dự phòng$/i, '').trim() || s.label;
+            }))];
+            
+            // Đếm số server cho mỗi label
+            const serverCountMap = {};
+            uniqueLabels.forEach(label => {
+                const servers = new Set();
+                sources.forEach(s => {
+                    const baseLabel = (s.label || '').replace(/\s*dự phòng$/i, '').trim();
+                    if (baseLabel === label) {
+                        servers.add(s.server || 'Unknown');
+                    }
+                });
+                serverCountMap[label] = servers.size;
+            });
+            
             // Render buttons
-            sources.forEach((src, index) => {
+            const savedLabel = localStorage.getItem("preferredSourceLabel");
+            let defaultLabel = savedLabel ? savedLabel.replace(/\s*dự phòng$/i, '').trim() : null;
+            if (!defaultLabel || !uniqueLabels.includes(defaultLabel)) {
+                defaultLabel = uniqueLabels[0];
+            }
+            
+            uniqueLabels.forEach((label) => {
                 const btn = document.createElement("button");
                 btn.className = "btn btn-sm version-btn";
-                /* Styles chuyển sang CSS class .version-btn trong intro.css */
-                btn.textContent = src.label;
-                btn.onclick = () => selectIntroVersion(src.label, index);
+                const serverCount = serverCountMap[label] || 0;
+                const serverInfo = serverCount > 1 ? ` (${serverCount} server)` : '';
+                btn.textContent = label + serverInfo;
+                btn.onclick = () => selectIntroVersion(label, 0);
+                
+                // Đánh dấu active
+                if (label === defaultLabel) {
+                    btn.classList.add("active");
+                }
                 versionContainer.appendChild(btn);
             });
             
-            // Chọn mặc định (ưu tiên cái đã lưu)
-            const savedLabel = localStorage.getItem("preferredSourceLabel");
-            let defaultIndex = sources.findIndex(s => s.label === savedLabel);
-            if (defaultIndex === -1) defaultIndex = 0;
-            
-            // Delay 1 chút để đảm bảo DOM đã render
-            setTimeout(() => {
-                selectIntroVersion(sources[defaultIndex].label, defaultIndex);
-            }, 50);
+            // Lưu label mặc định
+            localStorage.setItem("preferredSourceLabel", defaultLabel);
         }
     }
     
@@ -231,6 +254,67 @@ async function viewMovieIntro(movieId, updateHistory = true) {
     
     // Cuộn lên đầu
     window.scrollTo(0, 0);
+
+    // Bổ sung dữ liệu TMDb (bất đồng bộ, không block render)
+    if (typeof enrichMovieWithTmdb === 'function') {
+        enrichMovieWithTmdb(movie).then(enriched => {
+            applyTmdbDataToIntroPage(enriched);
+        }).catch(e => console.warn('[TMDb] Lỗi enrich intro:', e));
+    }
+}
+
+/**
+ * Áp dụng dữ liệu TMDb vào trang giới thiệu phim
+ * Poster/Backdrop chỉ fallback khi ảnh gốc lỗi, thêm nút Xem Trailer nếu có
+ */
+function applyTmdbDataToIntroPage(movie) {
+    if (!movie) return;
+
+    // --- Poster fallback ---
+    if (movie._tmdbPosterUrl && typeof applyTmdbPosterFallback === 'function') {
+        const posterEl = document.getElementById('introPoster');
+        if (posterEl) applyTmdbPosterFallback(posterEl, movie._tmdbPosterUrl, movie.id);
+    }
+
+    // --- Backdrop fallback ---
+    if (movie._tmdbBackdropUrl && typeof applyTmdbBackdropFallback === 'function') {
+        const bgEl = document.getElementById('introBgImage');
+        if (bgEl) {
+            applyTmdbBackdropFallback(bgEl, movie._tmdbBackdropUrl, movie.id);
+        }
+    }
+
+    // --- Nút Xem Trailer trên Intro ---
+    const oldBtn = document.getElementById('btnIntroTrailer');
+    if (oldBtn) oldBtn.remove();
+
+    console.log('[TMDb Intro] _tmdbTrailerKey:', movie._tmdbTrailerKey);
+
+    if (movie._tmdbTrailerKey) {
+        // Container chứa "Xem Ngay", "Yêu thích", "Chia sẻ" trong intro.html
+        const actionBtns = document.querySelector('.intro-actions');
+        console.log('[TMDb Intro] .intro-actions found:', !!actionBtns);
+
+        if (actionBtns && !document.getElementById('btnIntroTrailer')) {
+            const trailerBtn = document.createElement('button');
+            trailerBtn.id = 'btnIntroTrailer';
+            trailerBtn.className = 'btn btn-secondary btn-lg btn-icon-text btn-trailer-tmdb';
+            trailerBtn.innerHTML = '<i class="fab fa-youtube"></i> Xem Trailer';
+            trailerBtn.onclick = () => showTrailerModal(movie._tmdbTrailerKey, movie.title);
+            // Chèn sau nút "Xem Ngay" (con đầu tiên)
+            const playBtn = actionBtns.querySelector('.btn-play-intro');
+            if (playBtn && playBtn.nextSibling) {
+                actionBtns.insertBefore(trailerBtn, playBtn.nextSibling);
+            } else {
+                actionBtns.appendChild(trailerBtn);
+            }
+            console.log('[TMDb Intro] ✅ Đã thêm nút Xem Trailer');
+        } else if (!actionBtns) {
+            console.warn('[TMDb Intro] ⚠️ Không tìm thấy .intro-actions trong DOM');
+        }
+    } else {
+        console.log('[TMDb Intro] ℹ️ Không có trailer (phim quá mới hoặc TMDb không có)');
+    }
 }
 
 /**

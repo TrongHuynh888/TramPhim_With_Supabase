@@ -1,4 +1,4 @@
-﻿/*Tách biệt hoàn toàn giao diện Admin.
+/*Tách biệt hoàn toàn giao diện Admin.
    ADMIN.CSS - GIAO DIỆN QUẢN TRỊ VIÊN
    ============================================ */
 
@@ -1761,6 +1761,7 @@
 .dash-activity-icon.error { background: rgba(255, 71, 87, 0.15); color: #ff6b81; }
 .dash-activity-icon.user { background: rgba(0, 122, 255, 0.15); color: var(--accent-primary); }
 .dash-activity-icon.comment { background: rgba(0, 200, 81, 0.15); color: #00ff88; }
+.dash-activity-icon.auto_fix { background: rgba(16, 185, 129, 0.15); color: #10b981; } /* Màu xanh báo Auto-fix thành công */
 
 .dash-activity-content {
   flex: 1;
