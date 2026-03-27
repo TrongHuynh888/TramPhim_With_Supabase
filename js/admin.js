@@ -198,6 +198,8 @@ async function loadAdminData() {
 
     // 🔄 Tự động sync tập mới từ API (chạy ngầm, không ảnh hưởng UI)
     if (typeof autoSyncEpisodesIfNeeded === 'function') autoSyncEpisodesIfNeeded();
+    // 🎬 Tự động import phim mới từ nguồn API (chạy ngầm)
+    if (typeof autoImportNewMoviesIfNeeded === 'function') autoImportNewMoviesIfNeeded();
   } catch (error) {
     console.error("Lỗi load admin data:", error);
   }
@@ -2939,10 +2941,17 @@ function renderMovieSelectionGrid(movies) {
             serverBadgeHtml = `<div style="position: absolute; bottom: 4px; left: 4px; display: flex; gap: 3px; flex-wrap: wrap;">${badges}</div>`;
         }
 
+        // Badge "Chờ duyệt" cho phim đang pending (chỉ có trailer)
+        let pendingBadgeHtml = '';
+        if (m.status === 'pending') {
+            pendingBadgeHtml = `<span style="position:absolute;top:4px;right:4px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-size:0.65rem;font-weight:700;padding:3px 8px;border-radius:5px;z-index:2;letter-spacing:0.3px;box-shadow:0 2px 6px rgba(245,158,11,0.4);"><i class="fas fa-clock" style="margin-right:3px;"></i>Chờ duyệt</span>`;
+        }
+
         return `
             <div class="movie-selection-card" onclick="loadEpisodesForMovie('${m.id}')">
                 <div class="poster-wrapper">
                     ${statusHtml}
+                    ${pendingBadgeHtml}
                     ${serverBadgeHtml}
                     <img src="${m.posterUrl || m.poster_url || ''}" alt="${m.title}" loading="lazy" onerror="this.src='https://placehold.co/200x300?text=No+Poster'">
                 </div>
@@ -3430,6 +3439,54 @@ async function saveBatchImportedEpisodes() {
         showNotification("Import thành công " + episodesToInsert.length + " tập!", "success");
         closeModal("importEpisodesModal");
         
+        if (typeof sendTelegramNotify === 'function') {
+            try {
+                const { data: mData } = await supabase.from('movies').select('title, total_episodes, versions, type, status').eq('id', movieId).single();
+                const { count: currentEpCount } = await supabase.from('episodes').select('id', { count: 'exact', head: true }).eq('movie_id', movieId);
+                
+                const srcSet = new Set();
+                episodesToInsert.forEach(ep => {
+                    (ep.sources || []).forEach(s => {
+                        if (s.server) srcSet.add(s.server);
+                        else if ((s.source || '').includes('ophim')) srcSet.add('OPhim');
+                        else if ((s.source || '').includes('nguonc')) srcSet.add('NguonC');
+                        else srcSet.add('KKPhim');
+                    });
+                });
+                const sourcesStr = srcSet.size > 0 ? Array.from(srcSet).join(', ') : 'API Khác';
+                const versionsStr = mData?.versions?.length ? mData.versions.join(', ') : 'Vietsub';
+                const isTrailer = mData?.status === 'pending';
+                const typeName = mData?.type === 'series' ? 'Phim bộ' : 'Phim lẻ';
+                const typeStr = isTrailer ? `[Trailer] ${typeName}` : typeName;
+                
+                const msg = `🎬 <b>Trạm Phim Bot</b>\n\n👤 Admin vừa thêm thủ công danh sách tập phim:\n\n`
+                    + `📌 <b>Phim:</b> ${mData?.title || 'Không rõ'}\n`
+                    + `🏷 <b>Loại:</b> ${typeStr}\n`
+                    + `📺 <b>Tập:</b> Cập nhật +${episodesToInsert.length} tập (Hiện tại: ${currentEpCount} / ${mData?.total_episodes || '?'})\n`
+                    + `💽 <b>Bản chiếu:</b> ${versionsStr}\n`
+                    + `🌐 <b>Nguồn:</b> ${sourcesStr}`;
+                
+                sendTelegramNotify(msg);
+
+                // ★ THÔNG BÁO CHUÔNG CHO TẬP MỚI
+                if (episodesToInsert.length > 0 && typeof sendNotificationToAllUsers === 'function') {
+                    const epNums = episodesToInsert.map(ep => parseFloat(ep.episode_number)).filter(n => !isNaN(n)).sort((a, b) => a - b);
+                    let epString = `thêm ${episodesToInsert.length} tập mới`;
+                    if (epNums.length === 1) {
+                        epString = `Tập ${epNums[0]}`;
+                    } else if (epNums.length > 1) {
+                        epString = `từ Tập ${epNums[0]} đến Tập ${epNums[epNums.length - 1]}`;
+                    }
+
+                    const notifTitle = `📺 Tập mới [${typeName}]: ${mData?.title || 'Phim'}`;
+                    const notifMsg = `Trạm Phim vừa cập nhật ${epString} cho "${mData?.title || 'Phim'}". Vào xem ngay!`;
+                    sendNotificationToAllUsers(notifTitle, notifMsg, 'new_episode', { movie_id: movieId });
+                }
+            } catch(e) {
+                sendTelegramNotify(`🎬 <b>Trạm Phim Bot</b>\n\n👤 Admin vừa thêm thủ công <b>${episodesToInsert.length} tập phim</b> mới qua API Import!`);
+            }
+        }
+
         if (typeof loadMovies === 'function') await loadMovies();
         await loadAdminMovies();
         loadEpisodesForMovie(movieId);
@@ -4112,6 +4169,38 @@ async function handleEpisodeSubmit(event) {
       
       const { error } = await supabase.from('episodes').insert(episodeData);
       if (error) throw error;
+      
+      if (typeof sendTelegramNotify === 'function') {
+          try {
+              const { data: mData } = await supabase.from('movies').select('title, total_episodes, versions, type, status').eq('id', selectedMovieForEpisodes).single();
+              const { count: currentEpCount } = await supabase.from('episodes').select('id', { count: 'exact', head: true }).eq('movie_id', selectedMovieForEpisodes);
+              
+              const srcSet = new Set();
+              (episodeData.sources || []).forEach(s => { if (s.server) srcSet.add(s.server); else srcSet.add('Custom'); });
+              const sourcesStr = srcSet.size > 0 ? Array.from(srcSet).join(', ') : 'Custom';
+              const versionsStr = mData?.versions?.length ? mData.versions.join(', ') : 'Vietsub';
+              const isTrailer = mData?.status === 'pending';
+              const typeName = mData?.type === 'series' ? 'Phim bộ' : 'Phim lẻ';
+              const typeStr = isTrailer ? `[Trailer] ${typeName}` : typeName;
+
+              const msg = `🎬 <b>Trạm Phim Bot</b>\n\n👤 Admin vừa tạo thủ công 1 Tập phim:\n\n`
+                    + `📌 <b>Phim:</b> ${mData?.title || 'Không rõ'}\n`
+                    + `🏷 <b>Loại:</b> ${typeStr}\n`
+                    + `📺 <b>Tập:</b> ${episodeData.episode_number} (Hiện tại: ${currentEpCount} / ${mData?.total_episodes || '?'})\n`
+                    + `💽 <b>Bản chiếu:</b> ${versionsStr}\n`
+                    + `🌐 <b>Nguồn:</b> ${sourcesStr}`;
+              sendTelegramNotify(msg);
+
+              // ★ THÔNG BÁO CHUÔNG CHO TẬP MỚI
+              if (typeof sendNotificationToAllUsers === 'function') {
+                  const notifTitle = `📺 Tập mới [${typeName}]: ${mData?.title || 'Phim'}`;
+                  const notifMsg = `Trạm Phim vừa cập nhật Tập ${episodeData.episode_number} cho "${mData?.title || 'Phim'}". Vào xem ngay!`;
+                  sendNotificationToAllUsers(notifTitle, notifMsg, 'new_episode', { movie_id: selectedMovieForEpisodes });
+              }
+          } catch(e) {
+              sendTelegramNotify(`🎬 <b>Trạm Phim Bot</b>\n\n👤 Admin vừa thêm thủ công <b>Tập ${episodeData.episode_number}</b> lên hệ thống qua Admin Panel!`);
+          }
+      }
     }
 
     showNotification("Đã lưu tập phim!", "success");

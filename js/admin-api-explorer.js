@@ -49,6 +49,7 @@ const API_PROVIDERS = {
                 type: raw.type, // 'series' | 'single'
                 lang: raw.lang || '',
                 status: raw.episode_current || '',
+                episode_total: raw.episode_total || raw.total_episodes || '',
                 category: (raw.category || []).map(c => c.name).join(', '),
                 country: (raw.country || []).map(c => c.name).join(', '),
             };
@@ -120,6 +121,7 @@ const API_PROVIDERS = {
                 type: raw.type,
                 lang: raw.lang || '',
                 status: raw.episode_current || '',
+                episode_total: raw.episode_total || raw.total_episodes || '',
                 category: (raw.category || []).map(c => c.name).join(', '),
                 country: (raw.country || []).map(c => c.name).join(', '),
             };
@@ -186,6 +188,7 @@ const API_PROVIDERS = {
                 type: this._detectType(raw),
                 lang: raw.language || '',
                 status: raw.current_episode || '',
+                episode_total: raw.episode_total || raw.total_episodes || '',
                 category: this._extractCategories(raw),
                 country: this._extractCountry(raw),
             };
@@ -271,6 +274,10 @@ const _apiState = {
     totalPages: 1,
     lastRawData: null,  // Lưu JSON raw để hiển thị tab JSON
     lastDetailRaw: null,
+    pings: {},          // Lưu kết quả đo ping { kkphim: 120, ophim: 'error' }
+    pingInterval: null,
+    pingCountdown: 10,
+    isPinging: false,
 };
 
 /**
@@ -281,6 +288,34 @@ function initApiExplorer() {
     _renderProviderTabs();
     _populateYearSelect();
     _updateTypeOptions();
+    
+    // Đo vòng đầu tiên (có loading)
+    measureApiPings(false);
+
+    // Setup đếm ngược 10 giây đo ngầm (cập nhật UI từng giây)
+    if (_apiState.pingInterval) clearInterval(_apiState.pingInterval);
+    _apiState.pingCountdown = 10;
+    _apiState.pingInterval = setInterval(() => {
+        const explorerElem = document.getElementById('apiExplorerPanel');
+        // Tự hủy ping nếu đổi panel
+        if (!explorerElem || explorerElem.style.display === 'none') {
+            clearInterval(_apiState.pingInterval);
+            _apiState.pingInterval = null;
+            return;
+        }
+
+        // Đang lấy ping thì ngưng đếm
+        if (_apiState.isPinging) return;
+
+        _apiState.pingCountdown--;
+        const btn = document.getElementById('btnMeasurePing');
+
+        if (_apiState.pingCountdown <= 0) {
+            measureApiPings(true);
+        } else if (btn) {
+            btn.innerHTML = `<i class="fas fa-satellite-dish"></i> Đo Live (${_apiState.pingCountdown}s)`;
+        }
+    }, 1000);
 }
 
 /**
@@ -291,6 +326,22 @@ function _renderProviderTabs() {
     if (!container) return;
     container.innerHTML = '';
     Object.values(API_PROVIDERS).forEach(p => {
+        const pingVal = _apiState.pings[p.id];
+        let pingHtml = '<i class="fas fa-wifi"></i> --ms';
+        let pingColor = 'var(--text-muted)';
+        
+        if (pingVal !== undefined) {
+            if (pingVal === 'error') {
+                pingHtml = '<i class="fas fa-exclamation-triangle"></i> Lỗi';
+                pingColor = '#ff6b6b';
+            } else {
+                pingHtml = `<i class="fas fa-wifi"></i> ${pingVal}ms`;
+                if (pingVal < 400) pingColor = '#34d399'; // Tốt (Xanh) - API VN hay loanh quanh 100-300ms
+                else if (pingVal < 1000) pingColor = '#fbbf24'; // Chậm (Vàng)
+                else pingColor = '#f87171'; // Quá chậm (Đỏ)
+            }
+        }
+
         const btn = document.createElement('button');
         btn.className = 'api-provider-btn' + (p.id === _apiState.currentProvider ? ' active' : '');
         btn.onclick = () => onApiProviderChange(p.id);
@@ -298,9 +349,89 @@ function _renderProviderTabs() {
             <span class="provider-dot" style="background:${p.color};"></span>
             ${p.name}
             <span class="api-provider-badge">${p.badge || 'API'}</span>
+            <span class="api-provider-ping" id="ping_${p.id}" style="font-size:0.65rem; color:${pingColor}; margin-left:4px; display:flex; align-items:center; gap:4px; background:rgba(0,0,0,0.2); padding:2px 6px; border-radius:4px; border:1px solid rgba(255,255,255,0.05);" title="Tốc độ phản hồi API">${pingHtml}</span>
         `;
         container.appendChild(btn);
     });
+}
+
+/**
+ * Đo ping mạng các nguồn API (Hỗ trợ realtime ngầm có đếm ngược)
+ */
+async function measureApiPings(silent = false) {
+    if (_apiState.isPinging) return; // Khóa không cho gọi chồng
+    _apiState.isPinging = true;
+    _apiState.pingCountdown = 10; // Reset countdown
+
+    const btn = document.getElementById('btnMeasurePing');
+    if (btn && !silent) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang đo...';
+        btn.style.pointerEvents = 'none';
+        btn.style.opacity = '0.7';
+    } else if (btn && silent) {
+        // Đổi màu vàng báo hiệu đang thu thập dữ liệu realtime
+        btn.innerHTML = '<i class="fas fa-satellite-dish" style="color: #fbbf24;"></i> Đo Live...';
+    }
+
+    // Cập nhật UI loading các tab (chỉ khi ko chạy ngầm)
+    if (!silent) {
+        Object.keys(API_PROVIDERS).forEach(id => {
+            const span = document.getElementById(`ping_${id}`);
+            if (span) {
+                span.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...';
+                span.style.color = 'var(--text-muted)';
+            }
+        });
+    }
+
+    // Gọi song song list_url page=1 limit=1 để lấy ping chân thực nhất
+    const promises = Object.values(API_PROVIDERS).map(async p => {
+        const start = performance.now();
+        try {
+            const tempUrl = p.buildListUrl({ type: 'phim-bo', lang:'', year:'', limit: 1, page: 1 });
+            const res = await fetch(tempUrl, { method: 'GET', cache: 'no-cache' });
+            if (!res.ok) throw new Error('Bad Status');
+            
+            await res.json(); 
+            const elapsed = Math.round(performance.now() - start);
+            _apiState.pings[p.id] = elapsed;
+        } catch (err) {
+            _apiState.pings[p.id] = 'error';
+        }
+    });
+
+    await Promise.allSettled(promises);
+    
+    // Cập nhật UI trực tiếp vào thẻ span thay vì render lại cả tab (tránh mất DOM đang hover/focus)
+    Object.keys(API_PROVIDERS).forEach(id => {
+        const span = document.getElementById(`ping_${id}`);
+        if (!span) return;
+        const pingVal = _apiState.pings[id];
+        let pingHtml = '<i class="fas fa-wifi"></i> --ms';
+        let pingColor = 'var(--text-muted)';
+        
+        if (pingVal !== undefined) {
+            if (pingVal === 'error') {
+                pingHtml = '<i class="fas fa-exclamation-triangle"></i> Lỗi';
+                pingColor = '#ff6b6b';
+            } else {
+                pingHtml = `<i class="fas fa-wifi"></i> ${pingVal}ms`;
+                if (pingVal < 400) pingColor = '#34d399'; // Xanh
+                else if (pingVal < 1000) pingColor = '#fbbf24'; // Vàng
+                else pingColor = '#f87171'; // Đỏ
+            }
+        }
+        span.innerHTML = pingHtml;
+        span.style.color = pingColor;
+    });
+
+    _apiState.isPinging = false; // Mở khóa
+
+    if (btn) {
+        btn.innerHTML = `<i class="fas fa-satellite-dish"></i> Đo Live (${_apiState.pingCountdown}s)`;
+        btn.style.pointerEvents = 'auto';
+        btn.style.opacity = '1';
+    }
 }
 
 /**
@@ -410,6 +541,16 @@ async function callApiList() {
 
             results.forEach(res => {
                 if (res && res.items) {
+                    // Lọc quốc gia bị chặn cho Multi-Search
+                    if (typeof _importState !== 'undefined' && _importState.excludeCountryEnabled && _importState.excludeCountryText) {
+                        const blocked = _importState.excludeCountryText.toLowerCase().split(',').map(s=>s.trim()).filter(Boolean);
+                        res.items = res.items.filter(item => {
+                            if (!item.country) return true; // Cứ cho qua nếu API không trả country
+                            const cText = item.country.toLowerCase();
+                            return !blocked.some(bc => cText.includes(bc));
+                        });
+                    }
+
                     allItems = allItems.concat(res.items);
                     totalItemsCount += res.totalItems;
                     if (res.totalPages > maxTotalPages) maxTotalPages = res.totalPages;
@@ -447,6 +588,16 @@ async function callApiList() {
 
             const parsed = provider.parseListResponse(raw);
             _apiState.totalPages = parsed.totalPages;
+
+            // Lọc quốc gia bị chặn cho Single-Provider
+            if (typeof _importState !== 'undefined' && _importState.excludeCountryEnabled && _importState.excludeCountryText) {
+                const blocked = _importState.excludeCountryText.toLowerCase().split(',').map(s=>s.trim()).filter(Boolean);
+                parsed.items = parsed.items.filter(item => {
+                    if (!item.country) return true; // Cứ cho qua nếu API không trả country
+                    const cText = item.country.toLowerCase();
+                    return !blocked.some(bc => cText.includes(bc));
+                });
+            }
 
             // Cập nhật stats
             document.getElementById('apiStatsRow').style.display = 'flex';

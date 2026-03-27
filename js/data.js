@@ -140,7 +140,7 @@ async function loadInitialData() {
         startWatchHistoryRealtimeListener();
     }
 
-    // 6. Auto-sync tập phim mới khi Admin mở web (không cần vào trang Admin)
+    // 6. Auto-sync tập phim mới + Auto-import phim mới khi Admin mở web (không cần vào trang Admin)
     if (typeof isAdmin !== 'undefined' && isAdmin) {
         setTimeout(() => {
             // Lazy load admin-api-import.js nếu chưa load
@@ -152,12 +152,19 @@ async function loadInitialData() {
                             console.log('🔄 [AutoSync] Bắt đầu kiểm tra tập phim mới...');
                             autoSyncEpisodesIfNeeded();
                         }
+                        if (typeof autoImportNewMoviesIfNeeded === 'function') {
+                            console.log('🎬 [AutoImport] Bắt đầu quét phim mới từ nguồn...');
+                            autoImportNewMoviesIfNeeded();
+                        }
                     }).catch(e => console.warn('[AutoSync] Lỗi load script:', e.message));
                 }
             } else {
                 // Script đã load rồi (admin đã vào trang Admin trước đó)
                 if (typeof autoSyncEpisodesIfNeeded === 'function') {
                     autoSyncEpisodesIfNeeded();
+                }
+                if (typeof autoImportNewMoviesIfNeeded === 'function') {
+                    autoImportNewMoviesIfNeeded();
                 }
             }
         }, 5000); // Chờ 5s sau khi data load xong

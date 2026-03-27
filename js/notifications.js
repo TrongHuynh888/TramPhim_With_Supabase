@@ -5,6 +5,7 @@ let notificationsUnsubscribeAdmin = null;
 
 let allNotifications = []; // Lưu trữ mảng notifs hiện tại
 let currentNotifTab = 'movie'; // Tab hiện tại: 'movie' hoặc 'community'
+const _notifMetaMap = {}; // Lưu metadata theo notif.id để xử lý click
 
 // Danh sách type thuộc nhóm Cộng đồng
 const COMMUNITY_NOTIF_TYPES = [
@@ -137,7 +138,7 @@ function renderNotifications() {
         let iconHtml = '<i class="fas fa-bell text-info"></i>';
         if (notif.type === "vip_request") iconHtml = '<i class="fas fa-star text-warning"></i>';
         if (notif.type === "vip_approved") iconHtml = '<i class="fas fa-check-circle text-success"></i>';
-        if (notif.type === "new_movie") iconHtml = '<i class="fas fa-film" style="color: #e50914;"></i>';
+        if (notif.type === "new_movie" || notif.type === "new_episode") iconHtml = '<i class="fas fa-film" style="color: #e50914;"></i>';
         // Icon cho nhóm cộng đồng
         if (notif.type === "friend_request" || notif.type === "friend_accepted") iconHtml = '<i class="fas fa-user-friends" style="color: #3b82f6;"></i>';
         if (notif.type === "community_comment" || notif.type === "new_comment") iconHtml = '<i class="fas fa-comment" style="color: #10b981;"></i>';
@@ -153,14 +154,18 @@ function renderNotifications() {
             timeStr = date.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
         }
 
-        // Xử lý action click
-        const clickAction = `markAsRead('${notif.id}'); handleNotificationClick('${notif.type}')`;
+        // Xử lý action click - lưu metadata vào map, truyền notifId
+        if (notif.metadata) _notifMetaMap[notif.id] = notif.metadata;
+
+        // Click vào tiêu đề → điều hướng tới phim, click vùng khác → chỉ đánh dấu đã đọc
+        const titleClickAction = `event.stopPropagation(); markAsRead('${notif.id}'); handleNotificationClick('${notif.type}', '${notif.id}')`;
+        const contentClickAction = `markAsRead('${notif.id}')`;
 
         li.innerHTML = `
-            <div class="notif-content" onclick="${clickAction}">
+            <div class="notif-content" onclick="${contentClickAction}">
                 <div class="notif-icon">${iconHtml}</div>
                 <div class="notif-text">
-                    <div class="notif-title">${notif.title}</div>
+                    <div class="notif-title" onclick="${titleClickAction}" style="cursor:pointer;">${notif.title}</div>
                     <div class="notif-message">${notif.message}</div>
                     <div class="notif-time">${timeStr}</div>
                 </div>
@@ -197,9 +202,20 @@ function switchNotifTab(tab) {
 /**
  * Xử lý click trên thông báo tuỳ theo type
  */
-function handleNotificationClick(type) {
+function handleNotificationClick(type, notifId) {
     const dropdown = document.getElementById("notificationDropdown");
     if (dropdown) dropdown.classList.add("hidden");
+
+    // Lấy metadata từ map theo notifId
+    const meta = _notifMetaMap[notifId] || {};
+
+    // Phim mới / Tập mới: chuyển tới trang chi tiết phim
+    if ((type === 'new_movie' || type === 'new_episode') && meta.movie_id) {
+        if (typeof viewMovieDetail === 'function') {
+            viewMovieDetail(meta.movie_id);
+        }
+        return;
+    }
 
     // Admin: chuyển sang trang quản lý VIP
     if (type === "vip_request" && typeof isAdmin !== "undefined" && isAdmin && typeof showPage === "function" && typeof window.showAdminPanel === "function") {
@@ -369,20 +385,24 @@ async function sendNotification(userId, title, message, type = "system") {
  * @param {string} message Nội dung thông báo
  * @param {string} type Loại thông báo (mặc định: "new_movie")
  */
-async function sendNotificationToAllUsers(title, message, type = "new_movie") {
+async function sendNotificationToAllUsers(title, message, type = "new_movie", metadata = null) {
     if (!supabase) return;
     try {
         const { data: profiles, error } = await supabase.from('profiles').select('id');
         if (error || !profiles) return;
 
-        const notifs = profiles.map(p => ({
-            user_id: p.id,
-            is_for_admin: false,
-            title: title,
-            message: message,
-            type: type,
-            is_read: false
-        }));
+        const notifs = profiles.map(p => {
+            const row = {
+                user_id: p.id,
+                is_for_admin: false,
+                title: title,
+                message: message,
+                type: type,
+                is_read: false
+            };
+            if (metadata) row.metadata = metadata;
+            return row;
+        });
 
         // Supabase có thể insert mảng lớn một cách hiệu quả
         const { error: insError } = await supabase.from('notifications').insert(notifs);
