@@ -495,6 +495,27 @@ function renderDetailActorSidebar(movie) {
             </div>
         `;
     }).join("");
+
+    // Xử lý nút Xem thêm diễn viên
+    const sidebar = grid.closest('.detail-actor-sidebar');
+    if (sidebar) {
+        const existingBtn = sidebar.querySelector('.btn-toggle-actors');
+        if (existingBtn) existingBtn.remove(); // Xóa nút cũ nếu có thư mục render lại
+
+        // Hiển thị nút nếu số diễn viên nhiều hơn 6 (2 hàng)
+        if (actorsToRender.length > 6) {
+            const btn = document.createElement("button");
+            btn.id = "toggleActorsBtn";
+            btn.className = "btn-toggle-actors";
+            btn.style.marginTop = "10px";
+            btn.textContent = "Xem thêm diễn viên";
+            btn.onclick = function() {
+                grid.classList.toggle("expanded");
+                this.textContent = grid.classList.contains("expanded") ? "Thu gọn" : "Xem thêm diễn viên";
+            };
+            sidebar.appendChild(btn);
+        }
+    }
 }
 
 // --- LOGIC ẨN HIỆN TOOLBAR TRONG CINEMA MODE ---

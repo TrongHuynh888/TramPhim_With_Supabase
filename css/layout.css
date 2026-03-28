@@ -1219,9 +1219,35 @@
 
 /* Responsive Mobile */
 @media (max-width: 768px) {
-    .center-controls-overlay { gap: 25px; }
-    .play-btn-large { width: 55px; height: 55px; font-size: 22px; }
-    .skip-btn { width: 38px; height: 38px; font-size: 15px; }
+    .center-controls-overlay { gap: 15px; } /* Thu khoảng cách nút tua giữa màn hình */
+    .play-btn-large { width: 50px; height: 50px; font-size: 20px; }
+    .skip-btn { width: 34px; height: 34px; font-size: 14px; }
+    
+    /* Thu gọn thanh điều khiển phía dưới */
+    .custom-video-controls {
+        padding: 10px 8px 5px; /* Giảm padding trên dưới */
+        gap: 5px; /* Giảm gap giữa time, slider và toolbar */
+    }
+    .controls-left, .controls-right, .controls-center {
+        gap: 8px; /* Các icon gần lại */
+    }
+    .control-btn {
+        width: 25px; /* Rút diện tích nút */
+        height: 25px;
+        font-size: 15px; /* Thay vì 18px */
+    }
+    .control-btn.skip-btn-small {
+        width: 32px; /* Tua 10s có text+svg nên rộng hơn chút */
+    }
+    .skip-label {
+        font-size: 10px !important; /* Gọn chữ 10s lại */
+    }
+    .time-display, .time-current, .time-duration {
+        font-size: 11px; /* Nhỏ gọn thời gian text */
+    }
+    .volume-container {
+        width: 25px; /* Box volume cũng cần thu tương tự nút control-btn */
+    }
 }
 /* --- CENTER CONTROLS OVERLAY END --- */
 

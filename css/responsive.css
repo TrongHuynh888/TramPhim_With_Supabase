@@ -945,8 +945,8 @@ body.watch-party-active #watchPartyPage {
 
   .rating-input {
     display: flex !important;
-    flex-wrap: wrap !important; /* Cho phép xuống dòng */
-    align-items: flex-start !important;
+    flex-wrap: wrap !important; /* Vẫn cho label xuống dòng */
+    align-items: center !important;
     gap: 6px !important;
     margin-bottom: 12px !important;
   }
@@ -954,29 +954,30 @@ body.watch-party-active #watchPartyPage {
   .rating-input label {
     width: 100%;
     display: block !important;
-    margin-bottom: 6px !important;
+    margin-bottom: 4px !important;
     font-size: 13px !important;
   }
 
   .rating-stars {
     display: flex !important;
-    flex-wrap: wrap !important; /* Cho phép sao xuống dòng */
-    gap: 3px !important;
-    order: 3; /* Để sao nằm dưới label */
+    flex-wrap: nowrap !important; /* Không rớt sao xuống dòng */
+    gap: 5px !important;
+    order: 3; /* Sao dưới label */
+    align-items: center;
   }
 
   .rating-stars i {
-    font-size: 18px !important;
+    font-size: 20px !important; /* Sao nhỉnh hơn xíu cho dễ chạm */
     margin: 0 !important;
   }
 
   .rating-value {
-    font-size: 13px !important;
-    margin-left: 0 !important;
+    font-size: 14px !important;
+    margin-left: 8px !important; /* Khoảng cách với sao cuối cùng */
     white-space: nowrap;
     order: 4;
-    width: 100%;
-    margin-top: 6px;
+    width: auto !important; /* Cho phép đứng chung hàng ngang với sao */
+    margin-top: 0 !important; /* Bỏ margin-top đẩy dòng */
   }
 
   .comment-form .form-group {
@@ -1035,7 +1036,8 @@ body.watch-party-active #watchPartyPage {
   }
 
   /* --- D. LƯỚI PHIM (2 CỘT TRÊN MOBILE CHO DỄ NHÌN) --- */
-  .movie-grid {
+  .movie-grid,
+  .country-movies-row {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 15px !important;
     padding: 0 10px !important;
@@ -1071,6 +1073,7 @@ body.watch-party-active #watchPartyPage {
   .movie-card-wrapper.active-mobile {
     z-index: 5000 !important;
     position: relative;
+    overflow: visible !important; /* FIX SAFARI CLIP BUG */
   }
 
   .movie-card-wrapper.active-mobile .movie-popup-nfx {
@@ -1084,6 +1087,7 @@ body.watch-party-active #watchPartyPage {
 
     /* 👇 GIẢM KÍCH THƯỚC POPUP THEO YÊU CẦU */
     width: 200px !important; /* Giảm từ 225px xuống 200px */
+    max-width: 280px !important; /* Fix lỗi Safari tự bóp nghẹt max-width theo thẻ cha */
     height: auto;
     z-index: 5001;
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.95);
