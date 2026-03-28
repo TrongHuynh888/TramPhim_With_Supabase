@@ -200,10 +200,10 @@
               <!-- Tab chuyển đổi Phim / Cộng đồng -->
               <div class="notification-tabs">
                 <button class="notif-tab active" data-tab="movie" onclick="switchNotifTab('movie')">
-                  <i class="fas fa-film"></i> Phim <span class="notif-tab-badge" id="notifTabBadgeMovie"></span>
+                  <i class="fas fa-film"></i> Phim <span class="notif-tab-count" id="notifTabCountMovie" style="font-size:0.75rem; color:#888; margin-left:3px;"></span><span class="notif-tab-badge" id="notifTabBadgeMovie"></span>
                 </button>
                 <button class="notif-tab" data-tab="community" onclick="switchNotifTab('community')">
-                  <i class="fas fa-globe"></i> Cộng đồng <span class="notif-tab-badge" id="notifTabBadgeCommunity"></span>
+                  <i class="fas fa-globe"></i> Cộng đồng <span class="notif-tab-count" id="notifTabCountCommunity" style="font-size:0.75rem; color:#888; margin-left:3px;"></span><span class="notif-tab-badge" id="notifTabBadgeCommunity"></span>
                 </button>
               </div>
               <ul class="dropdown-list" id="notificationList" style="padding: 0; margin: 0; list-style: none; overflow-y: auto; flex-grow: 1;">
@@ -856,6 +856,10 @@
                     <span>Reaction</span>
                     <span class="badge-switch off" id="swReaction" onclick="toggleSwitch('swReaction')">OFF</span>
                 </div>
+                <div class="switch-item">
+                    <span>Auto Server</span>
+                    <span class="badge-switch on" id="swAutoFallback" onclick="toggleSwitch('swAutoFallback')">ON</span>
+                </div>
             </div>
 
             <div class="toolbar-group">
@@ -920,16 +924,16 @@
 
                         <div class="divider-vertical"></div>
 
-                        <!-- Versions List -->
-                        <div class="version-list-modern" id="versionListModern">
-                            <!-- JS sẽ render các bản (Vietsub, Thuyết minh) vào đây -->
+                        <!-- Servers List (hiện trước) -->
+                        <div class="version-list-modern" id="serverListModern">
+                            <!-- JS sẽ render các server (KKPhim, OPhim) vào đây -->
                         </div>
 
                         <div class="divider-vertical" id="serverDivider" style="display: none;"></div>
 
-                        <!-- Servers List -->
-                        <div class="version-list-modern" id="serverListModern">
-                            <!-- JS sẽ render các server (KKPhim, OPhim) vào đây -->
+                        <!-- Versions List (hiện sau, lọc theo server đang chọn) -->
+                        <div class="version-list-modern" id="versionListModern">
+                            <!-- JS sẽ render các bản (Vietsub, Thuyết minh) vào đây -->
                         </div>
                     </div>
                 </div>
@@ -1287,8 +1291,43 @@
             loadContactRequests();
         }
         // Khởi tạo API Explorer khi mở tab Quản lý API (render nút nguồn, năm, loại)
-        if (panelName === "apiExplorer" && typeof initApiExplorer === "function") {
-            initApiExplorer();
+        // [FIX] Nếu script chưa lazy load xong → chờ và retry thay vì bỏ qua
+        if (panelName === "apiExplorer") {
+            if (typeof initApiExplorer === "function") {
+                initApiExplorer();
+            } else {
+                // Script chưa load xong → hiện loading và retry
+                var _explorerPanel = document.getElementById('apiExplorerPanel');
+                var _toolbar = _explorerPanel ? _explorerPanel.querySelector('.api-explorer-toolbar') : null;
+                if (_toolbar) {
+                    _toolbar.style.opacity = '0.4';
+                    _toolbar.style.pointerEvents = 'none';
+                }
+                var _retryCount = 0;
+                var _maxRetry = 26; // ~8 giây
+                var _retryTimer = setInterval(function() {
+                    _retryCount++;
+                    if (typeof initApiExplorer === "function") {
+                        clearInterval(_retryTimer);
+                        if (_toolbar) {
+                            _toolbar.style.opacity = '1';
+                            _toolbar.style.pointerEvents = 'auto';
+                        }
+                        initApiExplorer();
+                        console.log("✅ [API Explorer] Script đã sẵn sàng sau " + (_retryCount * 300) + "ms");
+                    } else if (_retryCount >= _maxRetry) {
+                        clearInterval(_retryTimer);
+                        if (_toolbar) {
+                            _toolbar.style.opacity = '1';
+                            _toolbar.style.pointerEvents = 'auto';
+                        }
+                        console.warn("⚠️ [API Explorer] Script không tải được sau 8s. Hãy thử reload trang.");
+                        if (typeof showNotification === 'function') {
+                            showNotification('Script API Explorer chưa tải xong. Vui lòng chờ hoặc reload trang (F5).', 'warning');
+                        }
+                    }
+                }, 300);
+            }
         }
 
         // 4. [NEW] Tự động đóng menu trên Mobile sau khi chọn

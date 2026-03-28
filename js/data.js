@@ -140,24 +140,36 @@ async function loadInitialData() {
         startWatchHistoryRealtimeListener();
     }
 
-    // 6. Auto-sync tập phim mới khi Admin mở web (không cần vào trang Admin)
+    // 6. Auto-sync tập phim mới + Auto-import phim mới khi Admin mở web (không cần vào trang Admin)
     if (typeof isAdmin !== 'undefined' && isAdmin) {
         setTimeout(() => {
             // Lazy load admin-api-import.js nếu chưa load
             if (!window._adminScriptsLoaded) {
                 console.log('🔄 [AutoSync] Admin detected → Loading sync scripts...');
-                if (typeof lazyLoadScript === 'function') {
-                    lazyLoadScript('js/admin-api-import.js?v=3').then(() => {
+                if (typeof lazyLoadScriptBundle === 'function') {
+                    // ★ [FIX] Phải load admin-api-explorer.js TRƯỚC vì nó chứa API_PROVIDERS
+                    // mà importSingleMovieFromApi() cần dùng để gọi API nguồn
+                    lazyLoadScriptBundle([
+                        'js/admin-api-explorer.js?v=3',
+                        'js/admin-api-import.js?v=3'
+                    ], () => {
                         if (typeof autoSyncEpisodesIfNeeded === 'function') {
                             console.log('🔄 [AutoSync] Bắt đầu kiểm tra tập phim mới...');
                             autoSyncEpisodesIfNeeded();
                         }
-                    }).catch(e => console.warn('[AutoSync] Lỗi load script:', e.message));
+                        if (typeof autoImportNewMoviesIfNeeded === 'function') {
+                            console.log('🎬 [AutoImport] Bắt đầu quét phim mới từ nguồn...');
+                            autoImportNewMoviesIfNeeded();
+                        }
+                    });
                 }
             } else {
                 // Script đã load rồi (admin đã vào trang Admin trước đó)
                 if (typeof autoSyncEpisodesIfNeeded === 'function') {
                     autoSyncEpisodesIfNeeded();
+                }
+                if (typeof autoImportNewMoviesIfNeeded === 'function') {
+                    autoImportNewMoviesIfNeeded();
                 }
             }
         }, 5000); // Chờ 5s sau khi data load xong
@@ -401,9 +413,25 @@ async function loadMovies(remoteTimestamp) {
 
     if (data && data.length > 0) {
         allMovies = data.map(normalizeMovieData);
+        
+        // ★ Ép buộc Sort cứng phim: Năm ra mắt MỚI NHẤT -> CŨ NHẤT. Nếu cùng năm thì phim nào mới cập nhật sẽ lên trên.
+        allMovies.sort((a, b) => {
+            const yearA = parseInt(a.year) || 0;
+            const yearB = parseInt(b.year) || 0;
+            
+            if (yearB !== yearA) {
+                return yearB - yearA; // Ưu tiên 1: Xếp theo Năm ra mắt giảm dần
+            }
+            
+            // Ưu tiên 2: Cùng năm thì xếp theo Ngày cập nhật web giảm dần
+            const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+            const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+            return dateB - dateA; 
+        });
+
         saveToCache("movies", allMovies);
         if (remoteTimestamp) setCacheTimestamp("movies", remoteTimestamp);
-        console.log(`🌐 Fetched ${allMovies.length} Movies from Supabase`);
+        console.log(`🌐 Fetched ${allMovies.length} Movies from Supabase (Sorted by Latest)`);
     } else {
         allMovies = SAMPLE_MOVIES;
     }

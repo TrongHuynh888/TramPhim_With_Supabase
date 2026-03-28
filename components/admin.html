@@ -370,21 +370,6 @@
         </div>
         
         <div class="api-keys-wrapper">
-          <!-- Cloudflare R2 Config (đầu trang) -->
-          <div style="margin-bottom: 20px; padding: 18px 20px; background: rgba(0,210,255,0.04); border: 1px solid rgba(0,210,255,0.15); border-radius: 12px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-              <div style="display:flex; align-items:center; gap:10px;">
-                <i class="fas fa-cloud-upload-alt" style="color:#00d2ff; font-size:1.2rem;"></i>
-                <div>
-                  <div style="font-weight:700; font-size:0.9rem; color:#fff;">Cloudflare R2 Worker</div>
-                  <div style="font-size:0.75rem; color:var(--text-muted);">Upload ảnh phim lên Cloudflare R2 Storage</div>
-                </div>
-              </div>
-              <button class="btn btn-sm" onclick="openR2ConfigModal()" title="Cấu hình R2 Worker URL" style="background:rgba(0,210,255,0.1);border:1px solid rgba(0,210,255,0.25);color:#00d2ff;font-size:0.75rem;">
-                <i class="fas fa-cog"></i> Cấu hình URL
-              </button>
-            </div>
-          </div>
 
           <div class="api-keys-header-info">
             <h3><i class="fas fa-shield-alt"></i> Quản lý khóa API Hệ thống</h3>
@@ -590,6 +575,7 @@
               <th>Giá (CRO)</th>
               <th>Lượt xem</th>
               <th>Trạng thái</th>
+              <th><i class="fas fa-clock" style="margin-right: 4px;"></i>Ngày up</th>
               <th>Thao tác</th>
             </tr>
           </thead>
@@ -722,7 +708,7 @@
                 <th style="width: 40px;"><input type="checkbox" id="episodeSelectAllHeader" onclick="toggleAllEpisodes(this.checked)" style="width: 16px; height: 16px; cursor: pointer;"></th> <!-- Checkbox column -->
                 <th style="width: 40px;" id="dragHeader"></th> <!-- Drag handle column -->
                 <th style="width: 80px;">Tập</th>
-                <th>YouTube ID</th>
+                <th>Nguồn phát</th>
                 <th>Thời lượng</th>
                 <th>Chất lượng</th>
                 <th>Ngày thêm</th>
@@ -2123,7 +2109,12 @@
         <div class="api-explorer-toolbar">
           <!-- Chọn nguồn API -->
           <div class="api-provider-selector">
-            <label class="api-label"><i class="fas fa-database"></i> Nguồn API</label>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <label class="api-label" style="margin-bottom: 0;"><i class="fas fa-database"></i> Nguồn API</label>
+              <button onclick="measureApiPings()" id="btnMeasurePing" class="btn btn-sm" title="Kiểm tra tốc độ kết nối API" style="padding: 4px 10px; border-radius: 6px; background: rgba(0,210,255,0.08); border: 1px solid rgba(0,210,255,0.2); color: #00d2ff; font-size: 0.72rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all 0.2s;">
+                <i class="fas fa-satellite-dish"></i> Đo Ping
+              </button>
+            </div>
             <div class="api-provider-tabs" id="apiProviderTabs">
               <!-- Render động bằng JS -->
             </div>
@@ -2232,28 +2223,145 @@
               <span>Chọn tất cả</span>
             </label>
           </div>
-          <div class="api-import-toolbar-right">
-            <!-- Nút Toggle Auto-Sync tập mới -->
-            <div id="autoSyncToggleWrap" style="display:flex;align-items:center;gap:6px;background:rgba(0,210,255,0.06);border:1px solid rgba(0,210,255,0.15);border-radius:8px;padding:5px 10px;flex-wrap:wrap;">
-              <i class="fas fa-sync-alt" style="font-size:0.8rem;color:#00d2ff;"></i>
-              <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">Auto-Sync tập:</span>
-              <button id="btnToggleAutoSync" onclick="toggleAutoSyncFeature()"
-                style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:20px;border:none;cursor:pointer;transition:all 0.2s;">
-              </button>
-              <!-- Cài giờ cooldown -->
-              <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-left:4px;">Mỗi</span>
-              <input type="number" id="autoSyncIntervalInput" min="1" max="72" value="6"
-                style="width:46px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
-                title="Số giờ giữa các lần sync" />
-              <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">giờ</span>
-              <button onclick="saveAutoSyncInterval()" title="Lưu cài đặt giờ sync"
-                style="font-size:0.7rem;padding:2px 8px;border-radius:6px;border:none;cursor:pointer;background:rgba(0,210,255,0.15);color:#00d2ff;font-weight:600;">
-                Lưu
-              </button>
-              <span id="autoSyncLastInfo" style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap;"></span>
+          <div class="api-import-toolbar-right" style="flex-wrap: wrap; justify-content: flex-end;">
+            
+            <!-- ====== DÒNG 1: AUTO SYNC & IMPORT ====== -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); width: 100%; gap: 8px; margin-bottom: 4px;">
+              <!-- Nút Toggle Auto-Sync tập mới -->
+              <div id="autoSyncToggleWrap" style="display:flex;align-items:center;gap:6px;background:rgba(0,210,255,0.06);border:1px solid rgba(0,210,255,0.15);border-radius:8px;padding:5px 10px;flex-wrap:wrap;">
+                <i class="fas fa-sync-alt" style="font-size:0.8rem;color:#00d2ff;"></i>
+                <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">Auto-Sync tập:</span>
+                <button id="btnToggleAutoSync" onclick="toggleAutoSyncFeature()"
+                  style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:20px;border:none;cursor:pointer;transition:all 0.2s;">
+                </button>
+                <!-- Cài giờ cooldown -->
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-left:4px;">Mỗi</span>
+                <input type="number" id="autoSyncIntervalInput" min="1" max="72" value="6"
+                  style="width:46px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Số giờ giữa các lần sync" />
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">giờ</span>
+                <button onclick="saveAutoSyncInterval()" title="Lưu cài đặt giờ sync"
+                  style="font-size:0.7rem;padding:2px 8px;border-radius:6px;border:none;cursor:pointer;background:rgba(0,210,255,0.15);color:#00d2ff;font-weight:600;">
+                  Lưu
+                </button>
+                <span id="autoSyncLastInfo" style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap;"></span>
+              </div>
+
+              <!-- Nút Toggle Auto-Import phim mới -->
+              <div id="autoImportToggleWrap" style="display:flex;align-items:center;gap:6px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:8px;padding:5px 10px;flex-wrap:wrap;">
+                <i class="fas fa-film" style="font-size:0.8rem;color:#a78bfa;"></i>
+                <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">Auto-Import phim:</span>
+                <button id="btnToggleAutoImport" onclick="toggleAutoImportFeature()"
+                  style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:20px;border:none;cursor:pointer;transition:all 0.2s;">
+                </button>
+                <!-- Cài giờ cooldown -->
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-left:4px;">Mỗi</span>
+                <input type="number" id="autoImportIntervalInput" min="1" max="72" value="6"
+                  style="width:46px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Số giờ giữa các lần import" />
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">giờ</span>
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-left:4px;">Năm</span>
+                <input type="number" id="autoImportYearInput" min="1900" max="2100"
+                  style="width:55px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Năm phát hành phim cần lấy" />
+                <!-- Giới hạn phim/lần -->
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-left:4px;">Max</span>
+                <input type="number" id="autoImportMaxInput" min="1" max="50" value="10"
+                  style="width:46px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Tối đa số phim import mỗi lần" />
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">phim</span>
+                <script>document.getElementById('autoImportYearInput').value = new Date().getFullYear();</script>
+                <button onclick="saveAutoImportSettings()" title="Lưu cài đặt Auto-Import"
+                  style="font-size:0.7rem;padding:2px 8px;border-radius:6px;border:none;cursor:pointer;background:rgba(167,139,250,0.15);color:#a78bfa;font-weight:600;">
+                  Lưu
+                </button>
+                <span id="autoImportLastInfo" style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap;"></span>
+              </div>
+
+              <!-- Lọc quốc gia -->
+              <div id="excludeCountryWrap" style="display:flex;align-items:center;gap:6px;background:rgba(255,107,107,0.06);border:1px solid rgba(255,107,107,0.15);border-radius:8px;padding:5px 10px;flex-wrap:wrap;">
+                <i class="fas fa-ban" style="font-size:0.8rem;color:#ff6b6b;"></i>
+                <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">Chặn Q.Gia:</span>
+                <button id="btnToggleExcludeCountry" onclick="toggleExcludeCountryFeature()"
+                  style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:20px;border:none;cursor:pointer;transition:all 0.2s;">
+                  OFF
+                </button>
+
+                <!-- Vùng chứa các thẻ (chip) quốc gia bị chặn -->
+                <div id="excludeCountryTags" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+                  <!-- Auto-generated chips will appear here -->
+                </div>
+
+                <!-- Input để thêm quốc gia mới -->
+                <div style="display:flex;align-items:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;overflow:hidden;margin-left:4px;">
+                  <select id="excludeCountryInput"
+                    style="width:90px;padding:2px 4px;font-size:0.72rem;border:none;background:transparent;color:var(--text-primary);outline:none;cursor:pointer;">
+                    <option value="" disabled selected>Chọn...</option>
+                    <option value="Việt Nam" style="color:#000;">Việt Nam</option>
+                    <option value="Trung Quốc" style="color:#000;">Trung Quốc</option>
+                    <option value="Hàn Quốc" style="color:#000;">Hàn Quốc</option>
+                    <option value="Nhật Bản" style="color:#000;">Nhật Bản</option>
+                    <option value="Thái Lan" style="color:#000;">Thái Lan</option>
+                    <option value="Đài Loan" style="color:#000;">Đài Loan</option>
+                    <option value="Hồng Kông" style="color:#000;">Hồng Kông</option>
+                    <option value="Ấn Độ" style="color:#000;">Ấn Độ</option>
+                    <option value="Mỹ" style="color:#000;">Mỹ</option>
+                    <option value="Anh" style="color:#000;">Anh</option>
+                    <option value="Pháp" style="color:#000;">Pháp</option>
+                    <option value="Âu Mỹ" style="color:#000;">Âu Mỹ</option>
+                  </select>
+                  <button onclick="addExcludeCountryTag()" title="Thêm quốc gia"
+                    style="font-size:0.7rem;padding:2px 6px;border:none;border-left:1px solid rgba(255,255,255,0.1);cursor:pointer;background:rgba(255,255,255,0.1);color:#fff;">
+                    <i class="fas fa-plus"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- ====== AUTO-FILL PANEL ====== -->
+              <div id="autoFillWrap" style="display:flex;align-items:center;gap:6px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15);border-radius:8px;padding:5px 10px;flex-wrap:wrap;width:100%;">
+                <i class="fas fa-rocket" style="font-size:0.8rem;color:#22c55e;"></i>
+                <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">Auto-Fill:</span>
+                
+                <!-- Input mục tiêu -->
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">Thêm mới</span>
+                <input type="number" id="autoFillTargetInput" min="1" max="500" value="50"
+                  style="width:55px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Số phim MỚI cần import (không tính phim đã có)" />
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">phim</span>
+                <button onclick="saveAutoFillTarget()" title="Lưu số lượng phim"
+                  style="font-size:0.7rem;padding:2px 8px;border-radius:6px;border:none;cursor:pointer;background:rgba(34,197,94,0.15);color:#22c55e;font-weight:600;">
+                  Lưu
+                </button>
+
+                <!-- Nút Bắt đầu -->
+                <button id="btnStartAutoFill" onclick="startAutoFill()"
+                  style="font-size:0.72rem;font-weight:700;padding:4px 12px;border-radius:8px;border:none;cursor:pointer;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;white-space:nowrap;transition:all 0.2s;">
+                  <i class="fas fa-play"></i> Bắt đầu
+                </button>
+
+                <!-- Nút Tạm dừng -->
+                <button id="btnPauseAutoFill" onclick="pauseAutoFill()" style="display:none;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;border:1px solid rgba(251,191,36,0.5);background:rgba(251,191,36,0.1);color:#fbbf24;white-space:nowrap;">
+                  <i class="fas fa-pause"></i> Tạm dừng
+                </button>
+
+                <!-- Nút Hủy -->
+                <button id="btnCancelAutoFill" onclick="cancelAutoFill()" style="display:none;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;border:1px solid rgba(248,113,113,0.5);background:rgba(248,113,113,0.1);color:#f87171;white-space:nowrap;">
+                  <i class="fas fa-times-circle"></i> Hủy
+                </button>
+
+                <!-- Progress -->
+                <div id="autoFillProgressWrap" style="display:none;flex:1;min-width:180px;align-items:center;gap:6px;">
+                  <div style="flex:1;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;">
+                    <div id="autoFillProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#4ade80);border-radius:3px;transition:width 0.3s;"></div>
+                  </div>
+                  <span id="autoFillProgressText" style="font-size:0.7rem;color:#4ade80;white-space:nowrap;font-weight:600;">0/0</span>
+                </div>
+              </div>
             </div>
 
-            <!-- Nút lọc chỉ phim chưa có trong DB -->
+            <!-- ====== DÒNG 2: CÁC NÚT ACTION ====== -->
+            <div style="display: flex; gap: 10px; align-items: center; justify-content: flex-end; width: 100%; flex-wrap: wrap;">
+              <!-- Nút lọc chỉ phim chưa có trong DB -->
             <button id="btnFilterNewOnly" onclick="toggleNewOnlyFilter()"
               title="Ẩn phim đã có trong database, chỉ hiện phim mới"
               style="font-size:0.72rem;font-weight:700;padding:4px 11px;border-radius:8px;cursor:pointer;border:1px solid rgba(167,139,250,0.4);background:rgba(167,139,250,0.08);color:#a78bfa;white-space:nowrap;transition:all 0.2s;">
@@ -2266,7 +2374,25 @@
               style="font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;border:1px dashed #ff922b;cursor:pointer;background:rgba(255,146,43,0.12);color:#ff922b;white-space:nowrap;">
               🧪 Test Sync
             </button>
-            <!-- END NÚT TEST -->
+
+            <!-- Nút Test Auto-Import phim mới -->
+            <button id="btnTestAutoImport" onclick="testAutoImportNow()"
+              title="Test quét và import phim mới ngay lập tức (bỏ qua cooldown)"
+              style="font-size:0.72rem;font-weight:700;padding:4px 11px;border-radius:8px;cursor:pointer;border:1px dashed #a78bfa;background:rgba(167,139,250,0.1);color:#a78bfa;white-space:nowrap;transition:all 0.2s;">
+              <i class="fas fa-magic"></i> Test Import
+            </button>
+
+            <!-- Nút Tạm dừng / Hủy (ẩn mặc định, hiện khi test chạy) -->
+            <div id="testControlsWrap" style="display:none;align-items:center;gap:4px;">
+              <button id="btnTestPause" onclick="testPauseToggle()"
+                style="font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;border:1px solid rgba(251,191,36,0.5);background:rgba(251,191,36,0.1);color:#fbbf24;white-space:nowrap;">
+                <i class="fas fa-pause"></i> Tạm dừng
+              </button>
+              <button id="btnTestCancel" onclick="testCancelNow()"
+                style="font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;border:1px solid rgba(248,113,113,0.5);background:rgba(248,113,113,0.1);color:#f87171;white-space:nowrap;">
+                <i class="fas fa-times-circle"></i> Hủy
+              </button>
+            </div>
 
             <!-- NÚT QUÉT ĐA NGUỒN (Bulk Scan) -->
             <button id="btnBulkScanSources" onclick="bulkScanAllMoviesSources()"
@@ -2289,6 +2415,8 @@
             <button class="btn btn-sm api-r2-toggle-btn active" id="btnToggleR2Mode" onclick="toggleImportR2Mode()" title="Bật/tắt upload ảnh lên Cloudflare R2">
               <i class="fas fa-cloud-upload-alt"></i> Ảnh: Cloudflare R2
             </button>
+
+            </div> <!-- Kết thúc DÒNG 2 -->
 
           </div>
 
@@ -2400,6 +2528,35 @@
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button class="btn btn-secondary" onclick="closeR2ConfigModal()">Hủy</button>
         <button class="btn btn-primary" onclick="saveR2WorkerUrl()"><i class="fas fa-save"></i> Lưu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal cấu hình Telegram Bot Webhook -->
+<div class="api-r2-modal-overlay" id="apiTelegramConfigModal" onclick="closeTelegramConfigModal()">
+  <div class="api-r2-modal" onclick="event.stopPropagation()">
+    <div class="api-r2-modal-header">
+      <h3><i class="fab fa-telegram-plane" style="color:#34d399;"></i> Cấu hình Telegram Bot</h3>
+      <button onclick="closeTelegramConfigModal()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1rem;"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="api-r2-modal-body">
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">Nhập Bot Token và Chat ID để nhận thông báo tự động sau mỗi đợt Auto-Import.</p>
+      
+      <label class="form-label" style="font-size:0.8rem;">Bot Token (Lấy từ @BotFather)</label>
+      <input type="text" id="telegramBotTokenInput" class="form-input" placeholder="VD: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" style="margin-bottom:12px;font-family:monospace;font-size:0.85rem;" />
+      
+      <label class="form-label" style="font-size:0.8rem;">Chat ID (Lấy từ @getmyid_bot)</label>
+      <input type="text" id="telegramChatIdInput" class="form-input" placeholder="VD: 123456789" style="margin-bottom:16px;font-family:monospace;font-size:0.85rem;" />
+      
+      <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;">
+        <button class="btn btn-sm" onclick="testTelegramConfig()" style="background:rgba(52,211,153,0.1);color:#34d399;font-weight:600;padding:6px 12px;display:flex;align-items:center;gap:6px;border:none;border-radius:4px;cursor:pointer;">
+          <i class="fas fa-paper-plane"></i> Test Gửi
+        </button>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-secondary" onclick="closeTelegramConfigModal()">Hủy</button>
+          <button class="btn btn-primary" onclick="saveTelegramConfig()"><i class="fas fa-save"></i> Lưu</button>
+        </div>
       </div>
     </div>
   </div>

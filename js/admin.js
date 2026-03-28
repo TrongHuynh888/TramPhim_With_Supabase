@@ -198,6 +198,8 @@ async function loadAdminData() {
 
     // 🔄 Tự động sync tập mới từ API (chạy ngầm, không ảnh hưởng UI)
     if (typeof autoSyncEpisodesIfNeeded === 'function') autoSyncEpisodesIfNeeded();
+    // 🎬 Tự động import phim mới từ nguồn API (chạy ngầm)
+    if (typeof autoImportNewMoviesIfNeeded === 'function') autoImportNewMoviesIfNeeded();
   } catch (error) {
     console.error("Lỗi load admin data:", error);
   }
@@ -494,13 +496,18 @@ async function loadAdminStats() {
       .select('*', { count: 'exact', head: true });
     animateCountUp("statTotalMovies", totalMovies || 0);
 
-    // === 2. Tổng lượt xem (đếm từ view_logs DB) ===
+    // === 2. Tổng lượt xem (Cộng dồn cột views từ tất cả phim hiện hành) ===
     let totalViews = 0;
     try {
-      const { count: viewCount } = await supabase
-        .from('view_logs')
-        .select('*', { count: 'exact', head: true });
-      totalViews = viewCount || 0;
+      let offset = 0;
+      const limit = 1000;
+      while(true) {
+          const { data: mv, error } = await supabase.from('movies').select('views').range(offset, offset + limit - 1);
+          if (error || !mv || mv.length === 0) break;
+          totalViews += mv.reduce((sum, m) => sum + (m.views || 0), 0);
+          if (mv.length < limit) break;
+          offset += limit;
+      }
     } catch(e) { /* fallback = 0 */ }
     animateCountUp("statTotalViews", totalViews);
 
@@ -1803,12 +1810,45 @@ async function loadAdminMovies(skipPageReset = false) {
         from += BATCH;
     }
 
-    // Chuẩn hóa dữ liệu — dùng total_episodes sẵn có thay vì join đếm
+    // Chuẩn hóa dữ liệu
     allAdminMovies = allMoviesRaw.map(m => {
         const normalized = typeof normalizeMovieData === 'function' ? normalizeMovieData(m) : m;
-        normalized._episodeCount = m.total_episodes || 0;
+        normalized._episodeCount = 0; // Sẽ gán lại sau khi đếm thực tế
         return normalized;
     });
+
+    // ★ [FIX] Đếm số tập THỰC TẾ trong bảng episodes cho mỗi phim (thay vì dùng total_episodes từ API)
+    try {
+        let allEpCounts = [];
+        let countFrom = 0;
+        const COUNT_BATCH = 1000;
+        while (true) {
+            const { data: countBatch, error: countErr } = await supabase
+                .from('episodes')
+                .select('movie_id')
+                .range(countFrom, countFrom + COUNT_BATCH - 1);
+            if (countErr || !countBatch || countBatch.length === 0) break;
+            allEpCounts = allEpCounts.concat(countBatch);
+            if (countBatch.length < COUNT_BATCH) break;
+            countFrom += COUNT_BATCH;
+        }
+        // Đếm số tập theo movie_id
+        const epCountMap = {};
+        allEpCounts.forEach(ep => {
+            epCountMap[ep.movie_id] = (epCountMap[ep.movie_id] || 0) + 1;
+        });
+        // Gán _episodeCount thực tế vào mỗi movie
+        allAdminMovies.forEach(m => {
+            m._episodeCount = epCountMap[m.id] || 0;
+        });
+        console.log(`📊 Đếm tập thực tế cho ${Object.keys(epCountMap).length} phim`);
+    } catch (e) {
+        console.warn('⚠️ Không đếm được số tập thực tế:', e);
+        // Fallback: dùng total_episodes nếu không đếm được
+        allAdminMovies.forEach(m => {
+            m._episodeCount = m.totalEpisodes || m.total_episodes || 0;
+        });
+    }
 
     // [NEW] Lấy server info nhẹ: Chỉ fetch movie_id + sources từ episode đầu tiên
     try {
@@ -2732,7 +2772,12 @@ async function deleteMovie(movieId) {
         if (movie.background_url) await window.deleteImageFromR2(movie.background_url);
     }
 
-    // 3. Xóa phim khỏi Database
+    // 3. Xóa dữ liệu rác trong bảng notifications (giữ lại code này vì JSONB không hỗ trợ Cascade SQL)
+    try {
+        await supabase.from('notifications').delete().contains('metadata', { movie_id: movieId });
+    } catch (e) { console.warn("Lỗi dọn rác notifications:", e); }
+
+    // 4. Xóa phim khỏi Database
     const { error } = await supabase.from('movies').delete().eq('id', movieId);
     if (error) throw error;
 
@@ -2792,14 +2837,29 @@ async function deleteAllMoviesConfirm() {
             }));
         }
 
-        // 3. Xóa phim khỏi Database
-        showNotification("Hoàn tất dọn R2. Đang xóa bản ghi Database...", "info");
+        // 3. Dọn dẹp dữ liệu rác notifications (JSONB không hỗ trợ Cascade)
+        showNotification("Hoàn tất dọn R2. Đang xóa thông báo rác và bản ghi Database...", "info");
         
         // Supabase REST không cho phép delete all trực tiếp nếu thiếu where (bảo vệ an toàn). 
-        // Nên dùng `.in('id', chunkIDs)` để tuân thủ rule API. Bảng `episodes` sẽ tự động cascade delete (do RLS/Foreign Key cài sẵn).
-        for (let i = 0; i < movies.length; i += 200) {
-            const chunkIds = movies.slice(i, i + 200).map(m => m.id);
-            await supabase.from('movies').delete().in('id', chunkIds);
+        // Nên dùng `.in('id', chunkIDs)` để tuân thủ rule API nhưng với chunk size nhỏ (30).
+        for (let i = 0; i < movies.length; i += 30) {
+            const chunkIds = movies.slice(i, i + 30).map(m => m.id);
+            
+            // Xóa rác trong bảng notifications
+            try {
+                for (const mId of chunkIds) {
+                    await supabase.from('notifications').delete().contains('metadata', { movie_id: mId });
+                }
+            } catch (e) {
+                console.warn("Lỗi dọn rác notifications chunk:", e);
+            }
+
+            // 4. Bắt đầu xóa bộ phim
+            const { error: deleteErr } = await supabase.from('movies').delete().in('id', chunkIds);
+            if (deleteErr) {
+                console.error("Lỗi xóa db chunk phim:", deleteErr);
+                throw deleteErr;
+            }
         }
     }
 
@@ -2939,10 +2999,17 @@ function renderMovieSelectionGrid(movies) {
             serverBadgeHtml = `<div style="position: absolute; bottom: 4px; left: 4px; display: flex; gap: 3px; flex-wrap: wrap;">${badges}</div>`;
         }
 
+        // Badge "Chờ duyệt" cho phim đang pending (chỉ có trailer)
+        let pendingBadgeHtml = '';
+        if (m.status === 'pending') {
+            pendingBadgeHtml = `<span style="position:absolute;top:4px;right:4px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-size:0.65rem;font-weight:700;padding:3px 8px;border-radius:5px;z-index:2;letter-spacing:0.3px;box-shadow:0 2px 6px rgba(245,158,11,0.4);"><i class="fas fa-clock" style="margin-right:3px;"></i>Chờ duyệt</span>`;
+        }
+
         return `
             <div class="movie-selection-card" onclick="loadEpisodesForMovie('${m.id}')">
                 <div class="poster-wrapper">
                     ${statusHtml}
+                    ${pendingBadgeHtml}
                     ${serverBadgeHtml}
                     <img src="${m.posterUrl || m.poster_url || ''}" alt="${m.title}" loading="lazy" onerror="this.src='https://placehold.co/200x300?text=No+Poster'">
                 </div>
@@ -3430,6 +3497,54 @@ async function saveBatchImportedEpisodes() {
         showNotification("Import thành công " + episodesToInsert.length + " tập!", "success");
         closeModal("importEpisodesModal");
         
+        if (typeof sendTelegramNotify === 'function') {
+            try {
+                const { data: mData } = await supabase.from('movies').select('title, total_episodes, versions, type, status').eq('id', movieId).single();
+                const { count: currentEpCount } = await supabase.from('episodes').select('id', { count: 'exact', head: true }).eq('movie_id', movieId);
+                
+                const srcSet = new Set();
+                episodesToInsert.forEach(ep => {
+                    (ep.sources || []).forEach(s => {
+                        if (s.server) srcSet.add(s.server);
+                        else if ((s.source || '').includes('ophim')) srcSet.add('OPhim');
+                        else if ((s.source || '').includes('nguonc')) srcSet.add('NguonC');
+                        else srcSet.add('KKPhim');
+                    });
+                });
+                const sourcesStr = srcSet.size > 0 ? Array.from(srcSet).join(', ') : 'API Khác';
+                const versionsStr = mData?.versions?.length ? mData.versions.join(', ') : 'Vietsub';
+                const isTrailer = mData?.status === 'pending';
+                const typeName = mData?.type === 'series' ? 'Phim bộ' : 'Phim lẻ';
+                const typeStr = isTrailer ? `[Trailer] ${typeName}` : typeName;
+                
+                const msg = `🎬 <b>Trạm Phim Bot</b>\n\n👤 Admin vừa thêm thủ công danh sách tập phim:\n\n`
+                    + `📌 <b>Phim:</b> ${mData?.title || 'Không rõ'}\n`
+                    + `🏷 <b>Loại:</b> ${typeStr}\n`
+                    + `📺 <b>Tập:</b> Cập nhật +${episodesToInsert.length} tập (Hiện tại: ${currentEpCount} / ${mData?.total_episodes || '?'})\n`
+                    + `💽 <b>Bản chiếu:</b> ${versionsStr}\n`
+                    + `🌐 <b>Nguồn:</b> ${sourcesStr}`;
+                
+                sendTelegramNotify(msg);
+
+                // ★ THÔNG BÁO CHUÔNG CHO TẬP MỚI
+                if (episodesToInsert.length > 0 && typeof sendNotificationToAllUsers === 'function') {
+                    const epNums = episodesToInsert.map(ep => parseFloat(ep.episode_number)).filter(n => !isNaN(n)).sort((a, b) => a - b);
+                    let epString = `thêm ${episodesToInsert.length} tập mới`;
+                    if (epNums.length === 1) {
+                        epString = `Tập ${epNums[0]}`;
+                    } else if (epNums.length > 1) {
+                        epString = `từ Tập ${epNums[0]} đến Tập ${epNums[epNums.length - 1]}`;
+                    }
+
+                    const notifTitle = `📺 Tập mới [${typeName}]: ${mData?.title || 'Phim'}`;
+                    const notifMsg = `Trạm Phim vừa cập nhật ${epString} cho "${mData?.title || 'Phim'}". Vào xem ngay!`;
+                    sendNotificationToAllUsers(notifTitle, notifMsg, 'new_episode', { movie_id: movieId });
+                }
+            } catch(e) {
+                sendTelegramNotify(`🎬 <b>Trạm Phim Bot</b>\n\n👤 Admin vừa thêm thủ công <b>${episodesToInsert.length} tập phim</b> mới qua API Import!`);
+            }
+        }
+
         if (typeof loadMovies === 'function') await loadMovies();
         await loadAdminMovies();
         loadEpisodesForMovie(movieId);
@@ -4112,6 +4227,38 @@ async function handleEpisodeSubmit(event) {
       
       const { error } = await supabase.from('episodes').insert(episodeData);
       if (error) throw error;
+      
+      if (typeof sendTelegramNotify === 'function') {
+          try {
+              const { data: mData } = await supabase.from('movies').select('title, total_episodes, versions, type, status').eq('id', selectedMovieForEpisodes).single();
+              const { count: currentEpCount } = await supabase.from('episodes').select('id', { count: 'exact', head: true }).eq('movie_id', selectedMovieForEpisodes);
+              
+              const srcSet = new Set();
+              (episodeData.sources || []).forEach(s => { if (s.server) srcSet.add(s.server); else srcSet.add('Custom'); });
+              const sourcesStr = srcSet.size > 0 ? Array.from(srcSet).join(', ') : 'Custom';
+              const versionsStr = mData?.versions?.length ? mData.versions.join(', ') : 'Vietsub';
+              const isTrailer = mData?.status === 'pending';
+              const typeName = mData?.type === 'series' ? 'Phim bộ' : 'Phim lẻ';
+              const typeStr = isTrailer ? `[Trailer] ${typeName}` : typeName;
+
+              const msg = `🎬 <b>Trạm Phim Bot</b>\n\n👤 Admin vừa tạo thủ công 1 Tập phim:\n\n`
+                    + `📌 <b>Phim:</b> ${mData?.title || 'Không rõ'}\n`
+                    + `🏷 <b>Loại:</b> ${typeStr}\n`
+                    + `📺 <b>Tập:</b> ${episodeData.episode_number} (Hiện tại: ${currentEpCount} / ${mData?.total_episodes || '?'})\n`
+                    + `💽 <b>Bản chiếu:</b> ${versionsStr}\n`
+                    + `🌐 <b>Nguồn:</b> ${sourcesStr}`;
+              sendTelegramNotify(msg);
+
+              // ★ THÔNG BÁO CHUÔNG CHO TẬP MỚI
+              if (typeof sendNotificationToAllUsers === 'function') {
+                  const notifTitle = `📺 Tập mới [${typeName}]: ${mData?.title || 'Phim'}`;
+                  const notifMsg = `Trạm Phim vừa cập nhật Tập ${episodeData.episode_number} cho "${mData?.title || 'Phim'}". Vào xem ngay!`;
+                  sendNotificationToAllUsers(notifTitle, notifMsg, 'new_episode', { movie_id: selectedMovieForEpisodes });
+              }
+          } catch(e) {
+              sendTelegramNotify(`🎬 <b>Trạm Phim Bot</b>\n\n👤 Admin vừa thêm thủ công <b>Tập ${episodeData.episode_number}</b> lên hệ thống qua Admin Panel!`);
+          }
+      }
     }
 
     showNotification("Đã lưu tập phim!", "success");
@@ -5666,7 +5813,7 @@ function renderAdminMoviesList(movies) {
   const paginatedMovies = movies.slice(startIndex, startIndex + adminPerPage);
 
   if (totalItems === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center">Không tìm thấy phim nào.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center">Không tìm thấy phim nào.</td></tr>';
     const paginationContainer = document.getElementById("adminMoviePagination");
     if (paginationContainer) paginationContainer.innerHTML = "";
     return;
@@ -5699,8 +5846,8 @@ function renderAdminMoviesList(movies) {
           episodeStatus = `<span style="color: #f1c40f; font-weight: 600;">${currentEps}/${totalEps || '??'} tập</span>`;
         }
       } else {
-        // Phim lẻ đã có tập
-        episodeStatus = '<span style="color: #2ecc71; font-weight: 600;">Full</span>';
+        // Phim lẻ: hiển thị số tập thực tế (thường là 1)
+        episodeStatus = `<span style="color: #2ecc71; font-weight: 600;">${currentEps} tập ✓</span>`;
       }
 
       const typeBadge =
@@ -5755,6 +5902,25 @@ function renderAdminMoviesList(movies) {
           <td>${movie.price ? `<span class="text-accent" style="color: #4db8ff; font-weight: 600;">${movie.price} CRO</span>` : '<span class="status-badge free">Miễn phí</span>'}</td>
           <td style="text-align: center;"><i class="fas fa-eye text-muted"></i> ${formatNumber(movie.views || 0)}</td>
           <td>${statusBadge}</td>
+          <td style="text-align: center; white-space: nowrap;">
+            ${(() => {
+              // Hiển thị thời gian phim được upload lên (ngày/tháng/năm + giờ:phút:giây)
+              const rawDate = movie.created_at || movie.createdAt;
+              if (!rawDate) return '<span class="text-muted" style="font-size: 0.8rem;">N/A</span>';
+              const d = new Date(rawDate);
+              if (isNaN(d.getTime())) return '<span class="text-muted" style="font-size: 0.8rem;">N/A</span>';
+              const day = String(d.getDate()).padStart(2, '0');
+              const month = String(d.getMonth() + 1).padStart(2, '0');
+              const year = d.getFullYear();
+              const hours = String(d.getHours()).padStart(2, '0');
+              const mins = String(d.getMinutes()).padStart(2, '0');
+              const secs = String(d.getSeconds()).padStart(2, '0');
+              return `<div style="font-size: 0.82rem; line-height: 1.5;">`
+                + `<div style="font-weight: 600; color: var(--text-primary, #ddd);">${day}/${month}/${year}</div>`
+                + `<div style="color: var(--text-muted, #888); font-size: 0.75rem;"><i class="fas fa-clock" style="margin-right: 3px; font-size: 0.7rem;"></i>${hours}:${mins}:${secs}</div>`
+                + `</div>`;
+            })()}
+          </td>
           <td>
             <div class="admin-actions" style="display: flex; flex-direction: column; gap: 5px;">
               <button class="btn btn-sm btn-secondary" onclick="editMovie('${movie.id}')" title="Sửa" style="background: #34495e; border: none; padding: 6px;">
