@@ -458,14 +458,8 @@ function handleMovieClick(event, movieId) {
 
     currentWrapper.classList.add("active-mobile");
 
-    // FIX STACKING CONTEXT: Nâng section cha lên cao, nhưng dưới Navbar (Navbar=2000)
-    const parentSection = currentWrapper.closest(".country-section") || currentWrapper.closest(".section");
-    if (parentSection) {
-        parentSection.classList.add("section-active-popup");
-    }
-
     // FIX POPUP TRONG SCROLL CONTAINER: Dùng position:fixed để popup thoát overflow
-    const isInScrollContainer = currentWrapper.closest('.featured-scroll-wrapper') || currentWrapper.closest('#newMovies');
+    const isInScrollContainer = currentWrapper.closest('.featured-scroll-wrapper') || currentWrapper.closest('#newMovies') || currentWrapper.closest('.country-movies-row');
     if (isInScrollContainer) {
         const popup = currentWrapper.querySelector('.movie-popup-nfx');
         if (popup) {
@@ -474,6 +468,12 @@ function handleMovieClick(event, movieId) {
             // Căn giữa popup trên card (dọc + ngang)
             popup.style.setProperty('--popup-fixed-top', `${cardRect.top + cardRect.height / 2}px`);
             popup.style.setProperty('--popup-fixed-left', `${cardRect.left + cardRect.width / 2}px`);
+        }
+    } else {
+        // CHỈ thêm section-active-popup khi popup KHÔNG dùng fixed (tránh giật trang)
+        const parentSection = currentWrapper.closest(".country-section") || currentWrapper.closest(".section");
+        if (parentSection) {
+            parentSection.classList.add("section-active-popup");
         }
     }
   }

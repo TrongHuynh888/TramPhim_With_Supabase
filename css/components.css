@@ -973,11 +973,11 @@
   padding: 15px;
   display: flex;
   flex-direction: column;
-  /* Äáº£m báº£o ná»i dung khÃ´ng bá» trÃ n */
+  /* Ä áº£m báº£o ná»™i dung khÃ´ng bá»‹ trÃ n */
   box-sizing: border-box;
 }
 
-/* NÃºt báº¥m */
+/* Nút bấm */
 .popup-actions {
   display: flex;
   align-items: center;
@@ -985,6 +985,24 @@
   margin-bottom: 15px;
   flex-wrap: wrap;
 }
+
+/* --- FIX PC: Nút bấm landscape không bị rớt dòng --- */
+.movie-card-landscape .popup-actions {
+  flex-wrap: nowrap !important;
+  gap: 6px !important;
+}
+/* Thu gọn nút landscape PC để không bị tràn */
+.movie-card-landscape .btn-play-pink {
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  white-space: nowrap !important;
+}
+.movie-card-landscape .btn-action-glass {
+  padding: 8px 10px !important;
+  font-size: 12px !important;
+  white-space: nowrap !important;
+}
+
 .btn-popup-play {
   flex: 1;
   white-space: nowrap; /* Giá»¯ chá»¯ "Xem ngay" trÃªn 1 dÃ²ng */
@@ -4645,9 +4663,23 @@ body.modal-open .scroll-top-btn {
     .tmdb-trailer-title { font-size: 13px; }
 }
 
-/* Tá»± do phÃ³ng to Trailer trÃªn PC */
+/* Tự do phóng to Trailer trên PC */
 .tmdb-trailer-container { max-width: 1200px !important; width: 92vw !important; }
+
+/* Badge Trailer */
+.episode-badge-trailer {
+  background: linear-gradient(135deg, #7f8c8d, #95a5a6);
+  color: #fff;
 }
+
+@media (max-width: 768px) {
+    .tmdb-trailer-container { max-width: 100%; border-radius: 10px; }
+    .tmdb-trailer-header { padding: 12px 14px; }
+    .tmdb-trailer-title { font-size: 13px; }
+}
+
+/* Tự do phóng to Trailer trên PC */
+.tmdb-trailer-container { max-width: 1200px !important; width: 92vw !important; }
 
 /* Badge Trailer */
 .episode-badge-trailer {
