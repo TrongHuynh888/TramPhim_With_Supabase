@@ -334,6 +334,10 @@
   z-index: 10;
   background: var(--bg-primary); /* Đảm bảo nền liền mạch giữa các section */
 }
+/* PC: Nâng section lên khi có popup hover — tránh bị section khác che */
+.section:has(.movie-card-wrapper:hover) {
+  z-index: 100;
+}
 
 .section-header {
   display: flex;
@@ -369,13 +373,14 @@
 /* Phim Nổi Bật — Wrapper cuộn ngang */
 .featured-scroll-wrapper {
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: clip; /* FIX: dùng clip thay hidden để popup không bị cắt dọc */
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Ẩn thanh cuộn Firefox */
   cursor: grab;
   /* Padding trên/dưới tạo khoảng trống cho popup hiển thị đầy đủ */
-  padding: 50px 40px 220px;
-  margin-top: -50px;
+  /* Tăng padding-top lên 180px để popup không bị cắt mí trên */
+  padding: 180px 40px 220px;
+  margin-top: -180px;
   margin-bottom: -220px;
 }
 .featured-scroll-wrapper:active {

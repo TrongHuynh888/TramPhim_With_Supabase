@@ -2974,31 +2974,162 @@ body[data-theme="light"] .chat-msg .author {
 }
 
 /* =============================================
-   POPUP FIXED POSITION — Specificity cao (0,4,0)
-   để override mobile rules (0,3,0) 
+   POPUP BODY-LEVEL — Khi popup được di chuyển ra <body>
+   để thoát overflow container trên mobile
    ============================================= */
-.movie-card-wrapper.active-mobile .movie-popup-nfx.popup-fixed-position {
-    position: fixed !important;
-    top: var(--popup-fixed-top, 50%) !important;
-    left: var(--popup-fixed-left, 50%) !important;
-    transform: translate(-50%, -50%) !important;
-    z-index: 10001 !important;
-    width: 220px !important;
-    max-height: 70vh !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    border-radius: 12px !important;
-    background: #1f1f2e !important;
-    color: #fff !important;
-    box-shadow: 0 10px 50px rgba(0, 0, 0, 0.95) !important;
-    border: 1px solid var(--accent-primary) !important;
+
+/* Ảnh header — giống popup gốc */
+.popup-body-level .popup-header-img {
+    height: 120px !important;
 }
 
-/* Popup fixed cho thẻ landscape — đè lên thẻ phim */
-.movie-card-landscape.active-mobile .movie-popup-nfx.popup-fixed-position {
-    width: 250px !important;
+/* Padding body popup — thoáng hơn */
+.popup-body-level .popup-body {
+    padding: 8px 10px !important;
+}
+
+/* Tiêu đề — giữ nguyên font gốc */
+.popup-body-level .popup-title-new {
+    font-size: 13px !important;
+    margin-bottom: 4px !important;
+    line-height: 1.3 !important;
+    color: var(--accent-primary) !important;
+    font-weight: 700 !important;
+}
+
+/* Meta info — KHÔNG dùng mask-image để tránh cắt chữ bên trái */
+.popup-body-level .popup-meta-row {
+    font-size: 10px !important;
+    gap: 5px !important;
+    margin-bottom: 4px !important;
+    overflow: hidden !important;
+    flex-wrap: nowrap !important;
+    white-space: nowrap !important;
+}
+
+/* Marquee chạy chữ — giống popup gốc */
+.popup-body-level .marquee-content {
+    display: flex !important;
+    flex-shrink: 0 !important;
+    gap: 5px !important;
+    white-space: nowrap !important;
+    transform: translateX(0);
+    animation: marquee-infinite 12s linear infinite !important;
+    animation-delay: 1.5s !important;
+}
+
+/* Hiện bản sao marquee duplicate để chữ chạy liên tục */
+.popup-body-level .marquee-duplicate {
+    display: flex !important;
+}
+
+/* Nút Xem ngay — kích thước giống ảnh gốc */
+.popup-body-level .btn-popup-play {
+    font-size: 11px !important;
+    padding: 5px 10px !important;
+    height: 28px !important;
+}
+
+/* Nút icon — kích thước giống ảnh gốc */
+.popup-body-level .btn-popup-icon {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
+}
+
+/* HIỆN dòng thể loại + quốc gia — giống popup gốc */
+.popup-body-level .popup-genres-row {
+    display: flex !important;
+    font-size: 11px !important;
+    flex-wrap: nowrap !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    margin-top: 2px !important;
+}
+
+/* Ẩn thể loại dài PC, hiện bản rút gọn mobile */
+.popup-body-level .desktop-genres {
+    display: none !important;
+}
+.popup-body-level .mobile-genres {
+    display: inline-block !important;
+}
+
+/* Popup actions gọn gàng */
+.popup-body-level .popup-actions {
+    margin-bottom: 8px !important;
+    gap: 6px !important;
+    flex-wrap: nowrap !important;
+    justify-content: center !important;
+}
+
+/* Nút landscape (btn-play-pink, btn-action-glass) gọn vừa 1 hàng */
+.popup-body-level .btn-play-pink {
+    font-size: 11px !important;
+    padding: 6px 10px !important;
+    white-space: nowrap !important;
+    flex: 1 !important;
+    justify-content: center !important;
+}
+.popup-body-level .btn-action-glass {
+    font-size: 11px !important;
+    padding: 6px 8px !important;
+    white-space: nowrap !important;
+    flex: 1 !important;
+    justify-content: center !important;
+}
+
+/* Light mode tương thích */
+[data-theme="light"] .popup-body-level {
+    background: #fff !important;
+    color: #222 !important;
+    border-color: #ddd !important;
+}
+
+/* =============================================
+   POPUP LANDSCAPE COMPACT — Thu gọn popup thẻ ngang
+   ============================================= */
+.popup-body-landscape .popup-header-img {
+    height: 100px !important;
+}
+.popup-body-landscape .popup-body {
+    padding: 8px 10px 6px !important;
+}
+.popup-body-landscape .popup-title-main {
+    font-size: 14px !important;
+    margin-bottom: 2px !important;
+    line-height: 1.2 !important;
+}
+.popup-body-landscape .popup-subtitle-orig {
+    font-size: 11px !important;
+    margin-bottom: 4px !important;
+    line-height: 1.2 !important;
+}
+.popup-body-landscape .popup-actions {
+    margin-top: 4px !important;
+    margin-bottom: 6px !important;
+    gap: 5px !important;
+}
+.popup-body-landscape .btn-play-pink {
+    font-size: 10px !important;
+    padding: 5px 8px !important;
+}
+.popup-body-landscape .btn-action-glass {
+    font-size: 10px !important;
+    padding: 5px 6px !important;
+}
+.popup-body-landscape .meta-badges-row {
+    gap: 4px !important;
+    margin-bottom: 4px !important;
+}
+.popup-body-landscape .badge-item {
+    font-size: 10px !important;
+    padding: 2px 6px !important;
+}
+.popup-body-landscape .popup-genres-text {
+    font-size: 11px !important;
+    margin-bottom: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
 }

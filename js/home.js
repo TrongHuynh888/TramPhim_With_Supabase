@@ -243,6 +243,11 @@ function createMovieCard(movie, matchedTags = []) {
     ? `<span style="background: var(--accent-primary); color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; text-transform: uppercase; vertical-align: middle;">${displayPart}</span>`
     : "";
 
+  // Badge phần hiển thị trên ảnh nền popup (góc phải dưới)
+  const partBadgeOnImage = movie.part
+    ? `<span class="popup-part-badge">${displayPart}</span>`
+    : "";
+
   let isLiked = false;
   if (
     typeof currentUser !== "undefined" &&
@@ -331,6 +336,7 @@ function createMovieCard(movie, matchedTags = []) {
         <div class="movie-popup-nfx" onclick="event.stopPropagation()">
             <div class="popup-header-img">
                 <img src="${movie.backgroundUrl || movie.posterUrl}" onerror="this.onerror=null; this.src='${fallbackImage}';">
+                ${partBadgeOnImage}
             </div>
             <div class="popup-body">
                 <div class="popup-actions">
@@ -344,7 +350,7 @@ function createMovieCard(movie, matchedTags = []) {
                         <i class="fas fa-chevron-down"></i>
                     </button>
                 </div>
-                <h3 class="popup-title-new">${movie.title} ${partHtml}</h3>
+                <h3 class="popup-title-new">${movie.title}</h3>
                 ${movie.originTitle ? `<p style="font-size: 0.85em; color: #555; margin: -5px 0 5px; font-style: italic; font-weight: 500;">${movie.originTitle}</p>` : ''}
                 <div class="popup-meta-row">
                     <!-- Khối thông tin gốc -->
@@ -458,19 +464,63 @@ function handleMovieClick(event, movieId) {
 
     currentWrapper.classList.add("active-mobile");
 
-    // FIX POPUP TRONG SCROLL CONTAINER: Dùng position:fixed để popup thoát overflow
-    const isInScrollContainer = currentWrapper.closest('.featured-scroll-wrapper') || currentWrapper.closest('#newMovies') || currentWrapper.closest('.country-movies-row');
-    if (isInScrollContainer) {
-        const popup = currentWrapper.querySelector('.movie-popup-nfx');
-        if (popup) {
-            const cardRect = currentWrapper.getBoundingClientRect();
-            popup.classList.add('popup-fixed-position');
-            // Căn giữa popup trên card (dọc + ngang)
-            popup.style.setProperty('--popup-fixed-top', `${cardRect.top + cardRect.height / 2}px`);
-            popup.style.setProperty('--popup-fixed-left', `${cardRect.left + cardRect.width / 2}px`);
-        }
-    } else {
-        // CHỈ thêm section-active-popup khi popup KHÔNG dùng fixed (tránh giật trang)
+    // FIX iOS: Di chuyển popup ra <body> để thoát hoàn toàn overflow container
+    const popup = currentWrapper.querySelector('.movie-popup-nfx');
+    if (popup) {
+        const cardRect = currentWrapper.getBoundingClientRect();
+
+        // Lấy kích thước popup
+        const isLandscape = currentWrapper.classList.contains('movie-card-landscape');
+        const popupW = isLandscape ? 250 : 220;
+        const margin = 8;
+        const navbarH = 70;
+
+        // Tính vị trí trung tâm mong muốn
+        let centerX = cardRect.left + cardRect.width / 2;
+        let centerY = cardRect.top + cardRect.height / 2;
+
+        // CLAMP NGANG: Không cho popup tràn trái/phải viewport
+        const minLeft = margin + popupW / 2;
+        const maxLeft = window.innerWidth - margin - popupW / 2;
+        centerX = Math.max(minLeft, Math.min(maxLeft, centerX));
+
+        // CLAMP DỌC: Không cho popup tràn trên (dưới navbar)
+        centerY = Math.max(navbarH + margin + 100, centerY);
+
+        // Lưu vị trí gốc để khi đóng popup sẽ trả về đúng chỗ
+        popup._originalParent = currentWrapper;
+        popup._originalNextSibling = popup.nextSibling;
+
+        // Di chuyển popup ra body — thoát hoàn toàn mọi overflow container
+        document.body.appendChild(popup);
+
+        // Áp dụng style fixed trực tiếp
+        popup.classList.add('popup-body-level');
+        if (isLandscape) popup.classList.add('popup-body-landscape');
+        popup.style.cssText = `
+          position: fixed !important;
+          top: ${centerY}px !important;
+          left: ${centerX}px !important;
+          transform: translate(-50%, -50%) !important;
+          z-index: 2500 !important;
+          width: ${popupW}px !important;
+          max-height: 70vh !important;
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+          display: block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          pointer-events: auto !important;
+          border-radius: 12px !important;
+          background: #1f1f2e !important;
+          color: #fff !important;
+          box-shadow: 0 10px 50px rgba(0, 0, 0, 0.95) !important;
+          border: 1px solid var(--accent-primary) !important;
+        `;
+    }
+
+    // Thêm section-active-popup cho trường hợp không phải scroll container
+    if (!currentWrapper.closest('.featured-scroll-wrapper') && !currentWrapper.closest('#newMovies') && !currentWrapper.closest('.country-movies-row')) {
         const parentSection = currentWrapper.closest(".country-section") || currentWrapper.closest(".section");
         if (parentSection) {
             parentSection.classList.add("section-active-popup");
@@ -483,7 +533,23 @@ function handleMovieClick(event, movieId) {
 }
 
 function closeAllPopups() {
-  // Dọn dẹp popup fixed position
+  // Trả popup đã di chuyển ra body về vị trí gốc trong wrapper
+  document.querySelectorAll('.popup-body-level').forEach(p => {
+    p.classList.remove('popup-body-level', 'popup-body-landscape');
+    p.style.cssText = ''; // Xóa inline styles
+    // Trả popup về wrapper gốc
+    if (p._originalParent) {
+      if (p._originalNextSibling) {
+        p._originalParent.insertBefore(p, p._originalNextSibling);
+      } else {
+        p._originalParent.appendChild(p);
+      }
+      delete p._originalParent;
+      delete p._originalNextSibling;
+    }
+  });
+
+  // Dọn dẹp popup fixed position (fallback cũ)
   document.querySelectorAll('.popup-fixed-position').forEach(p => {
     p.classList.remove('popup-fixed-position');
     p.style.removeProperty('--popup-fixed-top');

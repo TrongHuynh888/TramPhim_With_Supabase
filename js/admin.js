@@ -2710,9 +2710,21 @@ function generateSeriesIdFromTitle(title) {
     // Giữ toàn bộ tên phim (không cắt tại dấu : hoặc - như trước)
     let baseTitle = title.trim();
     
-    // Loại bỏ các chữ số La Mã và số thường ở cuối (Phần 1, Season II, Mùa 3, ...)
-    baseTitle = baseTitle.replace(/(\s+)(Phần|Season|Mùa|Part)\s*(\d+|I{1,3}V?)/i, "").trim();
-    baseTitle = baseTitle.replace(/(\s+)(\d+|I|II|III|IV|V)+$/i, "").trim();
+    // Ngưỡng tối đa: số > 30 thường là tên phim (VD: "Xin Chào 1983"), KHÔNG phải phần/mùa
+    const MAX_PART = 30;
+    
+    // Loại bỏ từ khóa Phần/Season/Mùa/Part/Quyển/Kỳ/Vol... kèm số (VD: "Phần 2", "Season 3", "Vol. 2")
+    baseTitle = baseTitle.replace(/(\s+)(Phần|Season|Mùa|Part|Quyển|Kỳ|Chapter|Vol(?:ume)?\.?|Series|Cour)\s*(\d+|I{1,3}V?|V?I{1,3}|X{1,3})/i, "").trim();
+    // Loại bỏ shorthand S02, SS2 ở cuối
+    baseTitle = baseTitle.replace(/\s+SS?\d+$/i, "").trim();
+    
+    // Loại bỏ số La Mã hoặc số nhỏ ở cuối (VD: "Iron Man 2") — CHỈ khi số <= MAX_PART
+    baseTitle = baseTitle.replace(/(\s+)(I|II|III|IV|V)$/i, "").trim();
+    baseTitle = baseTitle.replace(/(\s+)(\d+)$/i, (match, space, numStr) => {
+        const num = parseInt(numStr);
+        // Chỉ xóa nếu là số nhỏ (phần/mùa), giữ nguyên số lớn (tên phim VD: 1983, 2024)
+        return (num <= MAX_PART) ? "" : match;
+    }).trim();
 
     return baseTitle
         .toLowerCase()

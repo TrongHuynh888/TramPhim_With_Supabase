@@ -636,38 +636,109 @@ async function _checkMovieExistsBySlug(slug, extra = null) {
  * @returns {string} - VD "Phần 2", "Mùa 3", "" nếu không phát hiện
  */
 function _detectMoviePart(viTitle, enTitle) {
-    // Chuyển số La Mã → số thường
-    const _roman = { I:1,II:2,III:3,IV:4,V:5,VI:6,VII:7,VIII:8,IX:9,X:10 };
-    const _toArabic = (s) => _roman[s.toUpperCase()] || parseInt(s) || null;
+    // Chuyển số La Mã → số thường (hỗ trợ tới XX = 20)
+    const _roman = {
+        I:1, II:2, III:3, IV:4, V:5, VI:6, VII:7, VIII:8, IX:9, X:10,
+        XI:11, XII:12, XIII:13, XIV:14, XV:15, XVI:16, XVII:17, XVIII:18, XIX:19, XX:20
+    };
+    const _toArabic = (s) => {
+        if (!s) return null;
+        const upper = s.toUpperCase().trim();
+        if (_roman[upper]) return _roman[upper];
+        const parsed = parseInt(s);
+        return isNaN(parsed) ? null : parsed;
+    };
 
-    // Patterns kiểm tra (theo độ ưu tiên)
-    const patterns = [
+    // Ngưỡng tối đa cho số phần - phim hiếm khi có > 30 phần/mùa
+    // Số lớn hơn (VD: 1983, 2024, 101) thường là tên phim hoặc năm, KHÔNG phải số phần
+    const MAX_PART = 30;
+
+    // Kiểm tra chuỗi có phải dạng năm phát hành (1900-2099) không
+    const _isYearLike = (s) => {
+        const n = parseInt(s);
+        return n >= 1900 && n <= 2099;
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // NHÓM 1: Patterns CÓ TỪ KHÓA RÕ RÀNG (độ tin cậy cao)
+    // Phát hiện chính xác vì có keyword đi kèm số
+    // ═══════════════════════════════════════════════════════════
+    const keywordPatterns = [
         // Tiếng Việt: Phần 2, (Phần 2), Phần II
-        { re: /\bph\u1ea7n\s*([ivxlcdm\d]+)\b/i, label: 'Phần' },
-        // Tiếng Việt: Mùa 2, (Mùa 2)
-        { re: /\bm\u00f9a\s*([ivxlcdm\d]+)\b/i,   label: 'Mùa'  },
+        { re: /\bph\u1ea7n\s*([ivxlcdm\d]+)\b/i,   label: 'Phần' },
+        // Tiếng Việt: Mùa 2, Mùa II
+        { re: /\bm\u00f9a\s*([ivxlcdm\d]+)\b/i,     label: 'Mùa'  },
+        // Tiếng Việt: Quyển 2 (manga/anime)
+        { re: /\bquy\u1ec3n\s*([ivxlcdm\d]+)\b/i,   label: 'Quyển' },
+        // Tiếng Việt: Kỳ 2 (dùng trong phim Trung Quốc)
+        { re: /\bk\u1ef3\s*([ivxlcdm\d]+)\b/i,      label: 'Kỳ'   },
         // Tiếng Anh: Season 2, (Season 2)
-        { re: /\bseason\s*([ivxlcdm\d]+)\b/i,      label: 'Mùa'  },
+        { re: /\bseason\s*([ivxlcdm\d]+)\b/i,        label: 'Mùa'  },
         // Tiếng Anh: Part 2, Part II
-        { re: /\bpart\s*([ivxlcdm\d]+)\b/i,        label: 'Phần' },
+        { re: /\bpart\s*([ivxlcdm\d]+)\b/i,          label: 'Phần' },
         // Tiếng Anh: Chapter 2
-        { re: /\bchapter\s*([ivxlcdm\d]+)\b/i,     label: 'Phần' },
-        // Số thứ tự ở cuối tên trong ngoặc: "(2)", "(3)"
-        { re: /\(\s*(\d+)\s*\)$/,                  label: 'Phần' },
-        // Số La Mã hoặc số thường ở CUỐI CÙNG chuỗi, cách bởi khoảng trắng: "Iron Man 2", "Ám Ảnh Kinh Hoàng II"
-        { re: /\s+([ivxlc\d]+)$/i,                 label: 'Phần' }
+        { re: /\bchapter\s*([ivxlcdm\d]+)\b/i,       label: 'Phần' },
+        // Tiếng Anh: Volume 2, Vol. 2, Vol 2 (anime/manga)
+        { re: /\bvol(?:ume)?\.?\s*([ivxlcdm\d]+)\b/i, label: 'Phần' },
+        // Tiếng Anh: Series 2 (UK style)
+        { re: /\bseries\s+([ivxlcdm\d]+)\b/i,        label: 'Phần' },
+        // Tiếng Anh: Cour 2 (anime)
+        { re: /\bcour\s*([ivxlcdm\d]+)\b/i,          label: 'Phần' },
+        // Shorthand: S02, S2, SS02, SS2 (phổ biến trong API phim)
+        { re: /\bSS?0*(\d+)\b/,                      label: 'Mùa'  },
+        // Ordinal: "2nd Season", "3rd Part", "4th Season"
+        { re: /\b(\d+)(?:st|nd|rd|th)\s+season\b/i,  label: 'Mùa'  },
+        { re: /\b(\d+)(?:st|nd|rd|th)\s+part\b/i,    label: 'Phần' },
     ];
 
+    // ═══════════════════════════════════════════════════════════
+    // NHÓM 2: Patterns KHÔNG CÓ TỪ KHÓA (cần cẩn thận hơn)
+    // Dễ nhận nhầm nên cần thêm nhiều điều kiện chặn
+    // ═══════════════════════════════════════════════════════════
+    const ambiguousPatterns = [
+        // Từ khóa trong ngoặc có kèm context: "(Season 2)", "(Phần 3)", "(Mùa 2)"
+        { re: /\(\s*(?:ph\u1ea7n|m\u00f9a|season|part|chapter|vol\.?)\s*([ivxlcdm\d]+)\s*\)/i, label: 'Phần' },
+        // Số thứ tự ở cuối tên trong ngoặc: "(2)", "(3)" — CHỈ khi số nhỏ
+        { re: /\(\s*(\d+)\s*\)$/,                    label: 'Phần' },
+        // Số La Mã hoặc số nhỏ ở CUỐI CÙNG chuỗi: "Iron Man 2", "Ám Ảnh III"
+        // ⚠️ Pattern này DỄ NHẬN NHẦM nhất — cần nhiều bộ lọc bổ sung
+        { re: /\s+([ivxlc]+)$/i,                     label: 'Phần', romanOnly: true },
+        { re: /\s+(\d+)$/,                           label: 'Phần', digitOnly: true },
+    ];
+
+    // --- BƯỚC 1: Thử patterns có từ khóa rõ ràng trước (tin cậy cao) ---
     for (const src of [viTitle, enTitle]) {
         if (!src) continue;
-        for (const { re, label } of patterns) {
+        for (const { re, label } of keywordPatterns) {
             const m = src.match(re);
             if (m) {
                 const num = _toArabic(m[1]);
-                if (num && num > 1) return `${label} ${num}`; // Chỉ set nếu >= 2
+                if (num && num > 1 && num <= MAX_PART) return `${label} ${num}`;
             }
         }
     }
+
+    // --- BƯỚC 2: Thử patterns mơ hồ (cần kiểm tra kỹ hơn) ---
+    for (const src of [viTitle, enTitle]) {
+        if (!src) continue;
+        for (const p of ambiguousPatterns) {
+            const m = src.match(p.re);
+            if (m) {
+                const raw = m[1];
+                const num = _toArabic(raw);
+                if (!num || num <= 1 || num > MAX_PART) continue;
+
+                // Chặn số trần giống năm phát hành (1900-2099): "Xin Chào 1983" → KHÔNG detect
+                if (p.digitOnly && _isYearLike(raw)) continue;
+
+                // Chặn số trần có >= 3 chữ số: "Apollo 13" ok, "District 101" → khả năng là tên phim
+                if (p.digitOnly && raw.length >= 3) continue;
+
+                return `${p.label} ${num}`;
+            }
+        }
+    }
+
     return ''; // Không phát hiện → để trống
 }
 
@@ -685,11 +756,20 @@ function _detectMoviePart(viTitle, enTitle) {
 function _buildSeriesId(slug, detectedPart) {
     if (!slug) return '';
 
-    // Bỏ các suffix phần/mùa ở cuối slug
-    const cleanSlug = slug
-        .replace(/-(phan|season|mua|part|chapter|quyen|tap)-?0*([\divxlc]+)$/i, '')
-        .replace(/-0*(\d+)$/, '')
-        .replace(/-+$/, '');
+    // Ngưỡng tối đa: số > 30 ở cuối slug thường là tên phim (VD: "xin-chao-1983"), không cắt
+    const MAX_PART = 30;
+
+    // Bỏ các suffix phần/mùa có từ khóa rõ ràng ở cuối slug (VD: -phan-2, -season-3)
+    let cleanSlug = slug
+        .replace(/-(phan|season|mua|part|chapter|quyen|ky|vol|volume|series|cour|tap|ss?)-?0*([\divxlc]+)$/i, '');
+    
+    // Chỉ bỏ số thuần ở cuối slug nếu số đó <= MAX_PART (tránh cắt nhầm tên phim có số lớn)
+    cleanSlug = cleanSlug.replace(/-0*(\d+)$/, (match, numStr) => {
+        const num = parseInt(numStr);
+        return (num <= MAX_PART) ? '' : match;
+    });
+    
+    cleanSlug = cleanSlug.replace(/-+$/, '');
 
     // PascalCase: mỗi từ viết hoa chữ đầu (VD: "mua-ruc-ro-cua-em" → "MuaRucRoCuaEm")
     return (cleanSlug || slug)

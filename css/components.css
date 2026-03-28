@@ -969,6 +969,24 @@
   background: linear-gradient(to bottom, transparent 50%, var(--bg-secondary));
 }
 
+/* Badge Phần (VD: Phần 2) — góc phải dưới ảnh nền popup */
+.popup-part-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3; /* Trên gradient overlay */
+  background: var(--accent-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+}
+
 .popup-body {
   padding: 15px;
   display: flex;
