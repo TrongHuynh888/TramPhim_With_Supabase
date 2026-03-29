@@ -252,6 +252,41 @@ CREATE TABLE system_settings (
         `;
     }
 
+    // Cloudflare & Telegram Config (Đã chuyển vào trong Sudo Mode)
+    html += `
+        <!-- Cloudflare R2 Config -->
+        <div style="margin-bottom: 20px; padding: 18px 20px; background: rgba(0,210,255,0.04); border: 1px solid rgba(0,210,255,0.15); border-radius: 12px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                <i class="fas fa-cloud-upload-alt" style="color:#00d2ff; font-size:1.2rem;"></i>
+                <div>
+                    <div style="font-weight:700; font-size:0.9rem; color:#fff;">Cloudflare R2 Worker</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">Upload ảnh phim lên Cloudflare R2 Storage</div>
+                </div>
+                </div>
+                <button class="btn btn-sm" onclick="openR2ConfigModal()" title="Cấu hình R2 Worker URL" style="background:rgba(0,210,255,0.1);border:1px solid rgba(0,210,255,0.25);color:#00d2ff;font-size:0.75rem;">
+                <i class="fas fa-cog"></i> Cấu hình URL
+                </button>
+            </div>
+        </div>
+
+        <!-- Telegram Bot Config -->
+        <div style="margin-bottom: 20px; padding: 18px 20px; background: rgba(52,211,153,0.04); border: 1px solid rgba(52,211,153,0.15); border-radius: 12px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                <i class="fab fa-telegram-plane" style="color:#34d399; font-size:1.3rem;"></i>
+                <div>
+                    <div style="font-weight:700; font-size:0.9rem; color:#fff;">Telegram Bot Báo Cáo</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">Nhận thông báo sau mỗi đợt Auto-Import</div>
+                </div>
+                </div>
+                <button class="btn btn-sm" onclick="openTelegramConfigModal()" title="Cấu hình Telegram Bot" style="background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.25);color:#34d399;font-size:0.75rem;">
+                <i class="fas fa-cog"></i> Cấu hình Bot
+                </button>
+            </div>
+        </div>
+    `;
+
     html += '<div class="api-keys-grid">';
 
     API_KEYS_CONFIG.forEach(config => {
@@ -411,13 +446,6 @@ function renderTmdbToggles() {
                     <i class="fas fa-magic"></i>
                     Quét &amp; Bổ sung ảnh diễn viên hàng loạt
                 </button>
-                <button class="btn-bulk-tmdb-scan" onclick="bulkScanTmdbTrailers()" title="Quét trailer YouTube cho toàn bộ phim và lưu vào cache" style="margin-top:8px; background:linear-gradient(135deg,rgba(198,40,40,0.15),rgba(136,14,79,0.15)); border-color:rgba(198,40,40,0.35); color:#ef9a9a;">
-                    <i class="fab fa-youtube"></i>
-                    Quét &amp; Lưu Trailer hàng loạt
-                </button>
-                <p style="margin: 6px 0 0; font-size: 11px; color: #777; line-height: 1.4;">
-                    <i class="fas fa-info-circle"></i> Trailer được lưu vào cache Supabase — bỏ qua phim đã có sẵn
-                </p>
             </div>
         </div>`;
 }

@@ -24,41 +24,104 @@ function isTmdbEnabled(feature) {
 }
 
 /**
- * Tìm kiếm phim trên TMDb theo tên + năm
- * Hỗ trợ tìm cả tiếng Việt và tên quốc tế
- * @param {string} title - Tên phim
+ * Làm sạch tên phim trước khi gửi cho TMDb (Loại bỏ Phần 1, Season 1, text trong ngoặc...)
+ */
+function _cleanTitleForTMDb(raw) {
+    if (!raw) return '';
+    let t = raw;
+    t = t.replace(/\(Phần \d+\)/gi, '');
+    t = t.replace(/\(Season \d+\)/gi, '');
+    t = t.replace(/Phần \d+/gi, '');
+    t = t.replace(/Season \d+/gi, '');
+    t = t.replace(/\([^)]*\)/g, ''); // Xoá chữ trong ngoặc đơn
+    return t.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Tìm phim trên TMDb theo dạng search/multi (hỗ trợ cả movie và tv)
+ * @param {string} rawTitle - Tên phim đầu vào (ưu tiên 1)
  * @param {number|string} year - Năm phát hành
+ * @param {string} secondaryTitle - Tên phụ (ưu tiên 2, thường là tiếng Việt/Anh còn lại)
  * @returns {object|null} - TMDb result object hoặc null nếu không tìm thấy
  */
-async function searchTmdbByTitle(title, year) {
+async function searchTmdbByTitle(rawTitle, year, secondaryTitle = null) {
     const key = getTmdbKey();
-    if (!key || !title) return null;
+    if (!key || !rawTitle) return null;
+
+    let title = _cleanTitleForTMDb(rawTitle);
 
     try {
-        // Thử tìm theo tên gốc tiếng Anh trước (nếu có originTitle)
-        // Thử 2 ngôn ngữ: vi (tiếng Việt) và en-US
-        const params = new URLSearchParams({
-            api_key: key,
-            query: title,
-            language: 'vi-VN',
-            include_adult: 'false'
-        });
-        if (year) params.append('year', year);
+        const fetchTmdb = async (queryTitle) => {
+            const params = new URLSearchParams({
+                api_key: key,
+                query: queryTitle,
+                language: 'vi-VN',
+                include_adult: 'false'
+            });
+            const res = await fetch(`${TMDB_BASE}/search/multi?${params}`);
+            if (!res.ok) {
+                if (res.status === 401) {
+                    showNotification('TMDb API Key không hợp lệ! Vui lòng kiểm tra lại cấu hình.', 'error');
+                }
+                console.error('[TMDb Search] Lỗi API:', res.status);
+                return null;
+            }
+            const data = await res.json();
+            return data.results || [];
+        };
 
-        const res = await fetch(`${TMDB_BASE}/search/multi?${params}`);
-        if (!res.ok) return null;
+        let results = await fetchTmdb(title);
 
-        const data = await res.json();
-        const results = data.results || [];
+        if (results.length === 0) {
+            // Thử bỏ chữ năm hoặc tên phụ đi (cắt theo dấu : hoặc -)
+            if (title.includes(':') || title.includes('-')) {
+                const shortTitle = title.split(/[:\-]/)[0].trim();
+                const shortResults = await fetchTmdb(shortTitle);
+                if (shortResults && shortResults.length > 0) results = shortResults;
+            }
+        }
+
+        // Nếu lấy Tên 1 (Tên Gốc) thất bại, thử lấy theo Tên 2 (Tiếng Việt)
+        if (results.length === 0 && secondaryTitle && secondaryTitle !== rawTitle) {
+            if (typeof _trailerBulkLog === 'function' && typeof _bulkScanTrailerRunning !== 'undefined' && _bulkScanTrailerRunning) {
+                _trailerBulkLog(`⚠️ Không tìm thấy "${title}". Đang thử lại với tên khác: "${secondaryTitle}"...`);
+            }
+            const title2 = _cleanTitleForTMDb(secondaryTitle);
+            results = await fetchTmdb(title2);
+            
+            if (results.length === 0 && (title2.includes(':') || title2.includes('-'))) {
+                const shortTitle2 = title2.split(/[:\-]/)[0].trim();
+                const shortResults2 = await fetchTmdb(shortTitle2);
+                if (shortResults2 && shortResults2.length > 0) results = shortResults2;
+            }
+        }
 
         if (results.length === 0) return null;
 
         // Ưu tiên kết quả movie > tv, lấy kết quả có popularity cao nhất
-        const sorted = results.sort((a, b) => {
+        let sorted = results.sort((a, b) => {
             if (a.media_type === 'movie' && b.media_type !== 'movie') return -1;
             if (b.media_type === 'movie' && a.media_type !== 'movie') return 1;
             return (b.popularity || 0) - (a.popularity || 0);
         });
+
+        // NẾU CÓ NĂM PHÁT HÀNH -> BẮT BUỘC PHẢI KHỚP NĂM (Vì TMDb /search/multi không hỗ trợ param year)
+        if (year) {
+            const tYear = Number(year);
+            const matched = sorted.filter(item => {
+                const itemDate = item.release_date || item.first_air_date;
+                if (!itemDate) return false;
+                const iYear = Number(itemDate.split('-')[0]);
+                // Cho phép lệch tới 2 năm do chênh lệch múi giờ/ngày phát hành quốc tế
+                return Math.abs(iYear - tYear) <= 2;
+            });
+            if (matched.length > 0) {
+                sorted = matched;
+            } else {
+                console.warn(`[TMDb] Tìm thấy phim nhưng KHÔNG KHỚP NĂM phát hành (Cần năm: ${year}). Đã bỏ qua để tránh lấy nhầm trailer phim khác!`);
+                return null;
+            }
+        }
 
         return sorted[0] || null;
     } catch (e) {
@@ -89,48 +152,64 @@ async function getTmdbDetails(tmdbId, mediaType = 'movie') {
 }
 
 /**
- * Lấy trailer YouTube từ TMDb
+ * Lấy trailer YouTube từ TMDb (Bao gồm fallback KinoCheck & Invidious)
  * @param {number} tmdbId
  * @param {string} mediaType
+ * @param {string} movieTitle - Tên phim để fallback Invidious
+ * @param {number|string} movieYear - Năm để fallback Invidious
  * @returns {string|null} - YouTube key của trailer hoặc null
  */
-async function getTmdbTrailer(tmdbId, mediaType = 'movie') {
+async function getTmdbTrailer(tmdbId, mediaType = 'movie', movieTitle = '', movieYear = '') {
     const key = getTmdbKey();
-    if (!key || !tmdbId) return null;
+    let trailerKey = null;
 
-    try {
-        const type = mediaType === 'tv' ? 'tv' : 'movie';
-        // Thử lấy trailer tiếng Việt trước, nếu không có dùng tiếng Anh
-        const [resVi, resEn] = await Promise.all([
-            fetch(`${TMDB_BASE}/${type}/${tmdbId}/videos?api_key=${key}&language=vi-VN`).catch(() => null),
-            fetch(`${TMDB_BASE}/${type}/${tmdbId}/videos?api_key=${key}`).catch(() => null)
-        ]);
-
-        let videos = [];
-
-        if (resVi && resVi.ok) {
-            const dataVi = await resVi.json();
-            videos = [...(dataVi.results || [])];
-        }
-
-        if (resEn && resEn.ok) {
-            const dataEn = await resEn.json();
-            (dataEn.results || []).forEach(v => {
-                if (!videos.find(x => x.key === v.key)) videos.push(v);
-            });
-        }
-
-        // Ưu tiên: Official Trailer > Trailer > Teaser
-        const trailer = videos.find(v => v.site === 'YouTube' && v.type === 'Trailer' && v.official)
-            || videos.find(v => v.site === 'YouTube' && v.type === 'Trailer')
-            || videos.find(v => v.site === 'YouTube' && v.type === 'Teaser')
-            || videos.find(v => v.site === 'YouTube');
-
-        return trailer ? trailer.key : null;
-    } catch (e) {
-        console.warn('[TMDb] Lỗi lấy trailer:', e.message);
-        return null;
+    if (typeof _addImportLog === 'function') {
+        if (key && tmdbId) _addImportLog(`🔍 Bắt đầu kiểm tra Trailer trên TMDb...`, 'info');
+        else if (!tmdbId) _addImportLog(`⚠️ Phim không có ID TMDb (không tìm thấy trên TMDb). Bỏ qua bước TMDb.`, 'warning');
     }
+
+    if (key && tmdbId) {
+        try {
+            const type = mediaType === 'tv' ? 'tv' : 'movie';
+            const [resVi, resEn] = await Promise.all([
+                fetch(`${TMDB_BASE}/${type}/${tmdbId}/videos?api_key=${key}&language=vi-VN`).catch(() => null),
+                fetch(`${TMDB_BASE}/${type}/${tmdbId}/videos?api_key=${key}`).catch(() => null)
+            ]);
+
+            let videos = [];
+            if (resVi && resVi.ok) {
+                const dataVi = await resVi.json();
+                videos = [...(dataVi.results || [])];
+            }
+            if (resEn && resEn.ok) {
+                const dataEn = await resEn.json();
+                (dataEn.results || []).forEach(v => {
+                    if (!videos.find(x => x.key === v.key)) videos.push(v);
+                });
+            }
+
+            const trailer = videos.find(v => v.site === 'YouTube' && v.type === 'Trailer' && v.official)
+                || videos.find(v => v.site === 'YouTube' && v.type === 'Trailer')
+                || videos.find(v => v.site === 'YouTube' && v.type === 'Teaser')
+                || videos.find(v => v.site === 'YouTube');
+
+            if (trailer && trailer.key) {
+                trailerKey = trailer.key;
+            }
+        } catch (e) {
+            console.warn('[TMDb] Lỗi lấy trailer:', e.message);
+        }
+    }
+
+    if (trailerKey) {
+        if (typeof _addImportLog === 'function') _addImportLog(`✅ Trailer lấy thành công từ TMDb!`, 'success');
+        if (typeof _trailerBulkLog === 'function' && typeof _bulkScanTrailerRunning !== 'undefined' && _bulkScanTrailerRunning) _trailerBulkLog(`✅ Đã lấy Trailer từ TMDb.`);
+        return trailerKey;
+    }
+
+    if (typeof _addImportLog === 'function') _addImportLog(`❌ Không tìm được Trailer trên TMDb.`, 'error');
+    if (typeof _trailerBulkLog === 'function' && typeof _bulkScanTrailerRunning !== 'undefined' && _bulkScanTrailerRunning) _trailerBulkLog(`❌ Không tìm được Trailer trên TMDb.`);
+    return null;
 }
 
 /**
@@ -281,7 +360,7 @@ async function enrichMovieWithTmdb(movie) {
                     movie._tmdbTrailerKey = cachedTrailer;
                 } else {
                     // 3. Fetch từ API TMDb (chậm nhất, chỉ khi cần)
-                    fetchPromises.trailer = getTmdbTrailer(tmdbId, mediaType);
+                    fetchPromises.trailer = getTmdbTrailer(tmdbId, mediaType, searchTitle, movie.year);
                 }
             }
         }
@@ -517,8 +596,7 @@ function getTrailerFromCache(movieId) {
 }
 
 /**
- * Quét toàn bộ phim, fetch trailer từ TMDb, lưu vào system_settings
- * Admin chạy 1 lần → tất cả user đều dùng được trailer
+ * Quét toàn bộ phim, fetch trailer từ TMDb & Invidious, lưu vào system_settings
  */
 async function bulkScanTmdbTrailers() {
     if (_bulkScanTrailerRunning) {
@@ -526,7 +604,9 @@ async function bulkScanTmdbTrailers() {
         return;
     }
     const key = getTmdbKey();
-    if (!key) { showNotification('Chưa có TMDb API Key!', 'error'); return; }
+    if (!key) { 
+        showNotification('Chưa cấu hình TMDb API Key. Sẽ chỉ sử dụng nguồn dự phòng (Invidious) để quét Trailer!', 'info'); 
+    }
     if (!window.supabase) { showNotification('Chưa có Supabase!', 'error'); return; }
 
     _bulkScanTrailerRunning = true;
@@ -561,18 +641,14 @@ async function bulkScanTmdbTrailers() {
 
             _trailerBulkLog(`🔍 [${i+1}/${movies.length}] ${movie.title}...`);
 
-            // Tìm TMDb
+            // Tìm TMDb (Nếu có Key)
             const searchTitle = movie.origin_title || movie.title;
-            const tmdbResult = await searchTmdbByTitle(searchTitle, movie.year);
-            if (!tmdbResult) {
-                _trailerBulkLog(`⚠️ Không tìm thấy trên TMDb: ${movie.title}`);
-                notFound++;
-                await new Promise(r => setTimeout(r, 200));
-                continue;
-            }
+            const tmdbResult = await searchTmdbByTitle(searchTitle, movie.year, movie.title);
+            const tmdbId = tmdbResult ? tmdbResult.id : null;
+            const mediaType = tmdbResult ? (tmdbResult.media_type || 'movie') : 'movie';
 
-            // Lấy trailer key
-            const trailerKey = await getTmdbTrailer(tmdbResult.id, tmdbResult.media_type || 'movie');
+            // Lấy trailer key (getTmdbTrailer đã có tính năng tự fallback sang Invidious nếu tmdbId rỗng)
+            const trailerKey = await getTmdbTrailer(tmdbId, mediaType, searchTitle, movie.year);
             if (trailerKey) {
                 // Lưu trực tiếp vào bảng movies
                 const { error: upErr } = await window.supabase
@@ -607,6 +683,14 @@ async function bulkScanTmdbTrailers() {
         _trailerBulkSetProgress(100);
         _trailerBulkLog(`\n🎉 Hoàn thành!\n✅ Tìm và lưu được: ${found} trailer\n⏭️ Đã có sẵn: ${skipped}\n❌ Không tìm được: ${notFound}`);
         showNotification(`✅ Đã lưu ${found} trailer vào bảng movies!`, 'success');
+
+        // Cập nhật giao diện Quản lý Trailer nếu đang mở
+        if (typeof loadAdminTrailers === 'function') {
+            const panel = document.getElementById('trailersPanel');
+            if (panel && panel.classList.contains('active')) {
+                loadAdminTrailers(currentTrailersPage || 1);
+            }
+        }
 
     } catch (e) {
         console.error('[TMDb Trailer Bulk] Lỗi:', e);
@@ -772,7 +856,7 @@ async function bulkScanTmdbCast() {
 
             // Tìm phim trên TMDb
             const searchTitle = movie.origin_title || movie.title;
-            const tmdbResult = await searchTmdbByTitle(searchTitle, movie.year);
+            const tmdbResult = await searchTmdbByTitle(searchTitle, movie.year, movie.title);
             if (!tmdbResult) {
                 _bulkLog(`⚠️ Không tìm thấy "${movie.title}" trên TMDb.`);
                 continue;

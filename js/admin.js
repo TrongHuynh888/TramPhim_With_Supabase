@@ -496,13 +496,18 @@ async function loadAdminStats() {
       .select('*', { count: 'exact', head: true });
     animateCountUp("statTotalMovies", totalMovies || 0);
 
-    // === 2. Tổng lượt xem (đếm từ view_logs DB) ===
+    // === 2. Tổng lượt xem (Cộng dồn cột views từ tất cả phim hiện hành) ===
     let totalViews = 0;
     try {
-      const { count: viewCount } = await supabase
-        .from('view_logs')
-        .select('*', { count: 'exact', head: true });
-      totalViews = viewCount || 0;
+      let offset = 0;
+      const limit = 1000;
+      while(true) {
+          const { data: mv, error } = await supabase.from('movies').select('views').range(offset, offset + limit - 1);
+          if (error || !mv || mv.length === 0) break;
+          totalViews += mv.reduce((sum, m) => sum + (m.views || 0), 0);
+          if (mv.length < limit) break;
+          offset += limit;
+      }
     } catch(e) { /* fallback = 0 */ }
     animateCountUp("statTotalViews", totalViews);
 
@@ -1422,7 +1427,7 @@ function renderErrorReports(list) {
                     </span>
                 </td>
                 <td>
-                    <div style="font-weight: 500; color: #4db8ff;">${item.movie_title || "—"}</div>
+                    <div style="font-weight: 500; color: #4db8ff; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;" onclick="goToMovieFromError('${(item.movie_title || '').replace(/'/g, "\\'")}'${item.movie_id ? `,  '${item.movie_id}'` : ''})" title="Bấm để chuyển đến Quản lý Phim → Sửa ảnh">${item.movie_title || "—"} <i class='fas fa-external-link-alt' style='font-size:10px; opacity:0.5; margin-left:4px;'></i></div>
                     <div style="font-size: 12px; color: #aaa;">${item.episode_name || "Phim lẻ"}</div>
                 </td>
                 <td>
@@ -1494,6 +1499,43 @@ window.deleteErrorReport = async function(id) {
     } finally {
         showLoading(false);
     }
+};
+
+/**
+ * Chuyển nhanh từ Báo Lỗi → Quản lý Phim và tự tìm phim đó
+ * @param {string} movieTitle - Tên phim cần tìm
+ * @param {string} movieId - ID phim (optional, dùng để mở edit trực tiếp)
+ */
+window.goToMovieFromError = function(movieTitle, movieId) {
+    // 1. Chuyển sang tab Quản lý Phim
+    if (typeof showAdminPanel === 'function') {
+        showAdminPanel('movies');
+    } else if (typeof window.showAdminPanel === 'function') {
+        window.showAdminPanel('movies');
+    }
+
+    // 2. Đợi tab render xong → điền tên phim vào ô tìm kiếm
+    setTimeout(() => {
+        const searchInput = document.getElementById('adminSearchMovies');
+        if (searchInput && movieTitle) {
+            searchInput.value = movieTitle;
+            searchInput.focus();
+            // Trigger lọc danh sách phim
+            if (typeof filterAdminMovies === 'function') {
+                filterAdminMovies();
+            } else {
+                searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+
+        // 3. Nếu có movieId → thử mở edit form trực tiếp
+        if (movieId) {
+            setTimeout(() => {
+                const editBtn = document.querySelector(`[data-movie-id="${movieId}"] .btn-edit, tr[data-id="${movieId}"] .btn-edit`);
+                if (editBtn) editBtn.click();
+            }, 500);
+        }
+    }, 300);
 };
 /**
  * Lọc danh sách phim (Admin)
@@ -1805,12 +1847,45 @@ async function loadAdminMovies(skipPageReset = false) {
         from += BATCH;
     }
 
-    // Chuẩn hóa dữ liệu — dùng total_episodes sẵn có thay vì join đếm
+    // Chuẩn hóa dữ liệu
     allAdminMovies = allMoviesRaw.map(m => {
         const normalized = typeof normalizeMovieData === 'function' ? normalizeMovieData(m) : m;
-        normalized._episodeCount = m.total_episodes || 0;
+        normalized._episodeCount = 0; // Sẽ gán lại sau khi đếm thực tế
         return normalized;
     });
+
+    // ★ [FIX] Đếm số tập THỰC TẾ trong bảng episodes cho mỗi phim (thay vì dùng total_episodes từ API)
+    try {
+        let allEpCounts = [];
+        let countFrom = 0;
+        const COUNT_BATCH = 1000;
+        while (true) {
+            const { data: countBatch, error: countErr } = await supabase
+                .from('episodes')
+                .select('movie_id')
+                .range(countFrom, countFrom + COUNT_BATCH - 1);
+            if (countErr || !countBatch || countBatch.length === 0) break;
+            allEpCounts = allEpCounts.concat(countBatch);
+            if (countBatch.length < COUNT_BATCH) break;
+            countFrom += COUNT_BATCH;
+        }
+        // Đếm số tập theo movie_id
+        const epCountMap = {};
+        allEpCounts.forEach(ep => {
+            epCountMap[ep.movie_id] = (epCountMap[ep.movie_id] || 0) + 1;
+        });
+        // Gán _episodeCount thực tế vào mỗi movie
+        allAdminMovies.forEach(m => {
+            m._episodeCount = epCountMap[m.id] || 0;
+        });
+        console.log(`📊 Đếm tập thực tế cho ${Object.keys(epCountMap).length} phim`);
+    } catch (e) {
+        console.warn('⚠️ Không đếm được số tập thực tế:', e);
+        // Fallback: dùng total_episodes nếu không đếm được
+        allAdminMovies.forEach(m => {
+            m._episodeCount = m.totalEpisodes || m.total_episodes || 0;
+        });
+    }
 
     // [NEW] Lấy server info nhẹ: Chỉ fetch movie_id + sources từ episode đầu tiên
     try {
@@ -2672,9 +2747,21 @@ function generateSeriesIdFromTitle(title) {
     // Giữ toàn bộ tên phim (không cắt tại dấu : hoặc - như trước)
     let baseTitle = title.trim();
     
-    // Loại bỏ các chữ số La Mã và số thường ở cuối (Phần 1, Season II, Mùa 3, ...)
-    baseTitle = baseTitle.replace(/(\s+)(Phần|Season|Mùa|Part)\s*(\d+|I{1,3}V?)/i, "").trim();
-    baseTitle = baseTitle.replace(/(\s+)(\d+|I|II|III|IV|V)+$/i, "").trim();
+    // Ngưỡng tối đa: số > 30 thường là tên phim (VD: "Xin Chào 1983"), KHÔNG phải phần/mùa
+    const MAX_PART = 30;
+    
+    // Loại bỏ từ khóa Phần/Season/Mùa/Part/Quyển/Kỳ/Vol... kèm số (VD: "Phần 2", "Season 3", "Vol. 2")
+    baseTitle = baseTitle.replace(/(\s+)(Phần|Season|Mùa|Part|Quyển|Kỳ|Chapter|Vol(?:ume)?\.?|Series|Cour)\s*(\d+|I{1,3}V?|V?I{1,3}|X{1,3})/i, "").trim();
+    // Loại bỏ shorthand S02, SS2 ở cuối
+    baseTitle = baseTitle.replace(/\s+SS?\d+$/i, "").trim();
+    
+    // Loại bỏ số La Mã hoặc số nhỏ ở cuối (VD: "Iron Man 2") — CHỈ khi số <= MAX_PART
+    baseTitle = baseTitle.replace(/(\s+)(I|II|III|IV|V)$/i, "").trim();
+    baseTitle = baseTitle.replace(/(\s+)(\d+)$/i, (match, space, numStr) => {
+        const num = parseInt(numStr);
+        // Chỉ xóa nếu là số nhỏ (phần/mùa), giữ nguyên số lớn (tên phim VD: 1983, 2024)
+        return (num <= MAX_PART) ? "" : match;
+    }).trim();
 
     return baseTitle
         .toLowerCase()
@@ -2734,7 +2821,17 @@ async function deleteMovie(movieId) {
         if (movie.background_url) await window.deleteImageFromR2(movie.background_url);
     }
 
-    // 3. Xóa phim khỏi Database
+    // 3. Xóa dữ liệu rác trong bảng notifications (giữ lại code này vì JSONB không hỗ trợ Cascade SQL)
+    try {
+        await supabase.from('notifications').delete().contains('metadata', { movie_id: movieId });
+    } catch (e) { console.warn("Lỗi dọn rác notifications:", e); }
+
+    // 3b. Xóa error_reports liên quan đến phim (tránh lỗi foreign key constraint)
+    try {
+        await supabase.from('error_reports').delete().eq('movie_id', movieId);
+    } catch (e) { console.warn("Lỗi dọn rác error_reports:", e); }
+
+    // 4. Xóa phim khỏi Database
     const { error } = await supabase.from('movies').delete().eq('id', movieId);
     if (error) throw error;
 
@@ -2794,14 +2891,36 @@ async function deleteAllMoviesConfirm() {
             }));
         }
 
-        // 3. Xóa phim khỏi Database
-        showNotification("Hoàn tất dọn R2. Đang xóa bản ghi Database...", "info");
+        // 3. Dọn dẹp dữ liệu rác notifications (JSONB không hỗ trợ Cascade)
+        showNotification("Hoàn tất dọn R2. Đang xóa thông báo rác và bản ghi Database...", "info");
         
         // Supabase REST không cho phép delete all trực tiếp nếu thiếu where (bảo vệ an toàn). 
-        // Nên dùng `.in('id', chunkIDs)` để tuân thủ rule API. Bảng `episodes` sẽ tự động cascade delete (do RLS/Foreign Key cài sẵn).
-        for (let i = 0; i < movies.length; i += 200) {
-            const chunkIds = movies.slice(i, i + 200).map(m => m.id);
-            await supabase.from('movies').delete().in('id', chunkIds);
+        // Nên dùng `.in('id', chunkIDs)` để tuân thủ rule API nhưng với chunk size nhỏ (30).
+        for (let i = 0; i < movies.length; i += 30) {
+            const chunkIds = movies.slice(i, i + 30).map(m => m.id);
+            
+            // Xóa rác trong bảng notifications
+            try {
+                for (const mId of chunkIds) {
+                    await supabase.from('notifications').delete().contains('metadata', { movie_id: mId });
+                }
+            } catch (e) {
+                console.warn("Lỗi dọn rác notifications chunk:", e);
+            }
+
+            // 3b. Xóa error_reports liên quan (tránh lỗi foreign key constraint)
+            try {
+                await supabase.from('error_reports').delete().in('movie_id', chunkIds);
+            } catch (e) {
+                console.warn("Lỗi dọn rác error_reports chunk:", e);
+            }
+
+            // 4. Bắt đầu xóa bộ phim
+            const { error: deleteErr } = await supabase.from('movies').delete().in('id', chunkIds);
+            if (deleteErr) {
+                console.error("Lỗi xóa db chunk phim:", deleteErr);
+                throw deleteErr;
+            }
         }
     }
 
@@ -5755,7 +5874,7 @@ function renderAdminMoviesList(movies) {
   const paginatedMovies = movies.slice(startIndex, startIndex + adminPerPage);
 
   if (totalItems === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center">Không tìm thấy phim nào.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center">Không tìm thấy phim nào.</td></tr>';
     const paginationContainer = document.getElementById("adminMoviePagination");
     if (paginationContainer) paginationContainer.innerHTML = "";
     return;
@@ -5788,8 +5907,8 @@ function renderAdminMoviesList(movies) {
           episodeStatus = `<span style="color: #f1c40f; font-weight: 600;">${currentEps}/${totalEps || '??'} tập</span>`;
         }
       } else {
-        // Phim lẻ đã có tập
-        episodeStatus = '<span style="color: #2ecc71; font-weight: 600;">Full</span>';
+        // Phim lẻ: hiển thị số tập thực tế (thường là 1)
+        episodeStatus = `<span style="color: #2ecc71; font-weight: 600;">${currentEps} tập ✓</span>`;
       }
 
       const typeBadge =
@@ -5844,6 +5963,25 @@ function renderAdminMoviesList(movies) {
           <td>${movie.price ? `<span class="text-accent" style="color: #4db8ff; font-weight: 600;">${movie.price} CRO</span>` : '<span class="status-badge free">Miễn phí</span>'}</td>
           <td style="text-align: center;"><i class="fas fa-eye text-muted"></i> ${formatNumber(movie.views || 0)}</td>
           <td>${statusBadge}</td>
+          <td style="text-align: center; white-space: nowrap;">
+            ${(() => {
+              // Hiển thị thời gian phim được upload lên (ngày/tháng/năm + giờ:phút:giây)
+              const rawDate = movie.created_at || movie.createdAt;
+              if (!rawDate) return '<span class="text-muted" style="font-size: 0.8rem;">N/A</span>';
+              const d = new Date(rawDate);
+              if (isNaN(d.getTime())) return '<span class="text-muted" style="font-size: 0.8rem;">N/A</span>';
+              const day = String(d.getDate()).padStart(2, '0');
+              const month = String(d.getMonth() + 1).padStart(2, '0');
+              const year = d.getFullYear();
+              const hours = String(d.getHours()).padStart(2, '0');
+              const mins = String(d.getMinutes()).padStart(2, '0');
+              const secs = String(d.getSeconds()).padStart(2, '0');
+              return `<div style="font-size: 0.82rem; line-height: 1.5;">`
+                + `<div style="font-weight: 600; color: var(--text-primary, #ddd);">${day}/${month}/${year}</div>`
+                + `<div style="color: var(--text-muted, #888); font-size: 0.75rem;"><i class="fas fa-clock" style="margin-right: 3px; font-size: 0.7rem;"></i>${hours}:${mins}:${secs}</div>`
+                + `</div>`;
+            })()}
+          </td>
           <td>
             <div class="admin-actions" style="display: flex; flex-direction: column; gap: 5px;">
               <button class="btn btn-sm btn-secondary" onclick="editMovie('${movie.id}')" title="Sửa" style="background: #34495e; border: none; padding: 6px;">

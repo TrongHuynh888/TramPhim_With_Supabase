@@ -320,7 +320,9 @@ body.cinema-mode .comments-section,
     body.cinema-mode #versionContainer,
     body.cinema-mode #recommendedMoviesContainer,
     body.cinema-mode .reaction-sidebar,
-    body.cinema-mode .detail-main-grid {
+    body.cinema-mode .detail-main-grid,
+    body.cinema-mode .scroll-top-btn,
+    body.cinema-mode #siteMarqueeBar {
         display: none !important;
     }
 
@@ -347,11 +349,40 @@ body.cinema-mode .detail-toolbar {
     z-index: 10001;
     background: rgba(15, 15, 25, 0.98);
     border-top: 1px solid rgba(255,255,255,0.1);
-    height: 70px;
+    min-height: 50px; /* Thu gọn min-height từ 70px xuống 50px */
+    height: auto !important;
     display: flex;
     align-items: center;
-    padding: 0 25px;
+    padding: 8px 15px; /* Giảm padding */
+    gap: 8px; /* Thêm gap nhỏ */
     transition: all 0.5s ease-in-out !important; /* Hiệu ứng mượt mà */
+}
+
+/* Tinh gọn các nút bên trong thanh công cụ khi bật Rạp phim */
+body.cinema-mode .toolbar-group {
+    gap: 10px;
+}
+body.cinema-mode .btn-toolbar {
+    font-size: 12px;
+    padding: 4px 6px;
+    gap: 4px;
+}
+body.cinema-mode .btn-toolbar i {
+    font-size: 14px;
+}
+body.cinema-mode .switch-item {
+    font-size: 11px;
+    gap: 6px;
+}
+body.cinema-mode .switch-item span:first-child {
+    max-width: 60px; /* Tránh chữ quá dài */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+body.cinema-mode .badge-switch {
+    font-size: 9px;
+    padding: 3px 6px;
 }
 
 body.cinema-mode .player-section,
@@ -1224,16 +1255,62 @@ body.cinema-mode.controls-visible .detail-toolbar {
         width: 100%;
     }
     .sidebar-actor-grid {
-        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); /* Linh hoạt hơn để tự căn giữa */
+        grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); /* Cột bé hơn để chứa nhiều hơn & gọn hơn */
         justify-items: center;
+        gap: 8px; /* Giảm khoảng cách ảnh */
+        max-height: 145px; /* Chỉ cho phép hiện 2 hàng trên Mobile */
+        overflow: hidden;
     }
     .sidebar-actor-item img {
-        width: 50px;
-        height: 50px;
+        width: 44px; /* Rút gọn kích thước ảnh đại diện */
+        height: 44px;
+        border-width: 1px;
+    }
+    .sidebar-actor-name {
+        font-size: 0.65rem; /* Tên diễn viên nhỏ lại */
     }
 
+    /* Tinh gọn danh sách tập phim */
+    #episodesSection {
+        padding: 15px 20px !important; /* Mỏng box danh sách tập */
+    }
     .episodes-list {
-        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); /* Nút bé lại */
+        gap: 8px;
+    }
+    .episode-item {
+        padding: 8px; /* Gọn padding trong nút tập */
+        border-radius: 8px;
+    }
+    .episode-item .ep-number {
+        font-size: 14px; /* Số tập/chữ Tập Full bé hơn */
+    }
+    .episode-item .ep-label {
+        font-size: 10px;
+    }
+
+    /* Tinh gọn thanh chọn Phần, Server, Phiên bản trên Mobile */
+    .movie-extra-controls-inner {
+        flex-wrap: wrap;       /* Cho phép rớt dòng khi thiếu viền */
+        padding: 10px 12px;
+        gap: 10px;
+        justify-content: center;
+    }
+    .part-selector-trigger {
+        font-size: 0.85rem;
+        padding: 6px 10px;
+        gap: 6px;
+        white-space: nowrap;   /* Chống rớt chữ thành 2 dòng */
+    }
+    .version-list-modern {
+        gap: 8px;
+        justify-content: center;
+    }
+    .version-btn-modern {
+        font-size: 0.8rem;
+        padding: 6px 12px;
+        gap: 6px;
+        white-space: nowrap;   /* Chống rớt dòng chữ Server */
     }
 }
 

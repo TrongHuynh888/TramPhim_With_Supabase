@@ -6,6 +6,7 @@ let notificationsUnsubscribeAdmin = null;
 let allNotifications = []; // Lưu trữ mảng notifs hiện tại
 let currentNotifTab = 'movie'; // Tab hiện tại: 'movie' hoặc 'community'
 const _notifMetaMap = {}; // Lưu metadata theo notif.id để xử lý click
+let _realtimeDebounceTimer = null; // Biến debounce chống spam Realtime
 
 // Danh sách type thuộc nhóm Cộng đồng
 const COMMUNITY_NOTIF_TYPES = [
@@ -13,6 +14,10 @@ const COMMUNITY_NOTIF_TYPES = [
     'friend_request', 'friend_accepted', 'new_comment', 'new_like',
     'mention', 'chat_message'
 ];
+
+let _notifUserId = null;
+let _notifIsAdmin = false;
+let _notifPollTimer = null;
 
 /**
  * Khởi tạo listener thông báo
@@ -22,12 +27,15 @@ const COMMUNITY_NOTIF_TYPES = [
 function initNotifications(user, isAdmin) {
     if (!supabase || !user) return;
     
+    _notifUserId = user.id;
+    _notifIsAdmin = isAdmin;
+    
     console.log("🔔 Bắt đầu lắng nghe thông báo cho UID:", user.id, "| Cờ Admin:", isAdmin);
 
     // 1. Tải thông báo ban đầu
     loadInitialNotifications(user.id, isAdmin);
 
-    // 2. Lắng nghe Realtime qua Channel
+    // 2. Lắng nghe Realtime qua Channel (kênh chính)
     const notificationChannel = supabase
       .channel('public:notifications')
       .on('postgres_changes', { 
@@ -36,12 +44,22 @@ function initNotifications(user, isAdmin) {
           table: 'notifications'
       }, payload => {
           console.log("🔔 [Realtime] Thông báo thay đổi:", payload.eventType);
-          // Load lại để đơn giản hoặc xử lý payload.new/payload.old
-          loadInitialNotifications(user.id, isAdmin);
+          // DEBOUNCE: Gom hàng loạt event vào 1 lần gọi duy nhất (chống sập server khi xoá hàng loạt)
+          if (_realtimeDebounceTimer) clearTimeout(_realtimeDebounceTimer);
+          _realtimeDebounceTimer = setTimeout(() => {
+              loadInitialNotifications(user.id, isAdmin);
+          }, 1000);
       })
       .subscribe();
 
-    // 3. Bắt đầu checker ngầm kiểm tra lịch hẹn
+    // 3. Fallback polling: kiểm tra thông báo mới mỗi 30 giây
+    // Phòng trường hợp Realtime bị mất kết nối
+    if (_notifPollTimer) clearInterval(_notifPollTimer);
+    _notifPollTimer = setInterval(() => {
+        loadInitialNotifications(_notifUserId, _notifIsAdmin);
+    }, 30000);
+
+    // 4. Bắt đầu checker ngầm kiểm tra lịch hẹn
     startSilentScheduleChecker();
 }
 
@@ -56,8 +74,28 @@ async function loadInitialNotifications(userId, isAdmin) {
             query = query.eq('user_id', userId).eq('is_for_admin', false);
         }
 
-        const { data, error } = await query.order('created_at', { ascending: false }).limit(50);
+        const { data, error } = await query.order('created_at', { ascending: false }).limit(201);
         if (error) throw error;
+
+        // 🧹 [TỰ ĐỘNG DỌN RÁC]: Xóa thông báo cũ nếu có nhiều hơn 200 tin
+        if (data && data.length > 200) {
+            const oldestNotif = data[199]; // Mốc là tin thứ 200
+            if (oldestNotif && oldestNotif.created_at) {
+                let delQuery = supabase.from('notifications').delete().lt('created_at', oldestNotif.created_at);
+                if (isAdmin) {
+                    delQuery = delQuery.or(`user_id.eq.${userId},is_for_admin.eq.true`);
+                } else {
+                    delQuery = delQuery.eq('user_id', userId).eq('is_for_admin', false);
+                }
+                
+                // Chạy ngầm không await để không khóa UI
+                delQuery.then(({error: delErr}) => {
+                    if (delErr) console.warn("[Dọn Rác] Lỗi xóa quá 200 thông báo:", delErr.message);
+                });
+            }
+            // Loại bỏ các tin từ 201 trở đi khỏi mảng để UI chỉ hiển thị đúng 200 tin
+            data.splice(200); 
+        }
 
         allNotifications = data || [];
         renderNotifications();
@@ -72,6 +110,11 @@ async function loadInitialNotifications(userId, isAdmin) {
 function stopNotifications() {
     if (supabase) {
         supabase.removeAllChannels();
+    }
+    // Hủy polling timer khi logout
+    if (_notifPollTimer) {
+        clearInterval(_notifPollTimer);
+        _notifPollTimer = null;
     }
     // Hủy schedule checker khi logout
     if (_schedCheckerTimer) {
@@ -104,8 +147,17 @@ function renderNotifications() {
     }
 
     // Cập nhật badge riêng cho từng tab
-    const movieUnread = allNotifications.filter(n => !n.is_read && !isCommunityType(n.type)).length;
-    const communityUnread = allNotifications.filter(n => !n.is_read && isCommunityType(n.type)).length;
+    const movieNotifs = allNotifications.filter(n => !isCommunityType(n.type));
+    const communityNotifs = allNotifications.filter(n => isCommunityType(n.type));
+    
+    const movieUnread = movieNotifs.filter(n => !n.is_read).length;
+    const communityUnread = communityNotifs.filter(n => !n.is_read).length;
+    
+    // Yêu cầu: "hiển thị số lượng thông báo như 121/200"
+    const movieCountEl = document.getElementById('notifTabCountMovie');
+    const communityCountEl = document.getElementById('notifTabCountCommunity');
+    if (movieCountEl) movieCountEl.textContent = `(${movieNotifs.length}/200)`;
+    if (communityCountEl) communityCountEl.textContent = `(${communityNotifs.length}/200)`;
     
     const movieBadge = document.getElementById('notifTabBadgeMovie');
     const communityBadge = document.getElementById('notifTabBadgeCommunity');
@@ -176,6 +228,14 @@ function renderNotifications() {
         `;
         listEl.appendChild(li);
     });
+
+    // Hiển thị thông báo giới hạn nếu số lượng đạt max (200)
+    if (allNotifications.length >= 200) {
+        const limitLi = document.createElement("li");
+        limitLi.style.cssText = "text-align: center; padding: 12px; font-size: 0.85rem; color: var(--text-muted); background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.05); margin-top: 5px;";
+        limitLi.innerHTML = '<i class="fas fa-info-circle"></i> Đã đạt giới hạn 200 thông báo gần nhất. Các tin cũ sẽ tự động bị xóa.';
+        listEl.appendChild(limitLi);
+    }
 }
 
 /**
@@ -378,6 +438,8 @@ async function sendNotification(userId, title, message, type = "system") {
     }
 }
 
+const _lastSentGlobalNotifs = new Set();
+
 /**
  * Gửi thông báo tới TẤT CẢ users (dùng khi admin đăng phim mới)
  * Sử dụng batch write để tối ưu hiệu suất
@@ -388,6 +450,16 @@ async function sendNotification(userId, title, message, type = "system") {
 async function sendNotificationToAllUsers(title, message, type = "new_movie", metadata = null) {
     if (!supabase) return;
     try {
+        // [CƠ CHẾ CHỐNG SPAM]: Chặn thông báo trùng lặp chuẩn xác trong vòng 60 giây
+        // Giải quyết lỗi Auto-Sync quét đa nguồn sinh ra 2 thông báo cho cùng 1 tập phim
+        const sig = `${title}|${message}`;
+        if (_lastSentGlobalNotifs.has(sig)) {
+            console.log(`[NotifDedupe] Bỏ qua thông báo trùng lặp: ${title}`);
+            return;
+        }
+        _lastSentGlobalNotifs.add(sig);
+        setTimeout(() => _lastSentGlobalNotifs.delete(sig), 60000);
+
         const { data: profiles, error } = await supabase.from('profiles').select('id');
         if (error || !profiles) return;
 

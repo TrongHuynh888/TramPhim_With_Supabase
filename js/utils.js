@@ -358,7 +358,8 @@ function showPage(pageName, addToHistory = true) {
             'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js',
             'js/admin.js?v=3',
             'js/admin-api-explorer.js?v=3',
-            'js/admin-api-import.js?v=3'
+            'js/admin-api-import.js?v=3',
+            'js/admin-trailers.js?v=1'
         ], () => {
             console.log('✅ Admin scripts loaded!');
             if (typeof loadAdminData === 'function') {

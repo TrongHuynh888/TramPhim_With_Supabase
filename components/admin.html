@@ -30,6 +30,14 @@
         </div>
         <div
           class="admin-nav-item"
+          data-panel="trailers"
+          onclick="showAdminPanel('trailers'); if(typeof loadAdminTrailers === 'function') loadAdminTrailers(1);"
+        >
+          <i class="fas fa-video" style="color: #ff4757;"></i>
+          <span>Quản lý Trailer</span>
+        </div>
+        <div
+          class="admin-nav-item"
           data-panel="categories"
           onclick="showAdminPanel('categories')"
         >
@@ -370,37 +378,6 @@
         </div>
         
         <div class="api-keys-wrapper">
-          <!-- Cloudflare R2 Config (đầu trang) -->
-          <div style="margin-bottom: 20px; padding: 18px 20px; background: rgba(0,210,255,0.04); border: 1px solid rgba(0,210,255,0.15); border-radius: 12px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-              <div style="display:flex; align-items:center; gap:10px;">
-                <i class="fas fa-cloud-upload-alt" style="color:#00d2ff; font-size:1.2rem;"></i>
-                <div>
-                  <div style="font-weight:700; font-size:0.9rem; color:#fff;">Cloudflare R2 Worker</div>
-                  <div style="font-size:0.75rem; color:var(--text-muted);">Upload ảnh phim lên Cloudflare R2 Storage</div>
-                </div>
-              </div>
-              <button class="btn btn-sm" onclick="openR2ConfigModal()" title="Cấu hình R2 Worker URL" style="background:rgba(0,210,255,0.1);border:1px solid rgba(0,210,255,0.25);color:#00d2ff;font-size:0.75rem;">
-                <i class="fas fa-cog"></i> Cấu hình URL
-              </button>
-            </div>
-          </div>
-
-          <!-- Telegram Bot Config -->
-          <div style="margin-bottom: 20px; padding: 18px 20px; background: rgba(52,211,153,0.04); border: 1px solid rgba(52,211,153,0.15); border-radius: 12px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-              <div style="display:flex; align-items:center; gap:10px;">
-                <i class="fab fa-telegram-plane" style="color:#34d399; font-size:1.3rem;"></i>
-                <div>
-                  <div style="font-weight:700; font-size:0.9rem; color:#fff;">Telegram Bot Báo Cáo</div>
-                  <div style="font-size:0.75rem; color:var(--text-muted);">Nhận thông báo sau mỗi đợt Auto-Import</div>
-                </div>
-              </div>
-              <button class="btn btn-sm" onclick="openTelegramConfigModal()" title="Cấu hình Telegram Bot" style="background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.25);color:#34d399;font-size:0.75rem;">
-                <i class="fas fa-cog"></i> Cấu hình Bot
-              </button>
-            </div>
-          </div>
 
           <div class="api-keys-header-info">
             <h3><i class="fas fa-shield-alt"></i> Quản lý khóa API Hệ thống</h3>
@@ -606,6 +583,7 @@
               <th>Giá (CRO)</th>
               <th>Lượt xem</th>
               <th>Trạng thái</th>
+              <th><i class="fas fa-clock" style="margin-right: 4px;"></i>Ngày up</th>
               <th>Thao tác</th>
             </tr>
           </thead>
@@ -752,6 +730,67 @@
           </table>
           <div id="adminEpisodePagination" class="pagination-container"></div>
         </div>
+      </div>
+
+      <!-- Trailers Panel -->
+      <div class="admin-panel" id="trailersPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title"><i class="fas fa-video"></i> Quản lý Trailer Video</h2>
+          <div class="header-actions">
+            <button class="btn btn-primary" onclick="if(typeof bulkScanTmdbTrailers === 'function') bulkScanTmdbTrailers();" style="background: linear-gradient(135deg, rgba(198, 40, 40, 0.15), rgba(136, 14, 79, 0.15)); border: 1px solid rgba(198, 40, 40, 0.35); color: #ef9a9a;">
+              <i class="fas fa-bolt"></i> Quét Trailer Hàng Loạt
+            </button>
+          </div>
+        </div>
+
+        <div class="movie-filter-grid">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              class="form-input"
+              id="adminSearchTrailer"
+              placeholder="Tìm kiếm phim..."
+              oninput="filterAdminTrailersDebounced()"
+            />
+          </div>
+          <select class="form-select" id="adminFilterTrailerStatus" onchange="filterAdminTrailers()">
+            <option value="">Tất cả trạng thái</option>
+            <option value="has_trailer">Đã có Trailer</option>
+            <option value="no_trailer">Trống Trailer</option>
+          </select>
+          <select class="form-select" id="adminSortTrailers" onchange="filterAdminTrailers()">
+            <option value="newest">Mới nhất</option>
+            <option value="oldest">Cũ nhất</option>
+          </select>
+        </div>
+
+        <!-- Thống kê Trailer -->
+        <div class="admin-movie-stats mb-3" style="display: flex; gap: 20px; font-size: 0.9rem; color: var(--text-muted);">
+            <div id="statTrailersTotal">Tổng phim: <i class="fas fa-spinner fa-spin"></i></div>
+            <div id="statTrailersHas" style="color: #4dabf7;">Đã có Trailer: 0</div>
+            <div id="statTrailersEmpty" style="color: #ff6b6b;">Trống Trailer: 0</div>
+        </div>
+
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Poster</th>
+              <th>Tên phim</th>
+              <th>Năm</th>
+              <th>Trạng thái Trailer</th>
+              <th>Trailer YouTube ID</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="adminTrailersTable">
+            <!-- Data load động -->
+          </tbody>
+        </table>
+        <div id="adminTrailerPagination" class="pagination-container"></div>
       </div>
 
       <!-- Categories Panel -->
@@ -2256,7 +2295,7 @@
           <div class="api-import-toolbar-right" style="flex-wrap: wrap; justify-content: flex-end;">
             
             <!-- ====== DÒNG 1: AUTO SYNC & IMPORT ====== -->
-            <div style="display: flex; width: 100%; gap: 10px; justify-content: flex-end; margin-bottom: 4px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); width: 100%; gap: 8px; margin-bottom: 4px;">
               <!-- Nút Toggle Auto-Sync tập mới -->
               <div id="autoSyncToggleWrap" style="display:flex;align-items:center;gap:6px;background:rgba(0,210,255,0.06);border:1px solid rgba(0,210,255,0.15);border-radius:8px;padding:5px 10px;flex-wrap:wrap;">
                 <i class="fas fa-sync-alt" style="font-size:0.8rem;color:#00d2ff;"></i>
@@ -2270,7 +2309,15 @@
                   style="width:46px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
                   title="Số giờ giữa các lần sync" />
                 <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">giờ</span>
-                <button onclick="saveAutoSyncInterval()" title="Lưu cài đặt giờ sync"
+
+                <!-- Cài ngày theo dõi -->
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-left:4px;">Theo dõi</span>
+                <input type="number" id="autoSyncGracePeriodInput" min="1" max="30" value="3"
+                  style="width:46px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Số ngày ngóng chờ các tập phim có Nguồn Dự Phòng sau khi ra" />
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">ngày</span>
+
+                <button onclick="saveAutoSyncInterval()" title="Lưu cài đặt cấu hình Auto-Sync"
                   style="font-size:0.7rem;padding:2px 8px;border-radius:6px;border:none;cursor:pointer;background:rgba(0,210,255,0.15);color:#00d2ff;font-weight:600;">
                   Lưu
                 </button>
@@ -2344,6 +2391,47 @@
                     style="font-size:0.7rem;padding:2px 6px;border:none;border-left:1px solid rgba(255,255,255,0.1);cursor:pointer;background:rgba(255,255,255,0.1);color:#fff;">
                     <i class="fas fa-plus"></i>
                   </button>
+                </div>
+              </div>
+
+              <!-- ====== AUTO-FILL PANEL ====== -->
+              <div id="autoFillWrap" style="display:flex;align-items:center;gap:6px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15);border-radius:8px;padding:5px 10px;flex-wrap:wrap;width:100%;">
+                <i class="fas fa-rocket" style="font-size:0.8rem;color:#22c55e;"></i>
+                <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">Auto-Fill:</span>
+                
+                <!-- Input mục tiêu -->
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">Thêm mới</span>
+                <input type="number" id="autoFillTargetInput" min="1" max="500" value="50"
+                  style="width:55px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Số phim MỚI cần import (không tính phim đã có)" />
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">phim</span>
+                <button onclick="saveAutoFillTarget()" title="Lưu số lượng phim"
+                  style="font-size:0.7rem;padding:2px 8px;border-radius:6px;border:none;cursor:pointer;background:rgba(34,197,94,0.15);color:#22c55e;font-weight:600;">
+                  Lưu
+                </button>
+
+                <!-- Nút Bắt đầu -->
+                <button id="btnStartAutoFill" onclick="startAutoFill()"
+                  style="font-size:0.72rem;font-weight:700;padding:4px 12px;border-radius:8px;border:none;cursor:pointer;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;white-space:nowrap;transition:all 0.2s;">
+                  <i class="fas fa-play"></i> Bắt đầu
+                </button>
+
+                <!-- Nút Tạm dừng -->
+                <button id="btnPauseAutoFill" onclick="pauseAutoFill()" style="display:none;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;border:1px solid rgba(251,191,36,0.5);background:rgba(251,191,36,0.1);color:#fbbf24;white-space:nowrap;">
+                  <i class="fas fa-pause"></i> Tạm dừng
+                </button>
+
+                <!-- Nút Hủy -->
+                <button id="btnCancelAutoFill" onclick="cancelAutoFill()" style="display:none;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;border:1px solid rgba(248,113,113,0.5);background:rgba(248,113,113,0.1);color:#f87171;white-space:nowrap;">
+                  <i class="fas fa-times-circle"></i> Hủy
+                </button>
+
+                <!-- Progress -->
+                <div id="autoFillProgressWrap" style="display:none;flex:1;min-width:180px;align-items:center;gap:6px;">
+                  <div style="flex:1;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;">
+                    <div id="autoFillProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#4ade80);border-radius:3px;transition:width 0.3s;"></div>
+                  </div>
+                  <span id="autoFillProgressText" style="font-size:0.7rem;color:#4ade80;white-space:nowrap;font-weight:600;">0/0</span>
                 </div>
               </div>
             </div>
@@ -2797,6 +2885,41 @@
         </button>
     </div>
   </div>
+</div>
+<!-- Trailer Edit Modal -->
+<div class="modal-overlay" id="trailerEditModal" onclick="closeModal('trailerEditModal')">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3><i class="fas fa-edit"></i> Chỉnh sửa Trailer</h3>
+            <button class="modal-close" onclick="closeModal('trailerEditModal')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <p id="trailerEditMovieName" style="font-weight: 600; margin-bottom: 15px;"></p>
+            <div class="form-group">
+                <label class="form-label">YouTube Video ID hoặc Tên Phim</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" class="form-input" id="trailerEditInput" placeholder="VD: dQw4w9WgXcQ" oninput="previewAdminTrailer()">
+                    <button class="btn btn-secondary" onclick="autoFetchAdminTrailer()" title="Tự động tìm kiếm qua TMDb/Invidious">
+                        <i class="fas fa-search"></i> Tìm Tự Động
+                    </button>
+                </div>
+                <small class="text-muted" style="display: block; margin-top: 5px;">Hệ thống sẽ lấy tự động bằng API, nhưng bạn có thể dán tay mã video Youtube vào đây.</small>
+            </div>
+            
+            <div id="trailerEditPreview" style="margin-top: 15px; display: none;">
+                <label class="form-label">Xem trước:</label>
+                <iframe id="trailerEditIframe" width="100%" height="200" src="" frameborder="0" allowfullscreen style="border-radius: 8px; border: 1px solid var(--border-color);"></iframe>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <input type="hidden" id="trailerEditMovieId">
+            <input type="hidden" id="trailerEditMovieTitle">
+            <input type="hidden" id="trailerEditMovieYear">
+            <button class="btn btn-secondary" onclick="closeModal('trailerEditModal')">Hủy</button>
+            <button class="btn btn-danger" onclick="deleteAdminTrailer()" id="btnDeleteTrailer" style="display: none;">Xóa Trailer</button>
+            <button class="btn btn-primary" onclick="saveAdminTrailer()">Lưu Trailer</button>
+        </div>
+    </div>
 </div>
 <!-- Modal Xem ảnh Bill Lớn -->
 <div class="modal-overlay" id="billViewportModal" onclick="closeModal('billViewportModal')">

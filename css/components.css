@@ -1,10 +1,10 @@
 /**
- * COMPONENTS.CSS - CÁC THÀNH PHẦN GIAO DIỆN
- * (Phiên bản đã Fix lỗi Icon Play & Code rác)
+ * COMPONENTS.CSS - CÃC THÃNH PHáº¦N GIAO DIá»N
+ * (PhiÃªn báº£n ÄÃ£ Fix lá»i Icon Play & Code rÃ¡c)
  */
 
 /* ============================================
-   1. NAVIGATION (THANH ĐIỀU HƯỚNG)
+   1. NAVIGATION (THANH ÄIá»U HÆ¯á»NG)
    ============================================ */
 .navbar {
   position: fixed;
@@ -50,16 +50,16 @@
   object-fit: contain;
   max-width: 250px; 
   pointer-events: none;
-  /* Chỉnh thấp xuống một chút */
+  /* Chá»nh tháº¥p xuá»ng má»t chÃºt */
   position: relative;
   top: 4px;
-  /* Mặc định Dark Mode: Chuyển sang màu vàng nâu/đồng cho sang trọng (theo yêu cầu) */
+  /* Máº·c Äá»nh Dark Mode: Chuyá»n sang mÃ u vÃ ng nÃ¢u/Äá»ng cho sang trá»ng (theo yÃªu cáº§u) */
   filter: sepia(1) saturate(0.5) hue-rotate(10deg) brightness(1.2);
 }
 
-/* FIX LOGO IN LIGHT MODE (Chống chìm logo trắng trên nền trắng -> Chuyển sang đen) */
+/* FIX LOGO IN LIGHT MODE (Chá»ng chÃ¬m logo tráº¯ng trÃªn ná»n tráº¯ng -> Chuyá»n sang Äen) */
 [data-theme="light"] .logo-img {
-  filter: invert(1) brightness(0.8); /* Đen đậm hơn chút */
+  filter: invert(1) brightness(0.8); /* Äen Äáº­m hÆ¡n chÃºt */
 }
 
 .nav-menu {
@@ -126,14 +126,14 @@
   flex-shrink: 0;
   flex-wrap: nowrap;
 }
-/* Nhóm phụ: Theme + Wallet + Auth */
+/* NhÃ³m phá»¥: Theme + Wallet + Auth */
 .nav-utilities {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
 }
-/* FIX: loginBtn không bao giờ bị chèn ép */
+/* FIX: loginBtn khÃ´ng bao giá» bá» chÃ¨n Ã©p */
 #loginBtn {
   white-space: nowrap !important;
   flex-shrink: 0 !important;
@@ -145,7 +145,7 @@
   overflow: hidden;
 }
 
-/* Notification Bell Button - Viền tròn giống theme-toggle */
+/* Notification Bell Button - Viá»n trÃ²n giá»ng theme-toggle */
 .notification-btn {
   width: 44px;
   height: 44px;
@@ -166,7 +166,7 @@
   box-shadow: var(--shadow-neon);
 }
 
-/* Wrapper giữ vị trí tương đối cho dropdown */
+/* Wrapper giá»¯ vá» trÃ­ tÆ°Æ¡ng Äá»i cho dropdown */
 .notification-wrapper {
   position: relative;
   display: flex;
@@ -175,7 +175,7 @@
   z-index: 5001;
 }
 
-/* Badge đỏ trên nút chuông */
+/* Badge Äá» trÃªn nÃºt chuÃ´ng */
 .notification-badge {
   display: none;
   position: absolute;
@@ -194,7 +194,7 @@
   line-height: 1.4;
 }
 
-/* Dropdown thông báo */
+/* Dropdown thÃ´ng bÃ¡o */
 .notification-dropdown {
   position: absolute;
   top: calc(100% + 10px);
@@ -223,7 +223,7 @@
   }
 }
 
-/* Mũi tên nhỏ phía trên dropdown */
+/* MÅ©i tÃªn nhá» phÃ­a trÃªn dropdown */
 .notification-dropdown::before {
   content: '';
   position: absolute;
@@ -257,7 +257,7 @@
   gap: 8px;
 }
 
-/* Nút đánh dấu đã đọc */
+/* NÃºt ÄÃ¡nh dáº¥u ÄÃ£ Äá»c */
 .btn-mark-read {
   background: none;
   border: none;
@@ -281,7 +281,7 @@
   border-radius: 0 0 16px 16px;
 }
 
-/* Thanh tab chuyển đổi Phim / Cộng đồng */
+/* Thanh tab chuyá»n Äá»i Phim / Cá»ng Äá»ng */
 .notification-tabs {
   display: flex;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -331,7 +331,7 @@
   font-size: 0.82rem;
 }
 
-/* Badge số chưa đọc trên mỗi tab */
+/* Badge sá» chÆ°a Äá»c trÃªn má»i tab */
 .notif-tab-badge {
   display: none;
   align-items: center;
@@ -348,7 +348,7 @@
   margin-left: 4px;
 }
 
-/* OVERRIDE LIGHT THEME CHO THÔNG BÁO */
+/* OVERRIDE LIGHT THEME CHO THÃNG BÃO */
 [data-theme="light"] .notification-dropdown {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -391,26 +391,26 @@
 }
 
 [data-theme="light"] .notif-item:hover {
-  background: rgba(0, 0, 0, 0.05); /* Hover sáng hơn */
+  background: rgba(0, 0, 0, 0.05); /* Hover sÃ¡ng hÆ¡n */
 }
 
-/* CHỐNG TRÀN CHỮ / BREAK TEXT CHO DROPDOWN THÔNG BÁO */
+/* CHá»NG TRÃN CHá»® / BREAK TEXT CHO DROPDOWN THÃNG BÃO */
 .notif-text {
   flex: 1;
-  min-width: 0; /* Quan trọng để flex chạy word-break */
+  min-width: 0; /* Quan trá»ng Äá» flex cháº¡y word-break */
 }
 
 .notif-title, 
 .notif-message {
-  word-wrap: break-word; /* Tự bẻ từ */
-  word-break: break-word; /* Fix cứng chữ quá dài như "aaaa" */
-  white-space: normal; /* Cho phép xuống dòng */
+  word-wrap: break-word; /* Tá»± báº» tá»« */
+  word-break: break-word; /* Fix cá»©ng chá»¯ quÃ¡ dÃ i nhÆ° "aaaa" */
+  white-space: normal; /* Cho phÃ©p xuá»ng dÃ²ng */
   overflow-wrap: anywhere;
   display: block;
 }
 
 [data-theme="light"] .notif-item.unread {
-  background: rgba(0, 122, 255, 0.05); /* Unread màu xanh nhẹ */
+  background: rgba(0, 122, 255, 0.05); /* Unread mÃ u xanh nháº¹ */
 }
 
 [data-theme="light"] .notif-title {
@@ -426,7 +426,7 @@
   color: var(--text-muted);
 }
 
-/* Nút xóa tất cả */
+/* NÃºt xÃ³a táº¥t cáº£ */
 .btn-delete-all {
   background: none;
   border: none;
@@ -475,7 +475,7 @@
 }
 
 /* ============================================
-   2. BUTTONS (NÚT BẤM - STYLE LÃNG MẠN)
+   2. BUTTONS (NÃT Báº¤M - STYLE LÃNG Máº N)
    ============================================ */
 .btn {
   display: inline-flex;
@@ -483,11 +483,11 @@
   justify-content: center;
   gap: var(--spacing-sm);
   padding: 10px 24px;
-  border-radius: 50px; /* Bo tròn mềm mại hơn */
+  border-radius: 50px; /* Bo trÃ²n má»m máº¡i hÆ¡n */
   font-weight: 600;
   font-size: var(--font-md);
   cursor: pointer;
-  transition: all var(--transition-normal); /* Chuyển động mượt mà */
+  transition: all var(--transition-normal); /* Chuyá»n Äá»ng mÆ°á»£t mÃ  */
   border: none;
   text-decoration: none;
   position: relative;
@@ -496,7 +496,7 @@
 
 .btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(255, 71, 87, 0.4); /* Bóng hồng ấm áp */
+  box-shadow: 0 8px 20px rgba(255, 71, 87, 0.4); /* BÃ³ng há»ng áº¥m Ã¡p */
 }
 
 .btn:active {
@@ -528,7 +528,7 @@
 /* Neon Button - Sunset Style */
 .btn-neon {
   background: transparent;
-  color: var(--accent-secondary); /* Màu cam vàng */
+  color: var(--accent-secondary); /* MÃ u cam vÃ ng */
   border: 2px solid var(--accent-secondary);
   box-shadow: 0 0 10px rgba(255, 165, 2, 0.4);
   position: relative;
@@ -549,12 +549,12 @@
 }
 
 .btn-neon:hover {
-  color: white; /* Chữ chuyển trắng khi hover */
+  color: white; /* Chá»¯ chuyá»n tráº¯ng khi hover */
   box-shadow: 0 0 20px rgba(255, 165, 2, 0.6);
 }
 
 .btn-neon:hover::before {
-  width: 100%; /* Hiệu ứng lấp đầy màu cam */
+  width: 100%; /* Hiá»u á»©ng láº¥p Äáº§y mÃ u cam */
 }
 .btn-success {
   background: var(--success);
@@ -607,12 +607,12 @@
   background: var(--success);
 }
 
-/* --- Nút Đăng nhập Pro (Giao diện PC) --- */
+/* --- NÃºt ÄÄng nháº­p Pro (Giao diá»n PC) --- */
 .login-btn-pro {
-  background: rgba(255, 255, 255, 0.08); /* Mờ nhẹ kính */
+  background: rgba(255, 255, 255, 0.08); /* Má» nháº¹ kÃ­nh */
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15); /* Viền mỏng */
+  border: 1px solid rgba(255, 255, 255, 0.15); /* Viá»n má»ng */
   color: var(--text-primary);
   font-weight: 700;
   display: inline-flex;
@@ -622,7 +622,7 @@
   white-space: nowrap;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
-  border-radius: 50px !important; /* Bo tròn đầy đặn */
+  border-radius: 50px !important; /* Bo trÃ²n Äáº§y Äáº·n */
   position: relative;
   overflow: hidden;
   z-index: 1;
@@ -651,7 +651,7 @@
   border-color: transparent;
   color: #fff !important;
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(255, 71, 87, 0.35); /* Bóng đổ hồng lãng mạn */
+  box-shadow: 0 8px 25px rgba(255, 71, 87, 0.35); /* BÃ³ng Äá» há»ng lÃ£ng máº¡n */
 }
 
 .login-btn-pro:hover::before {
@@ -672,7 +672,7 @@
 }
 
 /* ============================================
-   3. FORMS (NHẬP LIỆU)
+   3. FORMS (NHáº¬P LIá»U)
    ============================================ */
 .form-group {
   margin-bottom: var(--spacing-lg);
@@ -747,7 +747,7 @@
    4. CARDS & NETFLIX STYLE POPUP (NEW V2)
    ============================================ */
 
-/* --- THẺ PHIM TĨNH (Lúc chưa rê chuột) --- */
+/* --- THáºº PHIM TÄ¨NH (LÃºc chÆ°a rÃª chuá»t) --- */
 .card {
   background: var(--bg-card);
   border-radius: var(--border-radius);
@@ -756,7 +756,7 @@
   transition: all var(--transition-normal);
   position: relative;
 }
-/* Hiệu ứng khi rê vào thẻ tĩnh (Sáng viền) */
+/* Hiá»u á»©ng khi rÃª vÃ o tháº» tÄ©nh (SÃ¡ng viá»n) */
 .movie-card-wrapper:hover .movie-card-static {
   border-color: var(--accent-secondary);
 }
@@ -767,7 +767,7 @@
   height: 100%;
   z-index: 1;
 }
-/* Khi popup hiện lên thì wrapper phải có z-index cao nhất trong khu vực nội dung (dưới navbar) */
+/* Khi popup hiá»n lÃªn thÃ¬ wrapper pháº£i cÃ³ z-index cao nháº¥t trong khu vá»±c ná»i dung (dÆ°á»i navbar) */
 .movie-card-wrapper:hover {
   z-index: 900;
 }
@@ -781,7 +781,7 @@
 .movie-card-static .card-image {
   position: relative;
   width: 100%;
-  padding-top: 140%; /* Tỷ lệ poster dọc */
+  padding-top: 140%; /* Tá»· lá» poster dá»c */
   overflow: hidden;
 }
 .movie-card-static .card-image img {
@@ -794,7 +794,7 @@
   transition: transform 0.3s;
 }
 
-/* Badge trạng thái tập phim (góc trái trên) */
+/* Badge tráº¡ng thÃ¡i táº­p phim (gÃ³c trÃ¡i trÃªn) */
 .episode-badge {
   position: absolute;
   top: 8px;
@@ -816,17 +816,17 @@
   background: rgba(46, 204, 113, 0.9);
 }
 
-/* Phim bộ hoàn tất — xanh dương gradient để phân biệt với "Full" phim lẻ */
+/* Phim bá» hoÃ n táº¥t â xanh dÆ°Æ¡ng gradient Äá» phÃ¢n biá»t vá»i "Full" phim láº» */
 .episode-badge-completed {
   background: linear-gradient(135deg, rgba(52, 152, 219, 0.9), rgba(41, 128, 185, 0.95));
 }
 
-/* Phim bộ đang chiếu — cam gradient để phân biệt với hoàn tất */
+/* Phim bá» Äang chiáº¿u â cam gradient Äá» phÃ¢n biá»t vá»i hoÃ n táº¥t */
 .episode-badge-ongoing {
   background: linear-gradient(135deg, rgba(243, 156, 18, 0.9), rgba(230, 126, 34, 0.95));
 }
 
-/* Container cho nhãn khớp kết quả lọc */
+/* Container cho nhÃ£n khá»p káº¿t quáº£ lá»c */
 .match-badges-container {
   position: absolute;
   top: 8px;
@@ -836,10 +836,10 @@
   gap: 4px;
   align-items: flex-end;
   z-index: 10;
-  pointer-events: none; /* Không cản trở click vào thẻ phim */
+  pointer-events: none; /* KhÃ´ng cáº£n trá» click vÃ o tháº» phim */
 }
 
-/* Nhãn khớp cụ thể */
+/* NhÃ£n khá»p cá»¥ thá» */
 .match-badge {
   display: flex;
   align-items: center;
@@ -862,10 +862,10 @@
   to { opacity: 1; transform: translateX(0); }
 }
 
-/* Màu sắc theo loại tiêu chí */
-.match-badge-category { background: rgba(52, 152, 219, 0.7); } /* Xanh dương */
-.match-badge-country { background: rgba(241, 196, 15, 0.7); }  /* Vàng */
-.match-badge-year { background: rgba(155, 89, 182, 0.7); }     /* Tím */
+/* MÃ u sáº¯c theo loáº¡i tiÃªu chÃ­ */
+.match-badge-category { background: rgba(52, 152, 219, 0.7); } /* Xanh dÆ°Æ¡ng */
+.match-badge-country { background: rgba(241, 196, 15, 0.7); }  /* VÃ ng */
+.match-badge-year { background: rgba(155, 89, 182, 0.7); }     /* TÃ­m */
 
 .match-badge i {
   font-size: 9px;
@@ -891,16 +891,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 1);
-  color: var(--accent-primary); /* Màu chủ đạo web (accent) */
+  color: var(--accent-primary); /* MÃ u chá»§ Äáº¡o web (accent) */
 }
 .movie-card-static .card-meta {
   font-size: 12px;
-  color: #ddd; /* Fix: Màu xám sáng dễ đọc trên nền tối */
+  color: #ddd; /* Fix: MÃ u xÃ¡m sÃ¡ng dá» Äá»c trÃªn ná»n tá»i */
   display: flex;
   justify-content: space-between;
 }
 
-/* --- POPUP KHI RÊ CHUỘT (Giao diện mới) --- */
+/* --- POPUP KHI RÃ CHUá»T (Giao diá»n má»i) --- */
 /* --- 1. Khung Popup --- */
 .movie-popup-nfx,
 .movie-popup-nfx *,
@@ -913,8 +913,8 @@
   top: 50%;
   left: 50%;
 
-  /* 👇 TINH CHỈNH ĐỂ CANH ĐỀU: */
-  width: 320px; /* Cố định chiều rộng giúp kiểm soát căn lề tốt hơn */
+  /* ð TINH CHá»NH Äá» CANH Äá»U: */
+  width: 320px; /* Cá» Äá»nh chiá»u rá»ng giÃºp kiá»m soÃ¡t cÄn lá» tá»t hÆ¡n */
   height: auto;
   min-height: 100%;
 
@@ -924,23 +924,23 @@
   overflow: hidden;
   z-index: 950;
 
-  /* Ẩn mặc định */
+  /* áº¨n máº·c Äá»nh */
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
 
-  /* Dịch về tâm & Không thu nhỏ/phóng to */
+  /* Dá»ch vá» tÃ¢m & KhÃ´ng thu nhá»/phÃ³ng to */
   transform: translate(-50%, -50%);
   transition: opacity 0.2s ease, visibility 0.2s ease;
 }
 
-/* --- 2. Khi rê chuột vào --- */
+/* --- 2. Khi rÃª chuá»t vÃ o --- */
 .movie-card-wrapper:hover .movie-popup-nfx {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
 
-  /* Loại bỏ hiệu ứng phóng to */
+  /* Loáº¡i bá» hiá»u á»©ng phÃ³ng to */
   transform: translate(-50%, -50%);
 
   box-shadow:
@@ -949,13 +949,13 @@
   z-index: 990;
 }
 
-/* Các phần bên trong giữ nguyên */
+/* CÃ¡c pháº§n bÃªn trong giá»¯ nguyÃªn */
 .popup-header-img {
   position: relative;
   height: 160px;
   flex-shrink: 0;
-  border-radius: 8px 8px 0 0; /* Bo góc trên đồng bộ với popup */
-  overflow: hidden; /* Cắt ảnh theo đúng viền bo */
+  border-radius: 8px 8px 0 0; /* Bo gÃ³c trÃªn Äá»ng bá» vá»i popup */
+  overflow: hidden; /* Cáº¯t áº£nh theo ÄÃºng viá»n bo */
 }
 .popup-header-img img {
   width: 100%;
@@ -969,11 +969,29 @@
   background: linear-gradient(to bottom, transparent 50%, var(--bg-secondary));
 }
 
+/* Badge Phần (VD: Phần 2) — góc phải dưới ảnh nền popup */
+.popup-part-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3; /* Trên gradient overlay */
+  background: var(--accent-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+}
+
 .popup-body {
   padding: 15px;
   display: flex;
   flex-direction: column;
-  /* Đảm bảo nội dung không bị tràn */
+  /* Ä áº£m báº£o ná»™i dung khÃ´ng bá»‹ trÃ n */
   box-sizing: border-box;
 }
 
@@ -985,9 +1003,27 @@
   margin-bottom: 15px;
   flex-wrap: wrap;
 }
+
+/* --- FIX PC: Nút bấm landscape không bị rớt dòng --- */
+.movie-card-landscape .popup-actions {
+  flex-wrap: nowrap !important;
+  gap: 6px !important;
+}
+/* Thu gọn nút landscape PC để không bị tràn */
+.movie-card-landscape .btn-play-pink {
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  white-space: nowrap !important;
+}
+.movie-card-landscape .btn-action-glass {
+  padding: 8px 10px !important;
+  font-size: 12px !important;
+  white-space: nowrap !important;
+}
+
 .btn-popup-play {
   flex: 1;
-  white-space: nowrap; /* Giữ chữ "Xem ngay" trên 1 dòng */
+  white-space: nowrap; /* Giá»¯ chá»¯ "Xem ngay" trÃªn 1 dÃ²ng */
   background: var(--accent-gradient);
   color: white;
   border: none;
@@ -1033,22 +1069,22 @@
   background: rgba(229, 9, 20, 0.2);
 }
 
-/* Đảm bảo khi hover vào nút đã thích thì vẫn đỏ (không bị biến thành xanh) */
+/* Äáº£m báº£o khi hover vÃ o nÃºt ÄÃ£ thÃ­ch thÃ¬ váº«n Äá» (khÃ´ng bá» biáº¿n thÃ nh xanh) */
 .btn-popup-icon.liked:hover {
-  color: #ff1a1a !important; /* Đỏ sáng hơn chút */
+  color: #ff1a1a !important; /* Äá» sÃ¡ng hÆ¡n chÃºt */
   border-color: #ff1a1a !important;
   background: rgba(229, 9, 20, 0.4);
 }
 
-/* 👇 FIX TOÀN DIỆN CHO FONT AWESOME (Cả WebFont & SVG) */
+/* ð FIX TOÃN DIá»N CHO FONT AWESOME (Cáº£ WebFont & SVG) */
 .btn-popup-icon.liked i,
 .btn-popup-icon.liked svg,
 .btn-popup-icon.liked path {
   color: #e50914 !important;
-  fill: #e50914 !important; /* Dành cho SVG */
+  fill: #e50914 !important; /* DÃ nh cho SVG */
 }
 
-/* Khi hover cũng phải đỏ */
+/* Khi hover cÅ©ng pháº£i Äá» */
 .btn-popup-icon.liked:hover i,
 .btn-popup-icon.liked:hover svg,
 .btn-popup-icon.liked:hover path {
@@ -1060,19 +1096,19 @@
   margin-left: auto;
 }
 
-/* Tiêu đề tự do co giãn */
+/* TiÃªu Äá» tá»± do co giÃ£n */
 .popup-title-new {
-  font-family: "Montserrat", sans-serif; /* Đảm bảo font thẳng */
+  font-family: "Montserrat", sans-serif; /* Äáº£m báº£o font tháº³ng */
   font-size: 18px;
   font-weight: 700;
   margin-bottom: 10px;
-  color: var(--accent-primary); /* Màu chủ đạo web */
+  color: var(--accent-primary); /* MÃ u chá»§ Äáº¡o web */
   line-height: 1.4;
-  width: 100%; /* Chiếm hết chiều ngang popup */
-  white-space: normal; /* Cho phép xuống dòng thoải mái */
+  width: 100%; /* Chiáº¿m háº¿t chiá»u ngang popup */
+  white-space: normal; /* Cho phÃ©p xuá»ng dÃ²ng thoáº£i mÃ¡i */
 }
 
-/* Thông tin khác */
+/* ThÃ´ng tin khÃ¡c */
 .popup-meta-row {
   display: flex;
   align-items: center;
@@ -1082,17 +1118,17 @@
   flex-wrap: wrap;
 }
 .meta-match {
-  color: var(--accent-primary); /* Màu chủ đạo web */
+  color: var(--accent-primary); /* MÃ u chá»§ Äáº¡o web */
   font-weight: bold;
   white-space: nowrap;
 }
 .meta-age,
 .meta-quality {
-  border: 1px solid var(--border-color); /* Fix: Dùng biến border thay vì màu trắng mờ */
+  border: 1px solid var(--border-color); /* Fix: DÃ¹ng biáº¿n border thay vÃ¬ mÃ u tráº¯ng má» */
   padding: 1px 6px;
   border-radius: 3px;
   font-size: 11px;
-  color: var(--text-secondary); /* Fix: Dùng biến text thay vì màu xám nhạt */
+  color: var(--text-secondary); /* Fix: DÃ¹ng biáº¿n text thay vÃ¬ mÃ u xÃ¡m nháº¡t */
 }
 .popup-genres-row {
   font-size: 13px;
@@ -1106,7 +1142,7 @@
   font-weight: bold;
 }
 
-/* --- TAGS & CATEGORY CARD (Giữ lại phần này) --- */
+/* --- TAGS & CATEGORY CARD (Giá»¯ láº¡i pháº§n nÃ y) --- */
 .category-card-pro {
   position: relative;
   height: 180px;
@@ -1176,24 +1212,24 @@
 
 
 /* --- SMART POPUP POSITIONING (GLOBAL) --- */
-/* Khi thẻ ở sát lề trái -> Mở popup sang phải & giữ nguyên chiều dọc + Lấn ra lề 30px cho đẹp */
+/* Khi tháº» á» sÃ¡t lá» trÃ¡i -> Má» popup sang pháº£i & giá»¯ nguyÃªn chiá»u dá»c + Láº¥n ra lá» 30px cho Äáº¹p */
 .movie-card-wrapper.popup-align-left:hover .movie-popup-nfx {
-  left: -30px !important; /* Lấn ra lề trái 30px */
+  left: -30px !important; /* Láº¥n ra lá» trÃ¡i 30px */
   right: auto !important;
-  transform: translateY(-50%) !important; /* Giữ lại căn giữa dọc */
+  transform: translateY(-50%) !important; /* Giá»¯ láº¡i cÄn giá»¯a dá»c */
   transform-origin: left center;
 }
 
-/* Khi thẻ ở sát lề phải -> Mở popup sang trái & giữ nguyên chiều dọc + Lấn ra lề 30px cho đẹp */
+/* Khi tháº» á» sÃ¡t lá» pháº£i -> Má» popup sang trÃ¡i & giá»¯ nguyÃªn chiá»u dá»c + Láº¥n ra lá» 30px cho Äáº¹p */
 .movie-card-wrapper.popup-align-right:hover .movie-popup-nfx {
   left: auto !important;
-  right: -30px !important; /* Lấn ra lề phải 30px */
-  transform: translateY(-50%) !important; /* Giữ lại căn giữa dọc */
+  right: -30px !important; /* Láº¥n ra lá» pháº£i 30px */
+  transform: translateY(-50%) !important; /* Giá»¯ láº¡i cÄn giá»¯a dá»c */
   transform-origin: right center;
 }
 
 /* ============================================
-   5. MODALS & 6. USER DROPDOWN (Giữ nguyên phần dưới)
+   5. MODALS & 6. USER DROPDOWN (Giá»¯ nguyÃªn pháº§n dÆ°á»i)
    ============================================ */
 .modal-overlay {
   position: fixed;
@@ -1299,7 +1335,7 @@
   display: block;
 }
 
-/* --- Đường phân cách "hoặc" trong form auth --- */
+/* --- ÄÆ°á»ng phÃ¢n cÃ¡ch "hoáº·c" trong form auth --- */
 .auth-divider {
   display: flex;
   align-items: center;
@@ -1320,7 +1356,7 @@
   text-transform: lowercase;
 }
 
-/* --- Nút đăng nhập bằng Google --- */
+/* --- NÃºt ÄÄng nháº­p báº±ng Google --- */
 .btn-google-login {
   width: 100%;
   display: flex;
@@ -1369,7 +1405,7 @@
   top: 60px;
   right: 0;
   width: 280px;
-  background: #1a1a2e; /* Nền đặc, không trong suốt */
+  background: #1a1a2e; /* Ná»n Äáº·c, khÃ´ng trong suá»t */
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1401,8 +1437,8 @@
 }
 .dropdown-role {
   font-size: 10px;
-  color: var(--text-muted); /* Đổi từ màu cứng sang màu tùy chỉnh theo theme */
-  border: 1px solid var(--border-color); /* Đổi từ màu cứng sang màu tùy chỉnh theo theme */
+  color: var(--text-muted); /* Äá»i tá»« mÃ u cá»©ng sang mÃ u tÃ¹y chá»nh theo theme */
+  border: 1px solid var(--border-color); /* Äá»i tá»« mÃ u cá»©ng sang mÃ u tÃ¹y chá»nh theo theme */
   padding: 1px 4px;
   border-radius: 3px;
   width: fit-content;
@@ -1470,22 +1506,22 @@
   font-size: 14px;
 }
 .btn-deposit {
-  background: var(--accent-primary); /* Màu nền xanh lam hiện đại */
-  color: #fff; /* Chữ trắng sắc nét */
+  background: var(--accent-primary); /* MÃ u ná»n xanh lam hiá»n Äáº¡i */
+  color: #fff; /* Chá»¯ tráº¯ng sáº¯c nÃ©t */
   border: none;
-  padding: 4px 12px; /* Tăng padding để nút trông tròn trịa hơn */
+  padding: 4px 12px; /* TÄng padding Äá» nÃºt trÃ´ng trÃ²n trá»a hÆ¡n */
   font-size: 11px;
   font-weight: 700;
-  border-radius: 20px; /* Bo tròn hoàn toàn (Pill shape) */
-  margin-left: auto; /* Đẩy sang phải cùng */
+  border-radius: 20px; /* Bo trÃ²n hoÃ n toÃ n (Pill shape) */
+  margin-left: auto; /* Äáº©y sang pháº£i cÃ¹ng */
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 5px rgba(0, 122, 255, 0.3); /* Bóng đổ nhẹ nhàng */
+  box-shadow: 0 2px 5px rgba(0, 122, 255, 0.3); /* BÃ³ng Äá» nháº¹ nhÃ ng */
 }
 .btn-deposit:hover {
-  transform: scale(1.05); /* Phóng to nhẹ khi hover */
-  background: var(--accent-secondary); /* Đổi sang màu xanh đậm hơn khi rà chuột */
-  box-shadow: 0 4px 8px rgba(0, 122, 255, 0.5); /* Tăng bóng đổ khi hover */
+  transform: scale(1.05); /* PhÃ³ng to nháº¹ khi hover */
+  background: var(--accent-secondary); /* Äá»i sang mÃ u xanh Äáº­m hÆ¡n khi rÃ  chuá»t */
+  box-shadow: 0 4px 8px rgba(0, 122, 255, 0.5); /* TÄng bÃ³ng Äá» khi hover */
 }
 .dropdown-item:hover {
   background: rgba(255, 255, 255, 0.05);
@@ -1661,12 +1697,12 @@
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 /* ============================================
-   FIX LỖI HIỂN THỊ DANH SÁCH YÊU THÍCH & LỊCH SỬ
-   (Sửa lại toàn bộ phần #libraryList)
+   FIX Lá»I HIá»N THá» DANH SÃCH YÃU THÃCH & Lá»CH Sá»¬
+   (Sá»­a láº¡i toÃ n bá» pháº§n #libraryList)
    ============================================ */
 #libraryList {
   display: grid;
-  /* Chia cột tự động: Tối thiểu 120px, tối đa co giãn */
+  /* Chia cá»t tá»± Äá»ng: Tá»i thiá»u 120px, tá»i Äa co giÃ£n */
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 15px;
   padding: 10px 5px;
@@ -1674,7 +1710,7 @@
   box-sizing: border-box;
 }
 
-/* Khung thẻ phim trong Modal */
+/* Khung tháº» phim trong Modal */
 #libraryList .card {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
@@ -1693,13 +1729,13 @@
   border-color: var(--accent-secondary);
 }
 
-/* 👇 KHUNG ẢNH CHUẨN TỶ LỆ 2:3 (FIX LỖI ẢNH DÀI NGOẰNG) 👇 */
+/* ð KHUNG áº¢NH CHUáº¨N Tá»¶ Lá» 2:3 (FIX Lá»I áº¢NH DÃI NGOáº°NG) ð */
 #libraryList .card-image {
   position: relative;
   width: 100%;
-  padding-top: 145%; /* Tỷ lệ vàng cho Poster phim */
+  padding-top: 145%; /* Tá»· lá» vÃ ng cho Poster phim */
   overflow: hidden;
-  background: #000; /* Nền đen giữ chỗ khi ảnh chưa load */
+  background: #000; /* Ná»n Äen giá»¯ chá» khi áº£nh chÆ°a load */
 }
 
 #libraryList .card-image img {
@@ -1708,7 +1744,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover; /* Cắt ảnh vừa khung, không méo */
+  object-fit: cover; /* Cáº¯t áº£nh vá»«a khung, khÃ´ng mÃ©o */
   transition: transform 0.3s ease;
 }
 
@@ -1716,11 +1752,11 @@
   transform: scale(1.1);
 }
 
-/* Phần nội dung bên dưới ảnh */
+/* Pháº§n ná»i dung bÃªn dÆ°á»i áº£nh */
 #libraryList .card-body {
   padding: 8px;
   background: var(--bg-card);
-  flex: 1; /* Đẩy nội dung lấp đầy khoảng trống */
+  flex: 1; /* Äáº©y ná»i dung láº¥p Äáº§y khoáº£ng trá»ng */
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1746,7 +1782,7 @@
 }
 
 /* ============================================
-   LÀM ĐẸP GIAO DIỆN LỊCH SỬ (PREMIUM UI)
+   LÃM Äáº¸P GIAO DIá»N Lá»CH Sá»¬ (PREMIUM UI)
    ============================================ */
 .history-card {
   position: relative;
@@ -1783,7 +1819,7 @@
   filter: brightness(0.7);
 }
 
-/* Thanh tiến trình bên dưới ảnh */
+/* Thanh tiáº¿n trÃ¬nh bÃªn dÆ°á»i áº£nh */
 .history-progress-container {
   position: absolute;
   bottom: 0;
@@ -1801,7 +1837,7 @@
   transition: width 0.3s ease;
 }
 
-/* Overlay hành động khi hover */
+/* Overlay hÃ nh Äá»ng khi hover */
 .history-overlay {
   position: absolute;
   top: 0;
@@ -1905,7 +1941,7 @@
   color: var(--text-muted);
 }
 
-/* Scrollbar cho Modal Lịch sử */
+/* Scrollbar cho Modal Lá»ch sá»­ */
 #libraryList::-webkit-scrollbar {
   width: 6px;
 }
@@ -1945,7 +1981,7 @@
 }
 
 /* ============================================
-   LÀM ĐẸP POPUP LANDSCAPE (STYLE MỚI)
+   LÃM Äáº¸P POPUP LANDSCAPE (STYLE Má»I)
    ============================================ */
 
 .movie-popup-nfx {
@@ -1965,7 +2001,7 @@
   opacity: 0.9;
 }
 
-/* Nút Xem ngay gradient */
+/* NÃºt Xem ngay gradient */
 .btn-play-pink {
   background: var(--accent-gradient) !important;
   border: none !important;
@@ -1981,7 +2017,7 @@
   box-shadow: 0 4px 15px color-mix(in srgb, var(--accent-primary) 30%, transparent) !important;
 }
 
-/* Nút hành động kính */
+/* NÃºt hÃ nh Äá»ng kÃ­nh */
 .btn-action-glass {
   background: rgba(255, 255, 255, 0.08) !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
@@ -2053,7 +2089,7 @@
    LIGHT MODE OVERRIDES FOR POPUP (GLOBAL)
    ========================================= */
 
-/* Nền và Box popup sáng sủa */
+/* Ná»n vÃ  Box popup sÃ¡ng sá»§a */
 [data-theme="light"] .movie-popup-nfx {
   background: #ffffff !important;
   border: 1px solid rgba(0,0,0,0.1) !important;
@@ -2072,7 +2108,7 @@
   background: #ffffff !important;
 }
 
-/* Tiêu đề phim chữ đen */
+/* TiÃªu Äá» phim chá»¯ Äen */
 [data-theme="light"] .popup-title-new,
 [data-theme="light"] .popup-title-main {
   color: #111 !important;
@@ -2084,7 +2120,7 @@
   color: #555 !important;
 }
 
-/* Metadata: Điểm, Giới hạn tuổi, Chất lượng... */
+/* Metadata: Äiá»m, Giá»i háº¡n tuá»i, Cháº¥t lÆ°á»£ng... */
 [data-theme="light"] .meta-age,
 [data-theme="light"] .meta-quality {
   border-color: rgba(0,0,0,0.2) !important;
@@ -2112,13 +2148,13 @@
   color: #444 !important;
 }
 
-/* Text Thể loại dài bên dưới */
+/* Text Thá» loáº¡i dÃ i bÃªn dÆ°á»i */
 [data-theme="light"] .popup-genres-text,
 [data-theme="light"] .popup-genres-row {
   color: #666 !important;
 }
 
-/* Nút hình tròn: Thêm vào, Thích... */
+/* NÃºt hÃ¬nh trÃ²n: ThÃªm vÃ o, ThÃ­ch... */
 [data-theme="light"] .btn-popup-icon {
   background: rgba(0, 0, 0, 0.05) !important;
   border-color: rgba(0, 0, 0, 0.1) !important;
@@ -2130,7 +2166,7 @@
   color: #000 !important;
 }
 
-/* Nút bấm ở phim dạng ngang (landscape) */
+/* NÃºt báº¥m á» phim dáº¡ng ngang (landscape) */
 [data-theme="light"] .btn-action-glass {
   background: rgba(0, 0, 0, 0.05) !important;
   border-color: rgba(0, 0, 0, 0.1) !important;
@@ -2143,10 +2179,10 @@
 }
 
 /* ============================================
-   TRANG DIỄN VIÊN (ACTORS PAGE)
+   TRANG DIá»N VIÃN (ACTORS PAGE)
    ============================================ */
 
-/* --- Grid danh sách diễn viên --- */
+/* --- Grid danh sÃ¡ch diá»n viÃªn --- */
 .actors-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -2207,7 +2243,7 @@
   margin-top: 5px;
 }
 
-/* --- Trang chi tiết diễn viên --- */
+/* --- Trang chi tiáº¿t diá»n viÃªn --- */
 .actor-detail-layout {
   max-width: 1400px;
   margin: 0 auto;
@@ -2237,7 +2273,7 @@
   padding-bottom: 40px;
 }
 
-/* Sidebar thông tin */
+/* Sidebar thÃ´ng tin */
 .actor-info-sidebar {
   position: sticky;
   top: 90px;
@@ -2314,7 +2350,7 @@
   color: var(--text-primary);
 }
 
-/* Phần danh sách phim */
+/* Pháº§n danh sÃ¡ch phim */
 .actor-movies-section {
   min-width: 0;
 }
@@ -2334,7 +2370,7 @@
   color: var(--text-primary);
 }
 
-/* Nút toggle xem */
+/* NÃºt toggle xem */
 .actor-view-toggle {
   display: flex;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -2518,7 +2554,7 @@
 }
 
 /* ============================================
-   NÂNG CẤP BỘ LỌC PHIM (V3 - MINIMALIST PRO)
+   NÃNG Cáº¤P Bá» Lá»C PHIM (V3 - MINIMALIST PRO)
    ============================================ */
 .search-filter {
   display: flex !important;
@@ -2534,7 +2570,7 @@
     position: relative;
     background: rgba(20, 20, 30, 0.7);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px !important; /* Dáng vuông bo nhẹ sang trọng */
+    border-radius: 8px !important; /* DÃ¡ng vuÃ´ng bo nháº¹ sang trá»ng */
     display: flex;
     align-items: center;
     padding: 0 16px;
@@ -2552,9 +2588,9 @@
 
 .search-box:focus-within {
     background: #151520;
-    border-color: rgba(255, 255, 255, 0.5); /* Viền xám trắng tinh tế, không chói */
+    border-color: rgba(255, 255, 255, 0.5); /* Viá»n xÃ¡m tráº¯ng tinh táº¿, khÃ´ng chÃ³i */
     box-shadow: 0 4px 20px rgba(0,0,0,0.6);
-    max-width: 340px; /* Dãn nhẹ ra khi nhập */
+    max-width: 340px; /* DÃ£n nháº¹ ra khi nháº­p */
     outline: none !important;
 }
 
@@ -2644,13 +2680,13 @@
 }
 
 /* ============================================
-   MEGA MENU DROPDOWN (BẢNG LỌC LỚN)
+   MEGA MENU DROPDOWN (Báº¢NG Lá»C Lá»N)
    ============================================ */
 .suggestions-dropdown {
     position: absolute;
     top: calc(100% + 12px);
     right: 0; 
-    width: 420px; /* Mở rộng thành bảng lớn */
+    width: 420px; /* Má» rá»ng thÃ nh báº£ng lá»n */
     background: rgba(20, 20, 30, 0.95);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
@@ -2665,14 +2701,14 @@
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     
-    /* Thiết lập Grid cho nội dung bên trong */
+    /* Thiáº¿t láº­p Grid cho ná»i dung bÃªn trong */
     display: grid;
-    grid-template-columns: repeat(2, 1fr); /* Chia 2 cột */
+    grid-template-columns: repeat(2, 1fr); /* Chia 2 cá»t */
     gap: 8px;
     padding: 16px;
 }
 
-/* Đảm bảo item "Tất cả" chiếm trọn 2 cột nếu muốn, ở đây cứ để 1 cột cho đều */
+/* Äáº£m báº£o item "Táº¥t cáº£" chiáº¿m trá»n 2 cá»t náº¿u muá»n, á» ÄÃ¢y cá»© Äá» 1 cá»t cho Äá»u */
 .custom-filter-box.active .suggestions-dropdown {
     opacity: 1;
     visibility: visible;
@@ -2703,7 +2739,7 @@
     background: rgba(255, 255, 255, 0.08);
     font-weight: bold;
     color: #fff;
-    grid-column: span 2; /* Cho mục Tất cả chiếm hết 2 cột */
+    grid-column: span 2; /* Cho má»¥c Táº¥t cáº£ chiáº¿m háº¿t 2 cá»t */
 }
 
 .suggestion-item.selected {
@@ -2711,11 +2747,11 @@
     border-color: var(--accent-secondary);
     color: #fff;
     font-weight: 600;
-    justify-content: space-between; /* Đưa nhãn sang trái, X sang phải */
+    justify-content: space-between; /* ÄÆ°a nhÃ£n sang trÃ¡i, X sang pháº£i */
     padding-right: 12px;
 }
 
-/* Xóa check cũ */
+/* XÃ³a check cÅ© */
 .suggestion-item.selected::after {
     display: none;
 }
@@ -2735,7 +2771,7 @@
 
 .suggestion-item.selected:hover .btn-remove-item {
     opacity: 1;
-    color: #ff4d4d; /* Chuyển đỏ khi hover vào nút xóa */
+    color: #ff4d4d; /* Chuyá»n Äá» khi hover vÃ o nÃºt xÃ³a */
 }
 
 .suggestion-item:hover {
@@ -2745,7 +2781,7 @@
     transform: translateY(-2px);
 }
 
-/* NÚT LỌC PHIM */
+/* NÃT Lá»C PHIM */
 .btn-filter-apply {
     background: var(--accent-secondary);
     color: #000;
@@ -2824,7 +2860,7 @@
     font-size: 0.85rem;
 }
 
-/* Tùy chỉnh thanh cuộn cho Mega Menu */
+/* TÃ¹y chá»nh thanh cuá»n cho Mega Menu */
 .suggestions-dropdown::-webkit-scrollbar {
     width: 6px;
 }
@@ -2877,7 +2913,7 @@
 }
 
 /* ============================================
-   SCROLL TO TOP BUTTON (NÚT LÊN ĐẦU TRANG)
+   SCROLL TO TOP BUTTON (NÃT LÃN Äáº¦U TRANG)
    ============================================ */
 .scroll-top-btn {
   position: fixed;
@@ -2909,7 +2945,7 @@
   transform: translateY(0) scale(1);
 }
 
-/* Ẩn nút khi đang mở modal/form */
+/* áº¨n nÃºt khi Äang má» modal/form */
 body.modal-open .scroll-top-btn {
   opacity: 0 !important;
   visibility: hidden !important;
@@ -3088,14 +3124,14 @@ body.modal-open .scroll-top-btn {
 /* ============================================
    MY ALBUMS MODALS & CARDS STYLING (NEW UI)
    ============================================ */
-/* Lưới chính cho Album của tôi */
+/* LÆ°á»i chÃ­nh cho Album cá»§a tÃ´i */
 .album-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 20px;
 }
 
-/* Thẻ Album */
+/* Tháº» Album */
 .my-album-card {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
@@ -3116,7 +3152,7 @@ body.modal-open .scroll-top-btn {
 
 .album-cover-wrapper {
     position: relative;
-    aspect-ratio: 16/9; /* Đổi về tỉ lệ ngang để đẹp hơn */
+    aspect-ratio: 16/9; /* Äá»i vá» tá» lá» ngang Äá» Äáº¹p hÆ¡n */
     overflow: hidden;
 }
 
@@ -3131,7 +3167,7 @@ body.modal-open .scroll-top-btn {
     transform: scale(1.05);
 }
 
-/* Biểu tượng play lớn giữa ảnh */
+/* Biá»u tÆ°á»£ng play lá»n giá»¯a áº£nh */
 .album-overlay {
     position: absolute;
     inset: 0;
@@ -3159,7 +3195,7 @@ body.modal-open .scroll-top-btn {
     transform: scale(1);
 }
 
-/* Nút xóa album góc trên phải */
+/* NÃºt xÃ³a album gÃ³c trÃªn pháº£i */
 .btn-remove-album {
     position: absolute;
     top: 8px;
@@ -3187,16 +3223,16 @@ body.modal-open .scroll-top-btn {
 }
 
 .btn-remove-album:hover {
-    background: #ff4d4f; /* Màu đỏ rõ rang hơn khi hover xóa */
+    background: #ff4d4f; /* MÃ u Äá» rÃµ rang hÆ¡n khi hover xÃ³a */
     border-color: #ff4d4f;
     color: white;
 }
 
-/* Nút đổi tên album góc trên phải */
+/* NÃºt Äá»i tÃªn album gÃ³c trÃªn pháº£i */
 .btn-rename-album {
     position: absolute;
     top: 8px;
-    right: 46px; /* Đặt cạnh nút Xóa (8px lề + 30px nút xóa + 8px khoảng cách) */
+    right: 46px; /* Äáº·t cáº¡nh nÃºt XÃ³a (8px lá» + 30px nÃºt xÃ³a + 8px khoáº£ng cÃ¡ch) */
     width: 30px;
     height: 30px;
     border-radius: 50%;
@@ -3225,7 +3261,7 @@ body.modal-open .scroll-top-btn {
     color: white;
 }
 
-/* Badge đếm phim góc dưới trái */
+/* Badge Äáº¿m phim gÃ³c dÆ°á»i trÃ¡i */
 .album-count-badge {
     position: absolute;
     bottom: 8px;
@@ -3265,14 +3301,14 @@ body.modal-open .scroll-top-btn {
     color: var(--text-secondary);
 }
 
-/* Lưới hiển thị phim trong album */
+/* LÆ°á»i hiá»n thá» phim trong album */
 .album-movies-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     gap: 15px;
 }
 
-/* Thẻ phim bên trong Album */
+/* Tháº» phim bÃªn trong Album */
 .album-movie-card {
     background: rgba(255, 255, 255, 0.02);
     border-radius: 8px;
@@ -3302,10 +3338,10 @@ body.modal-open .scroll-top-btn {
 }
 
 .album-movie-card:hover .album-movie-img {
-    transform: scale(1.08); /* Phóng to nhẹ ảnh khi hover thẻ phim */
+    transform: scale(1.08); /* PhÃ³ng to nháº¹ áº£nh khi hover tháº» phim */
 }
 
-/* Overlay đen để làm nổi bật nút play */
+/* Overlay Äen Äá» lÃ m ná»i báº­t nÃºt play */
 .movie-card-overlay {
     position: absolute;
     inset: 0;
@@ -3315,14 +3351,14 @@ body.modal-open .scroll-top-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    pointer-events: none; /* [QUAN TRỌNG] Tránh cản trở click vào checkbox/nút xóa */
+    pointer-events: none; /* [QUAN TRá»NG] TrÃ¡nh cáº£n trá» click vÃ o checkbox/nÃºt xÃ³a */
 }
 
 .album-movie-card:hover .movie-card-overlay {
     opacity: 1;
 }
 
-/* Nút xóa phim góc trên phải */
+/* NÃºt xÃ³a phim gÃ³c trÃªn pháº£i */
 .btn-remove-movie-album {
     position: absolute;
     top: 5px;
@@ -3340,7 +3376,7 @@ body.modal-open .scroll-top-btn {
     cursor: pointer;
     opacity: 0;
     transition: all 0.2s ease;
-    z-index: 10; /* Tăng Z-index */
+    z-index: 10; /* TÄng Z-index */
 }
 
 .album-movie-card:hover .btn-remove-movie-album {
@@ -3353,23 +3389,23 @@ body.modal-open .scroll-top-btn {
 }
 
 /* =======================================
-   BULK DELETE MODE (CHẾ ĐỘ CHỌN NHIỀU) 
+   BULK DELETE MODE (CHáº¾ Äá» CHá»N NHIá»U) 
    ======================================= */
 .album-movie-card.selectable-mode {
     cursor: pointer !important;
 }
 
-/* Không hiện icon play khi đang ở chế độ chọn */
+/* KhÃ´ng hiá»n icon play khi Äang á» cháº¿ Äá» chá»n */
 .album-movie-card.selectable-mode .play-icon-small,
 .album-movie-card.selectable-mode:hover .play-icon-small {
     display: none !important;
 }
 
 .album-movie-card.selectable-mode:hover .movie-card-overlay {
-    opacity: 0.5; /* Mờ sáng nhẹ thay vì đen thui khi hover chọn */
+    opacity: 0.5; /* Má» sÃ¡ng nháº¹ thay vÃ¬ Äen thui khi hover chá»n */
 }
 
-/* Nút Checkbox */
+/* NÃºt Checkbox */
 .movie-select-checkbox {
     position: absolute;
     top: 8px;
@@ -3382,9 +3418,9 @@ body.modal-open .scroll-top-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10; /* Tăng z-index để nằm ngang hàng nút xóa */
+    z-index: 10; /* TÄng z-index Äá» náº±m ngang hÃ ng nÃºt xÃ³a */
     transition: all 0.2s ease;
-    cursor: pointer; /* Thay đổi con trỏ chuột sang hình bàn tay */
+    cursor: pointer; /* Thay Äá»i con trá» chuá»t sang hÃ¬nh bÃ n tay */
 }
 
 .movie-select-checkbox i {
@@ -3393,7 +3429,7 @@ body.modal-open .scroll-top-btn {
     transition: color 0.1s;
 }
 
-/* Khi phim được chọn */
+/* Khi phim ÄÆ°á»£c chá»n */
 .album-movie-card.selected .movie-card-overlay {
     opacity: 0.3;
     background: var(--accent-primary);
@@ -3413,9 +3449,9 @@ body.modal-open .scroll-top-btn {
     color: #000;
 }
 
-/* Phóng to ảnh nhẹ khi chưa chọn mà đang di chuột */
+/* PhÃ³ng to áº£nh nháº¹ khi chÆ°a chá»n mÃ  Äang di chuá»t */
 .album-movie-card:hover .album-movie-img {
-    transform: scale(1.08); /* Phóng to nhẹ ảnh khi hover thẻ phim */
+    transform: scale(1.08); /* PhÃ³ng to nháº¹ áº£nh khi hover tháº» phim */
 }
 
 .album-movie-info {
@@ -3490,8 +3526,8 @@ body.modal-open .scroll-top-btn {
 }
 
 /* ============================================
-   LIGHT MODE — COMPONENTS OVERRIDES
-   Bổ sung tương phản cho nền sáng
+   LIGHT MODE â COMPONENTS OVERRIDES
+   Bá» sung tÆ°Æ¡ng pháº£n cho ná»n sÃ¡ng
    ============================================ */
 
 /* --- Navbar items --- */
@@ -3545,7 +3581,7 @@ body.modal-open .scroll-top-btn {
 [data-theme="light"] .movie-card-static:hover {
   border-color: var(--accent-primary);
 }
-/* LƯU Ý: .card-info-bottom nằm trên overlay gradient tối → giữ màu sáng */
+/* LÆ¯U Ã: .card-info-bottom náº±m trÃªn overlay gradient tá»i â giá»¯ mÃ u sÃ¡ng */
 
 /* --- History Card --- */
 [data-theme="light"] .history-card {
@@ -3676,7 +3712,7 @@ body.modal-open .scroll-top-btn {
   color: var(--text-secondary);
 }
 
-/* --- Nút "Xem tất cả" (btn-secondary) --- */
+/* --- NÃºt "Xem táº¥t cáº£" (btn-secondary) --- */
 [data-theme="light"] .btn-secondary {
   background: rgba(0, 0, 0, 0.06);
   color: var(--accent-secondary);
@@ -3690,7 +3726,7 @@ body.modal-open .scroll-top-btn {
   border-color: var(--accent-primary);
 }
 
-/* --- Ô tìm kiếm & Bộ lọc (Trang Kho Phim) --- */
+/* --- Ã tÃ¬m kiáº¿m & Bá» lá»c (Trang Kho Phim) --- */
 [data-theme="light"] .search-box {
   background: #fff !important;
   border-color: var(--border-color) !important;
@@ -3764,36 +3800,36 @@ body.modal-open .scroll-top-btn {
 }
 
 /* ============================================
-   TOP BÌNH LUẬN — CAROUSEL TRANG CHỦ
+   TOP BÃNH LUáº¬N â CAROUSEL TRANG CHá»¦
    ============================================ */
 .top-comments-section {
   margin-top: 20px;
   padding-bottom: 10px;
 }
 
-/* Wrapper chung bọc carousel + grid — 1 khung viền duy nhất */
+/* Wrapper chung bá»c carousel + grid â 1 khung viá»n duy nháº¥t */
 .tc-main-wrapper {
   border: 1.5px solid rgba(255,255,255,0.1);
   border-radius: 16px;
-  overflow: visible; /* Cho nút mũi tên thoát ra ngoài */
+  overflow: visible; /* Cho nÃºt mÅ©i tÃªn thoÃ¡t ra ngoÃ i */
   background: rgba(255,255,255,0.02);
-  margin: 0 30px; /* Chừa chỗ cho nút mũi tên bên ngoài */
+  margin: 0 30px; /* Chá»«a chá» cho nÃºt mÅ©i tÃªn bÃªn ngoÃ i */
 }
 
-/* Khu vực carousel */
+/* Khu vá»±c carousel */
 .tc-carousel-area {
   position: relative;
   padding: 16px 20px;
 }
 
-/* Đường ngăn cách carousel / grid */
+/* ÄÆ°á»ng ngÄn cÃ¡ch carousel / grid */
 .tc-divider {
   height: 1px;
   background: rgba(255,255,255,0.08);
   margin: 0;
 }
 
-/* Track cuộn ngang */
+/* Track cuá»n ngang */
 .tc-carousel-track {
   display: flex;
   gap: 16px;
@@ -3807,7 +3843,7 @@ body.modal-open .scroll-top-btn {
   display: none;
 }
 
-/* Nút prev/next — nằm NGOÀI khung */
+/* NÃºt prev/next â náº±m NGOÃI khung */
 .tc-nav-btn {
   position: absolute;
   top: 50%;
@@ -3852,7 +3888,7 @@ body.modal-open .scroll-top-btn {
   box-shadow: 0 12px 32px rgba(0,0,0,0.4);
 }
 
-/* Nền poster mờ */
+/* Ná»n poster má» */
 .tc-card-bg {
   position: absolute;
   inset: 0;
@@ -3866,7 +3902,7 @@ body.modal-open .scroll-top-btn {
   opacity: 0.25;
 }
 
-/* Nội dung card */
+/* Ná»i dung card */
 .tc-card-content {
   position: relative;
   z-index: 2;
@@ -3891,7 +3927,7 @@ body.modal-open .scroll-top-btn {
   border: 2px solid rgba(251,191,36,0.5);
   flex-shrink: 0;
 }
-/* Row trên cùng: avatar bên trái, poster bên phải */
+/* Row trÃªn cÃ¹ng: avatar bÃªn trÃ¡i, poster bÃªn pháº£i */
 .tc-top-row {
   display: flex;
   align-items: flex-start;
@@ -3942,7 +3978,7 @@ body.modal-open .scroll-top-btn {
   color: var(--text-muted);
 }
 
-/* Nội dung comment */
+/* Ná»i dung comment */
 .tc-comment-text {
   font-size: 0.85rem;
   line-height: 1.45;
@@ -4069,7 +4105,7 @@ body.modal-open .scroll-top-btn {
   }
 }
 
-/* Highlight comment khi cuộn đến từ Top Bình Luận */
+/* Highlight comment khi cuá»n Äáº¿n tá»« Top BÃ¬nh Luáº­n */
 .tc-highlight {
   animation: tcHighlightPulse 0.8s ease-in-out 2;
   border-radius: 8px;
@@ -4080,7 +4116,7 @@ body.modal-open .scroll-top-btn {
 }
 
 /* ============================================
-   HOME STATS GRID — 5 CỘT THỐNG KÊ
+   HOME STATS GRID â 5 Cá»T THá»NG KÃ
    ============================================ */
 .home-stats-section {
   margin-top: 10px;
@@ -4093,7 +4129,7 @@ body.modal-open .scroll-top-btn {
   overflow: hidden;
 }
 
-/* Cột */
+/* Cá»t */
 .hs-column {
   padding: 18px 16px 14px;
   border-right: 1px solid rgba(255,255,255,0.06);
@@ -4104,7 +4140,7 @@ body.modal-open .scroll-top-btn {
   border-right: none;
 }
 
-/* Tiêu đề cột */
+/* TiÃªu Äá» cá»t */
 .hs-column-title {
   font-size: 0.82rem;
   font-weight: 700;
@@ -4127,7 +4163,7 @@ body.modal-open .scroll-top-btn {
 .hs-column-title .fa-comment-dots { color: #3b82f6; }
 .hs-column-title .fa-star { color: #fbbf24; }
 
-/* Danh sách numbered */
+/* Danh sÃ¡ch numbered */
 .hs-list {
   list-style: none;
   padding: 0;
@@ -4149,7 +4185,7 @@ body.modal-open .scroll-top-btn {
   background: rgba(255,255,255,0.05);
 }
 
-/* Số thứ tự */
+/* Sá» thá»© tá»± */
 .hs-rank {
   font-weight: 700;
   color: var(--text-muted);
@@ -4157,7 +4193,7 @@ body.modal-open .scroll-top-btn {
   font-size: 0.78rem;
 }
 
-/* Icon trend tăng/giảm */
+/* Icon trend tÄng/giáº£m */
 .hs-trend {
   min-width: 14px;
   font-size: 0.7rem;
@@ -4165,7 +4201,7 @@ body.modal-open .scroll-top-btn {
   flex-shrink: 0;
 }
 
-/* Poster nhỏ */
+/* Poster nhá» */
 .hs-thumb {
   width: 28px;
   height: 38px;
@@ -4179,7 +4215,7 @@ body.modal-open .scroll-top-btn {
   flex-shrink: 0;
 }
 
-/* Tên phim */
+/* TÃªn phim */
 .hs-movie-name {
   flex: 1;
   white-space: nowrap;
@@ -4187,12 +4223,12 @@ body.modal-open .scroll-top-btn {
   text-overflow: ellipsis;
 }
 
-/* Tên thể loại */
+/* TÃªn thá» loáº¡i */
 .hs-cat-name {
   flex: 1;
 }
 
-/* Nút xem thêm */
+/* NÃºt xem thÃªm */
 .hs-more-btn {
   margin-top: 8px;
   padding: 5px 0;
@@ -4216,7 +4252,7 @@ body.modal-open .scroll-top-btn {
   font-style: italic;
 }
 
-/* ---- BÌNH LUẬN MỚI (cột 4) ---- */
+/* ---- BÃNH LUáº¬N Má»I (cá»t 4) ---- */
 .hs-comments-list {
   flex: 1;
   display: flex;
@@ -4281,7 +4317,7 @@ body.modal-open .scroll-top-btn {
   text-overflow: ellipsis;
 }
 
-/* ---- REVIEW PHIM (cột 5) ---- */
+/* ---- REVIEW PHIM (cá»t 5) ---- */
 .hs-reviews-list {
   flex: 1;
   display: flex;
@@ -4374,7 +4410,7 @@ body.modal-open .scroll-top-btn {
 }
 
 /* ============================================
-   POPUP TOP 10 — MODAL
+   POPUP TOP 10 â MODAL
    ============================================ */
 .hs-popup-overlay {
   position: fixed;
@@ -4410,7 +4446,7 @@ body.modal-open .scroll-top-btn {
   transform: scale(1) translateY(0);
 }
 
-/* Nút đóng */
+/* NÃºt ÄÃ³ng */
 .hs-popup-close {
   position: absolute;
   top: 16px;
@@ -4433,7 +4469,7 @@ body.modal-open .scroll-top-btn {
   color: #fff;
 }
 
-/* Tiêu đề popup */
+/* TiÃªu Äá» popup */
 .hs-popup-title {
   font-size: 1.15rem;
   font-weight: 800;
@@ -4442,14 +4478,14 @@ body.modal-open .scroll-top-btn {
   margin: 0 0 20px;
 }
 
-/* Danh sách popup */
+/* Danh sÃ¡ch popup */
 .hs-popup-list {
   display: flex;
   flex-direction: column;
   gap: 0;
 }
 
-/* Mỗi item */
+/* Má»i item */
 .hs-popup-item {
   display: flex;
   align-items: center;
@@ -4467,7 +4503,7 @@ body.modal-open .scroll-top-btn {
   border-bottom: none;
 }
 
-/* Số thứ tự */
+/* Sá» thá»© tá»± */
 .hs-popup-rank {
   font-weight: 800;
   font-size: 1.05rem;
@@ -4492,7 +4528,7 @@ body.modal-open .scroll-top-btn {
   flex-shrink: 0;
 }
 
-/* Tên phim */
+/* TÃªn phim */
 .hs-popup-name {
   flex: 1;
   font-size: 0.92rem;
@@ -4500,7 +4536,7 @@ body.modal-open .scroll-top-btn {
   color: var(--text-primary);
 }
 
-/* Tag thể loại có màu */
+/* Tag thá» loáº¡i cÃ³ mÃ u */
 .hs-popup-tag {
   padding: 5px 14px;
   border-radius: 20px;
@@ -4617,7 +4653,7 @@ body.modal-open .scroll-top-btn {
     border: 0;
 }
 
-/* N�t Trailer trong toolbar trang xem phim */
+/* Nút Trailer trong toolbar trang xem phim */
 .btn-trailer-tmdb {
     display: inline-flex;
     align-items: center;
@@ -4648,3 +4684,23 @@ body.modal-open .scroll-top-btn {
 /* Tự do phóng to Trailer trên PC */
 .tmdb-trailer-container { max-width: 1200px !important; width: 92vw !important; }
 
+/* Badge Trailer */
+.episode-badge-trailer {
+  background: linear-gradient(135deg, #7f8c8d, #95a5a6);
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+    .tmdb-trailer-container { max-width: 100%; border-radius: 10px; }
+    .tmdb-trailer-header { padding: 12px 14px; }
+    .tmdb-trailer-title { font-size: 13px; }
+}
+
+/* Tự do phóng to Trailer trên PC */
+.tmdb-trailer-container { max-width: 1200px !important; width: 92vw !important; }
+
+/* Badge Trailer */
+.episode-badge-trailer {
+  background: linear-gradient(135deg, #7f8c8d, #95a5a6);
+  color: #fff;
+}

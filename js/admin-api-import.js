@@ -221,6 +221,40 @@ async function testTelegramConfig() {
     }
 }
 
+/* ─── TELEGRAM CHUNK HELPER ─── */
+async function _sendTelegramInChunks(reports, headerGenerator, isSync = false) {
+    if (typeof sendTelegramNotify !== 'function') return;
+    const chunkSize = 20;
+    const totalMsgs = Math.ceil(reports.length / chunkSize);
+    
+    for (let i = 0; i < totalMsgs; i++) {
+        const startIdx = i * chunkSize;
+        const chunk = reports.slice(startIdx, startIdx + chunkSize);
+        
+        let msg = headerGenerator(i + 1, totalMsgs);
+        
+        chunk.forEach((ts, idx) => {
+            const realIdx = startIdx + idx + 1;
+            if (isSync) {
+                msg += `<b>${realIdx}. ${ts.title}</b>\n`;
+                msg += `   📺 Cập nhật: +${ts.added} tập (Hiện có ${ts.current}/${ts.total})\n\n`;
+            } else {
+                const typeStr = ts.isTrailer ? `[Trailer] ${ts.typeName}` : ts.typeName;
+                msg += `<b>${realIdx}. ${ts.title}</b> (${typeStr})\n`;
+                msg += `   📺 Tập: ${ts.currentEps} / ${ts.totalEps}\n`;
+                msg += `   💽 Bản: ${ts.versions}\n`;
+                msg += `   🌐 Nguồn: ${ts.sources}\n\n`;
+            }
+        });
+        
+        sendTelegramNotify(msg);
+        
+        if (i < totalMsgs - 1) {
+            await new Promise(r => setTimeout(r, 1500)); // Tránh spam limit của Telegram
+        }
+    }
+}
+
 /* ─── OMDB API — Lấy điểm IMDb thật (Đã chuyển sang utils.js) ─── */
 
 /* ─── HELPER FUNCTIONS ─── */
@@ -254,6 +288,24 @@ async function _uploadImgToR2(imgUrl, folder, filename) {
         });
         if (!res.ok) throw new Error(`R2 HTTP ${res.status}`);
         const data = await res.json();
+        
+        // ★ KIỂM TRA LẠI ẢNH R2 ★ 
+        // Đôi khi R2 Worker báo thành công nhưng file tải lên bị 0 byte (do nguồn chặn Cloudflare bot)
+        if (data.url) {
+            const isR2UrlOk = await _validateImageUrl(data.url);
+            if (!isR2UrlOk) {
+                console.warn(`[R2 Upload] File R2 bị lỗi/0 byte: ${data.url} → Fallback URL gốc`);
+                // Gửi request xóa file lỗi trên R2 chạy ngầm
+                fetch(`${workerUrl}/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ paths: [`${folder}/${customFilename}`] })
+                }).catch(() => {});
+                
+                return imgUrl; 
+            }
+        }
+        
         return data.url || imgUrl;
     } catch (err) {
         console.warn('[R2 Upload] Lỗi, fallback URL gốc:', err.message);
@@ -273,6 +325,289 @@ function _buildApiImgUrl(url, providerId) {
     if (providerId === 'ophim') return `https://img.ophim.live/uploads/movies/${url}`;
     // KKPhim (mặc định)
     return `https://phimimg.com/${url}`;
+}
+
+/**
+ * Kiểm tra URL ảnh có tải được hay không bằng cách dùng Image() object.
+ * Không dùng crossOrigin để tránh CDN chặn CORS.
+ * @param {string} url - URL ảnh cần kiểm tra
+ * @returns {Promise<boolean>}
+ */
+async function _validateImageUrl(url) {
+    if (!url) return false;
+    return new Promise((resolve) => {
+        const img = new Image();
+        const timeout = setTimeout(() => {
+            img.onload = img.onerror = null; 
+            resolve(false); 
+        }, 10000);
+        img.onload = () => {
+            clearTimeout(timeout);
+            resolve(img.naturalWidth > 1 && img.naturalHeight > 1);
+        };
+        img.onerror = () => {
+            clearTimeout(timeout);
+            resolve(false); 
+        };
+        img.src = url;
+    });
+}
+
+/**
+ * Lấy thông tin kích thước và tỷ lệ ảnh.
+ * KHÔNG dùng crossOrigin để tránh CDN chặn CORS ảo.
+ */
+async function _getImageInfo(url) {
+    if (!url) return { ok: false, isVertical: false };
+    return new Promise((resolve) => {
+        const img = new Image();
+        const timeout = setTimeout(() => {
+            img.onload = img.onerror = null; 
+            resolve({ ok: false, isVertical: false }); 
+        }, 10000);
+        img.onload = () => {
+            clearTimeout(timeout);
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
+            resolve({ ok: w > 1 && h > 1, isVertical: h > w });
+        };
+        img.onerror = () => {
+            clearTimeout(timeout);
+            resolve({ ok: false, isVertical: false });
+        };
+        img.src = url;
+    });
+}
+
+/**
+ * Phân loại đúng 2 URL ảnh API thành Poster (dọc) và Background (ngang)
+ * dựa vào kích thước thật. Tự động loại bỏ ảnh chết.
+ * @returns {Promise<{ poster: string|null, background: string|null }>}
+ */
+async function _classifyAndValidateImages(url1, url2) {
+    const info1 = url1 ? await _getImageInfo(url1) : null;
+    const info2 = url2 && url2 !== url1 ? await _getImageInfo(url2) : null;
+    
+    let p = null, t = null;
+    const assign = (info, url) => {
+        if (!info || !info.ok) return;
+        if (info.isVertical) {
+            if (!p) p = url; else if (!t) t = url;
+        } else {
+            if (!t) t = url; else if (!p) p = url;
+        }
+    };
+    
+    if (info1?.ok && info2?.ok) {
+        if (info1.isVertical && !info2.isVertical) { p = url1; t = url2; }
+        else if (!info1.isVertical && info2.isVertical) { p = url2; t = url1; }
+        else {
+            // Nếu cả hai cùng tỷ lệ
+            if (!info1.isVertical) {
+                // Cả hai đều Nằm Ngang -> Chỉ có Background, KHÔNG có poster!
+                t = url1;
+            } else {
+                // Cả hai đều Đứng Dọc -> Chỉ có Poster, KHÔNG có background!
+                p = url1;
+            }
+        }
+    } else if (info1?.ok) {
+        if (info1.isVertical) p = url1; else t = url1;
+    } else if (info2?.ok) {
+        if (info2.isVertical) p = url2; else t = url2;
+    }
+    
+    // CHỈ trả về đúng loại: poster = ảnh DỌC, background = ảnh NGANG
+    // KHÔNG dùng poster thay background (tránh gán ảnh dọc vào chỗ ảnh ngang)
+    return { poster: p, background: t };
+}
+
+/**
+ * Tìm ảnh poster/background thay thế từ các API nguồn khác và TMDb.
+ * Chỉ tìm ảnh cho loại bị lỗi (poster / background hoặc cả hai).
+ * @param {string} slug - slug phim
+ * @param {string} movieName - tên phim (tìm kiếm)
+ * @param {string} originName - tên gốc phim (tìm kiếm TMDb)
+ * @param {number|string} year - năm phát hành
+ * @param {string} countryText - chuỗi quốc gia của phim gốc
+ * @param {string} excludeProviderId - provider đã dùng (bỏ qua)
+ * @param {object} needs - { poster: bool, background: bool }
+ * @returns {Promise<{ poster: string|null, background: string|null }>}
+ */
+async function _findReplacementImages(slug, movieName, originName, year, countryText, excludeProviderId, needs = { poster: true, background: true }) {
+    const result = { poster: null, background: null };
+    if (typeof API_PROVIDERS === 'undefined') return result;
+
+    // ════════════════════════════════════════════════════════════════
+    // ƯU TIÊN 1: Quét nguồn gộp — Dùng CHÍNH XÁC luật 3/5 điểm
+    // từ _crossFetchFromAllProviders để xác nhận đúng phim
+    // ════════════════════════════════════════════════════════════════
+    const providerKeys = Object.keys(API_PROVIDERS);
+    for (const key of providerKeys) {
+        // Đã đủ ảnh → dừng
+        if ((!needs.poster || result.poster) && (!needs.background || result.background)) break;
+
+        const prov = API_PROVIDERS[key];
+        if (prov.id === excludeProviderId || prov.name === excludeProviderId) continue;
+
+        try {
+            // Bước A: Tìm slug phim trên nguồn khác (Search-Then-Detail)
+            let resolvedSlug = slug;
+            let foundViaSearch = false;
+
+            if (movieName && typeof prov.buildSearchUrl === 'function') {
+                const searchUrl = prov.buildSearchUrl(movieName, 1);
+                const sRes = await fetch(searchUrl).catch(() => null);
+                if (!sRes || !sRes.ok) continue;
+                const sRaw = await sRes.json();
+                const parsed = prov.parseListResponse(sRaw);
+                if (!parsed.items || parsed.items.length === 0) continue;
+
+                const lowerName = movieName.toLowerCase().trim();
+                const lowerOrigin = (originName || '').toLowerCase().trim();
+                const potentialMatches = parsed.items.filter(i =>
+                    i.slug === slug ||
+                    (i.name || '').toLowerCase().trim() === lowerName ||
+                    (i.origin_name || '').toLowerCase().trim() === lowerName ||
+                    (lowerOrigin && (i.origin_name || '').toLowerCase().trim() === lowerOrigin)
+                );
+
+                const match = potentialMatches.find(i => i.slug === slug) || potentialMatches[0];
+                if (match && match.slug) {
+                    resolvedSlug = match.slug;
+                    foundViaSearch = true;
+                }
+            }
+
+            if (!foundViaSearch) continue;
+
+            // Bước B: Lấy chi tiết phim
+            const detUrl = prov.buildDetailUrl(resolvedSlug);
+            const dRes = await fetch(detUrl).catch(() => null);
+            if (!dRes || !dRes.ok) continue;
+            const dRaw = await dRes.json();
+            const movieRaw = dRaw.movie || dRaw.item || dRaw;
+            const mData = prov.mapItem ? prov.mapItem(movieRaw) : movieRaw;
+
+            // ===== BỘ LỌC 3/5 ĐIỂM (ĐỒNG BỘ VỚI _crossFetchFromAllProviders) =====
+            let matchScore = 0;
+
+            // 0. Tên / Slug
+            if (mData.slug === slug) {
+                matchScore++;
+            } else {
+                let nameMatched = false;
+                const ln = movieName?.toLowerCase().trim();
+                if (mData.name && ln && mData.name.toLowerCase().trim() === ln) nameMatched = true;
+                if (!nameMatched && mData.origin_name && ln && (mData.origin_name.toLowerCase().trim() === ln || mData.origin_name.toLowerCase().trim() === (originName || '').toLowerCase().trim())) nameMatched = true;
+                if (!nameMatched) continue; // Tên không khớp → loại
+                matchScore++;
+            }
+
+            // 1. Cùng loại phim
+            if (year && mData.type) {
+                // Dùng countryText param đại diện cho type nếu cần (truyền từ caller)
+                // Nhưng hàm này không có type param → bỏ qua tiêu chí này
+            }
+
+            // 2. Cùng quốc gia (BẮT BUỘC — khác quốc gia → loại ngay)
+            if (countryText && mData.country) {
+                const c1 = countryText.toLowerCase();
+                const c2Norm = Array.isArray(mData.country)
+                    ? mData.country.map(c => typeof c === 'string' ? c : c.name).join(', ')
+                    : (mData.country || '');
+                const c2 = c2Norm.toLowerCase();
+                const c1Arr = c1.split(',').map(s => s.trim()).filter(Boolean);
+                const c2Arr = c2.split(',').map(s => s.trim()).filter(Boolean);
+                const hasCommonCountry = c1Arr.some(c => c2.includes(c)) || c2Arr.some(c => c1.includes(c));
+                if (hasCommonCountry) {
+                    matchScore++;
+                } else {
+                    _addImportLog(`⚠️ ${prov.name}: Khác quốc gia hoàn toàn → chặn lấy ảnh (chống Remake).`, 'warning');
+                    continue;
+                }
+            }
+
+            // 3. Cùng năm (lệch >1 → loại ngay)
+            if (year && mData.year) {
+                const eYear = Number(year);
+                const iYear = Number(mData.year);
+                if (eYear === iYear) {
+                    matchScore++;
+                } else if (Math.abs(eYear - iYear) > 1) {
+                    _addImportLog(`⚠️ ${prov.name}: Lệch năm (${eYear} vs ${iYear}) → chặn lấy ảnh.`, 'warning');
+                    continue;
+                }
+            }
+
+            // 4. Cùng tổng tập (lệch >5 → loại)
+            if (mData.episode_total) {
+                // Chưa có episode_total trong params → bỏ qua
+            }
+
+            // Luật 3/5: matchScore phải ≥ 3 (hoặc ≥ 2 nếu thiếu 1 số tiêu chí)
+            // Vì hàm này không truyền type và episode_total, ta hạ ngưỡng còn 2
+            if (matchScore < 2) {
+                _addImportLog(`⚠️ ${prov.name}: Điểm khớp thấp (${matchScore}/5) → chặn lấy ảnh.`, 'warning');
+                continue;
+            }
+
+            // Bước D: Đã đủ điều kiện gộp → Phân loại ảnh (dọc/ngang)
+            _addImportLog(`🔍 ${prov.name}: Đủ điều kiện gộp (Điểm ${matchScore}). Kiểm tra ảnh...`, 'info');
+            const buildImg = (u) => {
+                if (!u) return '';
+                if (typeof prov.buildImgUrl === 'function') return prov.buildImgUrl(u);
+                return _buildApiImgUrl(u, prov.id);
+            };
+            const img1 = buildImg(mData.thumb_url || movieRaw.thumb_url);
+            const img2 = buildImg(mData.poster_url || movieRaw.poster_url);
+            const classified = await _classifyAndValidateImages(img1, img2);
+
+            if (needs.poster && !result.poster && classified.poster) {
+                result.poster = classified.poster;
+                _addImportLog(`✅ Lấy poster thay thế từ nguồn gộp ${prov.name}`, 'success');
+            }
+            if (needs.background && !result.background && classified.background) {
+                result.background = classified.background;
+                _addImportLog(`✅ Lấy background thay thế từ nguồn gộp ${prov.name}`, 'success');
+            }
+        } catch (e) {
+            console.warn(`[FindReplacementImg] Lỗi quét ${prov.name}:`, e.message);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // ƯU TIÊN 2: TMDb Fallback — Nếu nguồn gộp không đủ ảnh
+    // ════════════════════════════════════════════════════════════════
+    if ((needs.poster && !result.poster) || (needs.background && !result.background)) {
+        try {
+            if (typeof searchTmdbByTitle === 'function' && typeof getTmdbDetails === 'function') {
+                const searchTitle = originName || movieName || '';
+                _addImportLog(`🔍 TMDb: Tìm "${searchTitle}" (Năm: ${year || '?'})...`, 'info');
+
+                const tmdbResult = await searchTmdbByTitle(searchTitle, year, movieName);
+                if (tmdbResult) {
+                    const details = await getTmdbDetails(tmdbResult.id, tmdbResult.media_type || 'movie');
+                    if (details) {
+                        if (needs.poster && !result.poster && details.poster_path) {
+                            result.poster = buildTmdbImageUrl(details.poster_path, 'w500');
+                            _addImportLog('✅ TMDb: Poster OK', 'success');
+                        }
+                        if (needs.background && !result.background && details.backdrop_path) {
+                            result.background = buildTmdbImageUrl(details.backdrop_path, 'w1280');
+                            _addImportLog('✅ TMDb: Background OK', 'success');
+                        }
+                    }
+                } else {
+                    _addImportLog('❌ TMDb: Không tìm thấy phim.', 'warning');
+                }
+            }
+        } catch (e) {
+            console.warn('[FindReplacementImg] TMDb lỗi:', e.message);
+        }
+    }
+
+    return result;
 }
 
 /**
@@ -476,7 +811,7 @@ async function _checkMovieExistsBySlug(slug, extra = null) {
     ];
     
     try {
-        const orFilter = possibleUrls.map(u => `api_url_backup.eq.${u}`).join(',');
+        const orFilter = possibleUrls.map(u => `api_url_backup.eq."${u}"`).join(',');
         
         let q = supabase.from('movies').select('id, title, origin_title, type, country_id, countries(name), year, total_episodes, api_url_backup');
         
@@ -484,16 +819,16 @@ async function _checkMovieExistsBySlug(slug, extra = null) {
         if (extra && extra.origin_name && extra.name) {
             const safeOrigin = extra.origin_name.replace(/"/g, '');
             const safeTitle = extra.name.replace(/"/g, '');
-            nameFilters.push(`origin_title.ilike.%${safeOrigin}%`);
-            nameFilters.push(`title.ilike.%${safeOrigin}%`);
-            nameFilters.push(`title.ilike.%${safeTitle}%`);
+            nameFilters.push(`origin_title.ilike."%${safeOrigin}%"`);
+            nameFilters.push(`title.ilike."%${safeOrigin}%"`);
+            nameFilters.push(`title.ilike."%${safeTitle}%"`);
         } else if (extra && extra.origin_name) {
             const safeOrigin = extra.origin_name.replace(/"/g, '');
-            nameFilters.push(`origin_title.ilike.%${safeOrigin}%`);
-            nameFilters.push(`title.ilike.%${safeOrigin}%`);
+            nameFilters.push(`origin_title.ilike."%${safeOrigin}%"`);
+            nameFilters.push(`title.ilike."%${safeOrigin}%"`);
         } else if (extra && extra.name) {
             const safeTitle = extra.name.replace(/"/g, '');
-            nameFilters.push(`title.ilike.%${safeTitle}%`);
+            nameFilters.push(`title.ilike."%${safeTitle}%"`);
         }
         
         if (nameFilters.length > 0) {
@@ -554,12 +889,23 @@ async function _checkMovieExistsBySlug(slug, extra = null) {
                     const c2Arr = c2.split(',').map(s=>s.trim()).filter(Boolean);
                     
                     const hasCommon = c1Arr.some(c => c2.includes(c)) || c2Arr.some(c => c1.includes(c));
-                    if (hasCommon) matchScore++;
+                    if (hasCommon) {
+                        matchScore++;
+                    } else {
+                        // TUYỆT ĐỐI KHÔNG GỘP: Trùng tên nhưng khác quốc gia hoàn toàn -> Phim Remake / Trùng Tên!
+                        return false; 
+                    }
                 }
                 
                 // --- BƯỚC 3: KIỂM TRA YEAR --- (BẮT BUỘC ĐÚNG NĂM)
                 if (extra.year && dbm.year) {
-                    if (Number(extra.year) === Number(dbm.year)) matchScore++;
+                    const diff = Math.abs(Number(extra.year) - Number(dbm.year));
+                    if (diff <= 1) { // Lệch tối đa 1 năm
+                        matchScore++;
+                    } else {
+                        // TỬ HÌNH NẾU SAI NĂM (Chống gộp nhầm phim Remake khác năm)
+                        return false; 
+                    }
                 }
                 
                 // --- BƯỚC 4: KIỂM TRA TỔNG TẬP ---
@@ -602,38 +948,109 @@ async function _checkMovieExistsBySlug(slug, extra = null) {
  * @returns {string} - VD "Phần 2", "Mùa 3", "" nếu không phát hiện
  */
 function _detectMoviePart(viTitle, enTitle) {
-    // Chuyển số La Mã → số thường
-    const _roman = { I:1,II:2,III:3,IV:4,V:5,VI:6,VII:7,VIII:8,IX:9,X:10 };
-    const _toArabic = (s) => _roman[s.toUpperCase()] || parseInt(s) || null;
+    // Chuyển số La Mã → số thường (hỗ trợ tới XX = 20)
+    const _roman = {
+        I:1, II:2, III:3, IV:4, V:5, VI:6, VII:7, VIII:8, IX:9, X:10,
+        XI:11, XII:12, XIII:13, XIV:14, XV:15, XVI:16, XVII:17, XVIII:18, XIX:19, XX:20
+    };
+    const _toArabic = (s) => {
+        if (!s) return null;
+        const upper = s.toUpperCase().trim();
+        if (_roman[upper]) return _roman[upper];
+        const parsed = parseInt(s);
+        return isNaN(parsed) ? null : parsed;
+    };
 
-    // Patterns kiểm tra (theo độ ưu tiên)
-    const patterns = [
+    // Ngưỡng tối đa cho số phần - phim hiếm khi có > 30 phần/mùa
+    // Số lớn hơn (VD: 1983, 2024, 101) thường là tên phim hoặc năm, KHÔNG phải số phần
+    const MAX_PART = 30;
+
+    // Kiểm tra chuỗi có phải dạng năm phát hành (1900-2099) không
+    const _isYearLike = (s) => {
+        const n = parseInt(s);
+        return n >= 1900 && n <= 2099;
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // NHÓM 1: Patterns CÓ TỪ KHÓA RÕ RÀNG (độ tin cậy cao)
+    // Phát hiện chính xác vì có keyword đi kèm số
+    // ═══════════════════════════════════════════════════════════
+    const keywordPatterns = [
         // Tiếng Việt: Phần 2, (Phần 2), Phần II
-        { re: /\bph\u1ea7n\s*([ivxlcdm\d]+)\b/i, label: 'Phần' },
-        // Tiếng Việt: Mùa 2, (Mùa 2)
-        { re: /\bm\u00f9a\s*([ivxlcdm\d]+)\b/i,   label: 'Mùa'  },
+        { re: /\bph\u1ea7n\s*([ivxlcdm\d]+)\b/i,   label: 'Phần' },
+        // Tiếng Việt: Mùa 2, Mùa II
+        { re: /\bm\u00f9a\s*([ivxlcdm\d]+)\b/i,     label: 'Mùa'  },
+        // Tiếng Việt: Quyển 2 (manga/anime)
+        { re: /\bquy\u1ec3n\s*([ivxlcdm\d]+)\b/i,   label: 'Quyển' },
+        // Tiếng Việt: Kỳ 2 (dùng trong phim Trung Quốc)
+        { re: /\bk\u1ef3\s*([ivxlcdm\d]+)\b/i,      label: 'Kỳ'   },
         // Tiếng Anh: Season 2, (Season 2)
-        { re: /\bseason\s*([ivxlcdm\d]+)\b/i,      label: 'Mùa'  },
+        { re: /\bseason\s*([ivxlcdm\d]+)\b/i,        label: 'Mùa'  },
         // Tiếng Anh: Part 2, Part II
-        { re: /\bpart\s*([ivxlcdm\d]+)\b/i,        label: 'Phần' },
+        { re: /\bpart\s*([ivxlcdm\d]+)\b/i,          label: 'Phần' },
         // Tiếng Anh: Chapter 2
-        { re: /\bchapter\s*([ivxlcdm\d]+)\b/i,     label: 'Phần' },
-        // Số thứ tự ở cuối tên trong ngoặc: "(2)", "(3)"
-        { re: /\(\s*(\d+)\s*\)$/,                  label: 'Phần' },
-        // Số La Mã hoặc số thường ở CUỐI CÙNG chuỗi, cách bởi khoảng trắng: "Iron Man 2", "Ám Ảnh Kinh Hoàng II"
-        { re: /\s+([ivxlc\d]+)$/i,                 label: 'Phần' }
+        { re: /\bchapter\s*([ivxlcdm\d]+)\b/i,       label: 'Phần' },
+        // Tiếng Anh: Volume 2, Vol. 2, Vol 2 (anime/manga)
+        { re: /\bvol(?:ume)?\.?\s*([ivxlcdm\d]+)\b/i, label: 'Phần' },
+        // Tiếng Anh: Series 2 (UK style)
+        { re: /\bseries\s+([ivxlcdm\d]+)\b/i,        label: 'Phần' },
+        // Tiếng Anh: Cour 2 (anime)
+        { re: /\bcour\s*([ivxlcdm\d]+)\b/i,          label: 'Phần' },
+        // Shorthand: S02, S2, SS02, SS2 (phổ biến trong API phim)
+        { re: /\bSS?0*(\d+)\b/,                      label: 'Mùa'  },
+        // Ordinal: "2nd Season", "3rd Part", "4th Season"
+        { re: /\b(\d+)(?:st|nd|rd|th)\s+season\b/i,  label: 'Mùa'  },
+        { re: /\b(\d+)(?:st|nd|rd|th)\s+part\b/i,    label: 'Phần' },
     ];
 
+    // ═══════════════════════════════════════════════════════════
+    // NHÓM 2: Patterns KHÔNG CÓ TỪ KHÓA (cần cẩn thận hơn)
+    // Dễ nhận nhầm nên cần thêm nhiều điều kiện chặn
+    // ═══════════════════════════════════════════════════════════
+    const ambiguousPatterns = [
+        // Từ khóa trong ngoặc có kèm context: "(Season 2)", "(Phần 3)", "(Mùa 2)"
+        { re: /\(\s*(?:ph\u1ea7n|m\u00f9a|season|part|chapter|vol\.?)\s*([ivxlcdm\d]+)\s*\)/i, label: 'Phần' },
+        // Số thứ tự ở cuối tên trong ngoặc: "(2)", "(3)" — CHỈ khi số nhỏ
+        { re: /\(\s*(\d+)\s*\)$/,                    label: 'Phần' },
+        // Số La Mã hoặc số nhỏ ở CUỐI CÙNG chuỗi: "Iron Man 2", "Ám Ảnh III"
+        // ⚠️ Pattern này DỄ NHẬN NHẦM nhất — cần nhiều bộ lọc bổ sung
+        { re: /\s+([ivxlc]+)$/i,                     label: 'Phần', romanOnly: true },
+        { re: /\s+(\d+)$/,                           label: 'Phần', digitOnly: true },
+    ];
+
+    // --- BƯỚC 1: Thử patterns có từ khóa rõ ràng trước (tin cậy cao) ---
     for (const src of [viTitle, enTitle]) {
         if (!src) continue;
-        for (const { re, label } of patterns) {
+        for (const { re, label } of keywordPatterns) {
             const m = src.match(re);
             if (m) {
                 const num = _toArabic(m[1]);
-                if (num && num > 1) return `${label} ${num}`; // Chỉ set nếu >= 2
+                if (num && num > 1 && num <= MAX_PART) return `${label} ${num}`;
             }
         }
     }
+
+    // --- BƯỚC 2: Thử patterns mơ hồ (cần kiểm tra kỹ hơn) ---
+    for (const src of [viTitle, enTitle]) {
+        if (!src) continue;
+        for (const p of ambiguousPatterns) {
+            const m = src.match(p.re);
+            if (m) {
+                const raw = m[1];
+                const num = _toArabic(raw);
+                if (!num || num <= 1 || num > MAX_PART) continue;
+
+                // Chặn số trần giống năm phát hành (1900-2099): "Xin Chào 1983" → KHÔNG detect
+                if (p.digitOnly && _isYearLike(raw)) continue;
+
+                // Chặn số trần có >= 3 chữ số: "Apollo 13" ok, "District 101" → khả năng là tên phim
+                if (p.digitOnly && raw.length >= 3) continue;
+
+                return `${p.label} ${num}`;
+            }
+        }
+    }
+
     return ''; // Không phát hiện → để trống
 }
 
@@ -651,11 +1068,20 @@ function _detectMoviePart(viTitle, enTitle) {
 function _buildSeriesId(slug, detectedPart) {
     if (!slug) return '';
 
-    // Bỏ các suffix phần/mùa ở cuối slug
-    const cleanSlug = slug
-        .replace(/-(phan|season|mua|part|chapter|quyen|tap)-?0*([\divxlc]+)$/i, '')
-        .replace(/-0*(\d+)$/, '')
-        .replace(/-+$/, '');
+    // Ngưỡng tối đa: số > 30 ở cuối slug thường là tên phim (VD: "xin-chao-1983"), không cắt
+    const MAX_PART = 30;
+
+    // Bỏ các suffix phần/mùa có từ khóa rõ ràng ở cuối slug (VD: -phan-2, -season-3)
+    let cleanSlug = slug
+        .replace(/-(phan|season|mua|part|chapter|quyen|ky|vol|volume|series|cour|tap|ss?)-?0*([\divxlc]+)$/i, '');
+    
+    // Chỉ bỏ số thuần ở cuối slug nếu số đó <= MAX_PART (tránh cắt nhầm tên phim có số lớn)
+    cleanSlug = cleanSlug.replace(/-0*(\d+)$/, (match, numStr) => {
+        const num = parseInt(numStr);
+        return (num <= MAX_PART) ? '' : match;
+    });
+    
+    cleanSlug = cleanSlug.replace(/-+$/, '');
 
     // PascalCase: mỗi từ viết hoa chữ đầu (VD: "mua-ruc-ro-cua-em" → "MuaRucRoCuaEm")
     return (cleanSlug || slug)
@@ -789,7 +1215,7 @@ async function _importEpisodesForMovie(movieId, episodesData, movieDuration = ''
 
         // Map tên server → label chuẩn
         let mainLabel  = 'Vietsub';   // Mặc định
-        let embedLabel = 'Dự phòng';
+        let embedLabel = 'Vietsub dự phòng';
         if (lower.includes('thuyet-minh') || lower.includes('thuyết minh') || lower.includes('thuyet minh') || lower.includes('tm')) {
             mainLabel  = 'Thuyết minh';
             embedLabel = 'Thuyết minh dự phòng';
@@ -798,10 +1224,10 @@ async function _importEpisodesForMovie(movieId, episodesData, movieDuration = ''
             embedLabel = 'Lồng tiếng dự phòng';
         } else if (lower.includes('ban-goc') || lower.includes('bản gốc') || lower.includes('raw') || lower.includes('original')) {
             mainLabel  = 'Bản gốc';
-            embedLabel = 'Dự phòng';
+            embedLabel = 'Bản gốc dự phòng';
         }
 
-        (server.server_data || []).forEach((ep, idx) => {
+        (server.server_data || server.items || []).forEach((ep, idx) => {
             const epName = String(ep.name || (idx + 1));
             const epKey  = epName; // Dùng số tập làm key gộp
 
@@ -825,13 +1251,17 @@ async function _importEpisodesForMovie(movieId, episodesData, movieDuration = ''
             }
 
             // Gộp sources từ server này vào record (không trùng link) + gắn tên nguồn (server)
-            if (ep.link_m3u8) {
-                const already = episodeMap[epKey].sources.some(s => s.source === ep.link_m3u8);
-                if (!already) episodeMap[epKey].sources.push({ label: mainLabel, type: 'hls', source: ep.link_m3u8, server: providerName || '' });
+            const m3u8Link = ep.link_m3u8 || ep.m3u8 || '';
+            const embedLink = ep.link_embed || ep.embed || '';
+            const safeServerName = providerName === 'nguonc' || providerName === 'Nguồn C' ? 'NguonC' : providerName;
+
+            if (m3u8Link) {
+                const already = episodeMap[epKey].sources.some(s => s.source === m3u8Link);
+                if (!already) episodeMap[epKey].sources.push({ label: mainLabel, type: 'hls', source: m3u8Link, server: safeServerName || '' });
             }
-            if (ep.link_embed) {
-                const already = episodeMap[epKey].sources.some(s => s.source === ep.link_embed);
-                if (!already) episodeMap[epKey].sources.push({ label: embedLabel, type: 'embed', source: ep.link_embed, server: providerName || '' });
+            if (embedLink) {
+                const already = episodeMap[epKey].sources.some(s => s.source === embedLink);
+                if (!already) episodeMap[epKey].sources.push({ label: embedLabel, type: 'embed', source: embedLink, server: safeServerName || '' });
             }
         });
     });
@@ -875,12 +1305,28 @@ async function importSingleMovieFromApi(slug, opts = {}) {
     // Progress hiện qua panel inline, không cần overlay spinner
 
     try {
-        // 1. Lấy chi tiết phim từ API
-        if (!opts.silent) _clearImportLog(); // Chỉ xóa log khi import đơn, bulk đã clear ở đầu
+        // 1. Lấy chi tiết phim từ API (Có cơ chế tự động thử lại 1 lần nếu lỗi mạng)
+        if (!opts.silent) _clearImportLog();
         _addImportLog(`📡 Đang tải chi tiết "${slug}" từ ${provider.name}...`, 'info');
-        const res = await fetch(provider.buildDetailUrl(slug));
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const raw = await res.json();
+        
+        let res, raw;
+        try {
+            res = await fetch(provider.buildDetailUrl(slug));
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            raw = await res.json();
+        } catch (fetchErr) {
+            // Thử lại 1 lần sau 2 giây
+            _addImportLog(`⚠️ Lỗi tải "${slug}", đang thử lại sau 2s...`, 'warning');
+            await new Promise(r => setTimeout(r, 2000));
+            try {
+                res = await fetch(provider.buildDetailUrl(slug));
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                raw = await res.json();
+                _addImportLog(`✅ Thử lại thành công cho "${slug}"!`, 'success');
+            } catch (retryErr) {
+                throw new Error(`Thử lại thất bại: ${retryErr.message}`);
+            }
+        }
         const movie    = raw.movie || raw;
         // NguonC: episodes nằm trong movie.episodes thay vì raw.episodes
         const episodes = raw.episodes || movie.episodes || [];
@@ -925,10 +1371,119 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             episode_total: cTotal
         });
         if (existingId) {
+            // ★ Nếu skipMerge = true (Auto-Fill): bỏ qua ngay, đừng dùng vào gộp nguồn
+            if (opts.skipMerge) {
+                return { success: false, duplicate: true, merged: true, message: `Đã có trong DB: "${movie.name}"` };
+            }
+
             // Phim đã tồn tại → Merge nguồn mới vào episodes cũ
             const providerName = provider.name || provider.id || 'Unknown';
 
             const mergeResult = await _mergeEpisodesSources(existingId, episodes, providerName);
+
+            // ★ KIỂM TRA ẢNH POSTER / BACKGROUND CỦA PHIM ĐÃ TỒN TẠI ★
+            try {
+                const { data: existingMovie } = await supabase.from('movies')
+                    .select('poster_url, background_url')
+                    .eq('id', existingId).single();
+                if (existingMovie) {
+                    _addImportLog('🖼️ Kiểm tra ảnh poster/background phim đã tồn tại...', 'info');
+                    const [posterOk, bgOk] = await Promise.all([
+                        // Poster phải DỌC (h > w), Background phải NGANG (w > h)
+                        existingMovie.poster_url ? _getImageInfo(existingMovie.poster_url).then(info => info.ok && info.isVertical) : Promise.resolve(false),
+                        existingMovie.background_url ? _getImageInfo(existingMovie.background_url).then(info => info.ok && !info.isVertical) : Promise.resolve(false),
+                    ]);
+
+                    const needsReplace = { poster: !posterOk, background: !bgOk };
+                    if (needsReplace.poster || needsReplace.background) {
+                        if (needsReplace.poster) _addImportLog('⚠️ Ảnh poster phim cũ bị lỗi → thử lấy từ nguồn gộp...', 'warning');
+                        if (needsReplace.background) _addImportLog('⚠️ Ảnh background phim cũ bị lỗi → thử lấy từ nguồn gộp...', 'warning');
+
+                        const updateData = {};
+
+                        // ƯU TIÊN 1: Lấy ảnh từ nguồn đang gộp (đã xác nhận ĐÚNG PHIM qua check trùng lặp)
+                        const _mergerPid = provider.id || 'kkphim';
+                        const imgMerge1 = _buildApiImgUrl(movie.thumb_url, _mergerPid);
+                        const imgMerge2 = _buildApiImgUrl(movie.poster_url, _mergerPid);
+                        const _classified = await _classifyAndValidateImages(imgMerge1, imgMerge2);
+
+                        if (needsReplace.poster && _classified.poster) {
+                            updateData.poster_url = _classified.poster;
+                            needsReplace.poster = false;
+                            _addImportLog(`✅ Thay poster bằng ảnh từ nguồn gộp ${providerName}`, 'success');
+                        }
+                        if (needsReplace.background && _classified.background) {
+                            updateData.background_url = _classified.background;
+                            needsReplace.background = false;
+                            _addImportLog(`✅ Thay background bằng ảnh từ nguồn gộp ${providerName}`, 'success');
+                        }
+
+                        // ƯU TIÊN 2: Nếu nguồn gộp cũng không có ảnh chuẩn → Tìm trên TMDb/IMDb
+                        if (needsReplace.poster || needsReplace.background) {
+                            _addImportLog('🔍 Nguồn gộp không đủ ảnh chuẩn → Đang tìm trên TMDb...', 'info');
+                            const replacements = await _findReplacementImages(
+                                movie.slug, movie.name,
+                                movie.origin_name || movie.original_name || '',
+                                cYear, cText, _mergerPid, needsReplace
+                            );
+                            if (replacements.poster && needsReplace.poster) {
+                                updateData.poster_url = replacements.poster;
+                                needsReplace.poster = false;
+                            }
+                            if (replacements.background && needsReplace.background) {
+                                updateData.background_url = replacements.background;
+                                needsReplace.background = false;
+                            }
+                        }
+
+                        // VẪN thiếu → XÓA LINK ẢNH SAI + GỬI BÁO LỖI cho admin
+                        const missingMergeParts = [];
+                        if (needsReplace.poster) {
+                            updateData.poster_url = ''; // Để trống link ảnh sai
+                            missingMergeParts.push('Poster (ảnh dọc)');
+                            _addImportLog('❌ Không tìm được poster → xóa link sai, đã gửi báo lỗi.', 'error');
+                        }
+                        if (needsReplace.background) {
+                            updateData.background_url = ''; // Để trống link ảnh sai
+                            missingMergeParts.push('Background (ảnh ngang)');
+                            _addImportLog('❌ Không tìm được background → xóa link sai, đã gửi báo lỗi.', 'error');
+                        }
+
+                        // Gửi báo lỗi tự động
+                        if (missingMergeParts.length > 0) {
+                            try {
+                                const title = existingMovie.title || movie.name || 'Không rõ';
+                                await supabase.from('error_reports').insert({
+                                    movie_id: existingId,
+                                    movie_title: title,
+                                    episode_name: 'Ảnh phim',
+                                    error_type: 'missing_image',
+                                    description: `[AUTO-IMPORT] Phim "${title}" bị lỗi/thiếu ${missingMergeParts.join(' + ')}. Ảnh sai tỷ lệ hoặc hỏng link, không tìm được thay thế. Admin cần bổ sung ảnh thủ công.`,
+                                    status: 'pending',
+                                    user_name: 'Hệ thống Import',
+                                    report_count: 1,
+                                    reporters: [{ uid: 'system_import', name: 'Hệ thống Import', time: new Date().toISOString() }]
+                                });
+                                _addImportLog(`📨 Đã gửi báo lỗi thiếu ảnh cho admin.`, 'info');
+                            } catch (e) {
+                                console.warn('[AutoReport] Lỗi:', e.message);
+                            }
+                        }
+
+                        // Cập nhật DB
+                        if (Object.keys(updateData).length > 0) {
+                            await supabase.from('movies').update(updateData).eq('id', existingId);
+                            _addImportLog(`💾 Đã cập nhật ảnh phim cũ (${Object.keys(updateData).length} field)`, 'success');
+                        } else {
+                            _addImportLog('ℹ️ Không có ảnh nào cần thay đổi.', 'info');
+                        }
+                    } else {
+                        _addImportLog('✅ Ảnh poster & background phim cũ đều OK', 'success');
+                    }
+                }
+            } catch (imgErr) {
+                console.warn('[Merge Image Check] Lỗi kiểm tra ảnh:', imgErr.message);
+            }
 
             // ★ Trigger cross-fetch sang các nguồn khác (giống import mới)
             if (!opts.skipCrossFetch && mergeResult.added > 0) {
@@ -952,6 +1507,7 @@ async function importSingleMovieFromApi(slug, opts = {}) {
 
             return {
                 success: mergeResult.added > 0,
+                merged: true, // Đánh dấu là gộp nguồn, KHÔNG phải phim mới
                 movieId: existingId,
                 duplicate: mergeResult.added === 0,
                 message: mergeResult.added > 0
@@ -971,9 +1527,104 @@ async function importSingleMovieFromApi(slug, opts = {}) {
 
         // 3. Chuẩn bị URL ảnh gốc từ API (truyền providerId để dùng đúng CDN)
         const _pid = provider.id || 'kkphim';
-        const rawPoster = _buildApiImgUrl(movie.poster_url, _pid) || _buildApiImgUrl(movie.thumb_url, _pid);
-        const rawThumb  = _buildApiImgUrl(movie.thumb_url, _pid)  || rawPoster;
+        const imgRaw1 = _buildApiImgUrl(movie.thumb_url, _pid);
+        const imgRaw2 = _buildApiImgUrl(movie.poster_url, _pid);
+        
+        // Khởi tạo biến ảnh = null. CHỈ gán khi ảnh đã qua KĐ tỷ lệ chuẩn (dọc/ngang)
+        let rawPoster = null;
+        let rawThumb  = null;
         const safeSlug  = (movie.slug || slug).replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+
+        // ★ 3.5 KIỂM TRA ẢNH: Validate và phân loại poster & background tự động trước khi upload
+        _addImportLog('🖼️ Đang kiểm tra và phân loại chiều ảnh gốc...', 'info');
+        
+        const info1 = imgRaw1 ? await _getImageInfo(imgRaw1) : { ok: false };
+        const info2 = imgRaw2 ? await _getImageInfo(imgRaw2) : { ok: false };
+
+        if (!info1.ok && imgRaw1) _addImportLog('⚠️ Ảnh gốc 1 bị lỗi link / 0 byte', 'error');
+        if (!info2.ok && imgRaw2) _addImportLog('⚠️ Ảnh gốc 2 bị lỗi link / 0 byte', 'error');
+
+        let p = null, t = null;
+        if (info1.ok && info2.ok) {
+            if (info1.isVertical && !info2.isVertical) { p = imgRaw1; t = imgRaw2; }
+            else if (!info1.isVertical && info2.isVertical) { p = imgRaw2; t = imgRaw1; }
+            else { 
+                if (!info1.isVertical) {
+                    // CẢ 2 BỨC ĐỀU NẰM NGANG -> KHÔNG CÓ POSTER
+                    t = imgRaw1;
+                    _addImportLog('⚠️ Cả 2 ảnh gốc đều nằm ngang. Sẽ đi tìm Poster dọc thay thế!', 'warning');
+                } else {
+                    // CẢ 2 BỨC ĐỀU ĐỨNG DỌC -> KHÔNG CÓ BACKGROUND
+                    p = imgRaw1;
+                    _addImportLog('⚠️ Cả 2 ảnh gốc đều đứng dọc. Sẽ đi tìm Background ngang thay thế!', 'warning');
+                }
+            }
+        } else if (info1.ok) {
+            if (info1.isVertical) { p = imgRaw1; _addImportLog('⚠️ Thiếu Background ngang, sẽ đi tìm thay thế.', 'warning'); } 
+            else { t = imgRaw1; _addImportLog('⚠️ Thiếu Poster dọc, sẽ đi tìm thay thế.', 'warning'); }
+        } else if (info2.ok) {
+            if (info2.isVertical) { p = imgRaw2; _addImportLog('⚠️ Thiếu Background ngang, sẽ đi tìm thay thế.', 'warning'); } 
+            else { t = imgRaw2; _addImportLog('⚠️ Thiếu Poster dọc, sẽ đi tìm thay thế.', 'warning'); }
+        }
+        
+        const posterValid = !!p;
+        const bgValid = !!t;
+        
+        // Gán ảnh đã được phân loại chuẩn vào biến
+        if (posterValid) rawPoster = p;
+        if (bgValid) rawThumb = t;
+
+        if (posterValid) _addImportLog('✅ Ảnh poster gốc OK (đúng tỷ lệ dọc)', 'success');
+        else _addImportLog('⚠️ Ảnh poster gốc bị lỗi/thiếu → đang tìm thay thế...', 'warning');
+
+        if (bgValid) _addImportLog('✅ Ảnh background gốc OK (đúng tỷ lệ ngang)', 'success');
+        else _addImportLog('⚠️ Ảnh background gốc bị lỗi/thiếu → đang tìm thay thế...', 'warning');
+
+        // Nếu có ảnh lỗi → tìm thay thế từ nguồn gộp (đúng luật) + TMDb
+        if (!posterValid || !bgValid) {
+            const replacements = await _findReplacementImages(
+                movie.slug, movie.name,
+                movie.origin_name || movie.original_name || '',
+                cYear, cText, _pid,
+                { poster: !posterValid, background: !bgValid }
+            );
+            if (!posterValid && replacements.poster) rawPoster = replacements.poster;
+            if (!bgValid && replacements.background) rawThumb = replacements.background;
+
+            // Nếu VẪN không tìm được → ĐỂ TRỐNG + TỰ ĐỘNG BÁO LỖI cho admin
+            const missingParts = [];
+            if (!posterValid && !replacements.poster) {
+                rawPoster = null; // Để trống, không dùng ảnh sai
+                missingParts.push('Poster (ảnh dọc)');
+                _addImportLog('❌ KHÔNG tìm được poster thay thế → để trống, đã gửi báo lỗi.', 'error');
+            }
+            if (!bgValid && !replacements.background) {
+                rawThumb = null; // Để trống, không dùng ảnh sai
+                missingParts.push('Background (ảnh ngang)');
+                _addImportLog('❌ KHÔNG tìm được background thay thế → để trống, đã gửi báo lỗi.', 'error');
+            }
+
+            // Gửi báo lỗi tự động vào error_reports cho admin
+            if (missingParts.length > 0 && typeof supabase !== 'undefined') {
+                try {
+                    const movieTitle = movie.name || movie.slug || 'Không rõ';
+                    await supabase.from('error_reports').insert({
+                        movie_id: null, // Phim chưa insert vào DB nên chưa có ID
+                        movie_title: movieTitle,
+                        episode_name: 'Ảnh phim',
+                        error_type: 'missing_image',
+                        description: `[AUTO-IMPORT] Phim "${movieTitle}" thiếu ${missingParts.join(' + ')}. Không tìm được ảnh thay thế từ nguồn gộp và TMDb. Admin cần bổ sung ảnh thủ công.`,
+                        status: 'pending',
+                        user_name: 'Hệ thống Import',
+                        report_count: 1,
+                        reporters: [{ uid: 'system_import', name: 'Hệ thống Import', time: new Date().toISOString() }]
+                    });
+                    _addImportLog(`📨 Đã gửi báo lỗi thiếu ảnh "${movieTitle}" cho admin.`, 'info');
+                } catch (e) {
+                    console.warn('[AutoReport] Lỗi gửi báo lỗi ảnh:', e.message);
+                }
+            }
+        }
 
         // 4. Upload ảnh lên Cloudflare R2 (hoặc dùng URL gốc nếu tắt R2)
 
@@ -1007,9 +1658,10 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             try {
                 if (typeof searchTmdbByTitle !== 'function' || typeof getTmdbTrailer !== 'function') return null;
                 const searchTitle = movie.origin_name || movie.name || '';
-                const tmdbResult = await searchTmdbByTitle(searchTitle, movie.year);
-                if (!tmdbResult) return null;
-                return await getTmdbTrailer(tmdbResult.id, tmdbResult.media_type || 'movie');
+                const tmdbResult = await searchTmdbByTitle(searchTitle, movie.year, movie.name);
+                const tmdbId = tmdbResult ? tmdbResult.id : null;
+                const mediaType = tmdbResult ? (tmdbResult.media_type || 'movie') : 'movie';
+                return await getTmdbTrailer(tmdbId, mediaType, searchTitle, movie.year);
             } catch(e) { return null; }
         };
 
@@ -1364,20 +2016,9 @@ async function importBulkMoviesFromApi() {
     if (successCount > 0) {
         // Refresh admin lists sau khi import bulk xong
         _refreshAdminLists();
-        if (typeof sendTelegramNotify === 'function') {
-            let msg = `🎬 <b>Trạm Phim Bot</b>\n\n👤 Admin vừa Import Hàng Loạt <b>${successCount} phim mới</b>:\n\n`;
-            _bulkTelegramReports.slice(0, 15).forEach((ts, idx) => {
-                const typeStr = ts.isTrailer ? `[Trailer] ${ts.typeName}` : ts.typeName;
-                msg += `<b>${idx+1}. ${ts.title}</b> (${typeStr})\n`;
-                msg += `   📺 Tập: ${ts.currentEps} / ${ts.totalEps}\n`;
-                msg += `   💽 Bản: ${ts.versions}\n`;
-                msg += `   🌐 Nguồn: ${ts.sources}\n\n`;
-            });
-            if (_bulkTelegramReports.length > 15) {
-                msg += `<i>... và ${_bulkTelegramReports.length - 15} phim khác.</i>`;
-            }
-            sendTelegramNotify(msg);
-        }
+        await _sendTelegramInChunks(_bulkTelegramReports, (part, totalParts) => {
+            return `🎬 <b>Trạm Phim Bot</b>\n\n👤 Admin vừa Import Hàng Loạt <b>${successCount} phim mới</b> ${totalParts > 1 ? `(Phần ${part}/${totalParts})` : ''}:\n\n`;
+        }, false);
     }
     _importState.isImporting = false;
     const msg = `✅ ${successCount} thành công · 🔁 ${dupCount} đã tồn tại · ❌ ${failCount} lỗi`;
@@ -1959,7 +2600,7 @@ async function syncEpisodesForMovie(movieId, slug, provider) {
             const serverName = server.server_name || '';
             const lower = serverName.toLowerCase();
             let mainLabel = 'Vietsub';
-            let embedLabel = 'Dự phòng';
+            let embedLabel = 'Vietsub dự phòng';
             if (lower.includes('thuyet-minh') || lower.includes('thuyết minh') || lower.includes('tm')) {
                 mainLabel = 'Thuyết minh'; embedLabel = 'Thuyết minh dự phòng';
             } else if (lower.includes('long-tieng') || lower.includes('lồng tiếng') || lower.includes('lt')) {
@@ -1988,11 +2629,12 @@ async function syncEpisodesForMovie(movieId, slug, provider) {
                 }
                 const m3u8Link = ep.link_m3u8 || ep.m3u8 || '';
                 const embedLink = ep.link_embed || ep.embed || '';
+                const safeServerName = provider.id === 'nguonc' ? 'NguonC' : provider.name;
                 if (m3u8Link && !episodeMap[epName].sources.some(s => s.source === m3u8Link)) {
-                    episodeMap[epName].sources.push({ label: mainLabel, type: 'hls', source: m3u8Link });
+                    episodeMap[epName].sources.push({ label: mainLabel, type: 'hls', source: m3u8Link, server: safeServerName || '' });
                 }
                 if (embedLink && !episodeMap[epName].sources.some(s => s.source === embedLink)) {
-                    episodeMap[epName].sources.push({ label: embedLabel, type: 'embed', source: embedLink });
+                    episodeMap[epName].sources.push({ label: embedLabel, type: 'embed', source: embedLink, server: safeServerName || '' });
                 }
             });
         });
@@ -2012,6 +2654,7 @@ async function syncEpisodesForMovie(movieId, slug, provider) {
 
         // 5b. MERGE NGUỒN MỚI vào tập đã tồn tại (provider ra tập trước → provider khác ra sau → gộp source)
         let mergedCount = 0;
+        const mergedEpNames = []; // Theo dõi tên tập vừa được bổ sung video
         for (const [epNum, apiEp] of Object.entries(episodeMap)) {
             const existing = existingEpMap[epNum];
             if (!existing) continue; // Tập mới, đã insert ở bước 5a
@@ -2025,7 +2668,10 @@ async function syncEpisodesForMovie(movieId, slug, provider) {
                 const { error } = await supabase.from('episodes')
                     .update({ sources: merged, updated_at: new Date().toISOString() })
                     .eq('id', existing.id);
-                if (!error) mergedCount += newSources.length;
+                if (!error) {
+                    mergedCount += newSources.length;
+                    mergedEpNames.push(epNum);
+                }
             }
         }
 
@@ -2037,10 +2683,10 @@ async function syncEpisodesForMovie(movieId, slug, provider) {
             const qualityStr = normQuality || '1080p';
             const episodeStatus = raw.movie?.episode_current || raw.movie?.current_episode || raw.movie?.status || `Tập ${existingNumbers.size + toInsert.length}`;
             
-            // Kiểm tra xem phim đang ở trạng thái "chờ duyệt" (pending) do chỉ có trailer ko
-            // Nếu có tập mới thêm vào → tự động chuyển sang "public" (công khai)
             const { data: currentMovie } = await supabase.from('movies').select('title, type, status').eq('id', movieId).single();
-            const shouldPromote = currentMovie?.status === 'pending' && toInsert.length > 0;
+            
+            // ★ Kiểm tra xem phim đang chờ duyệt (trailer) không, NẾU ĐƯỢC THÊM NGUỒN (kể cả merge) → thăng cấp!
+            const shouldPromote = currentMovie?.status === 'pending' && totalNewWork > 0;
 
             const updatePayload = {
                 quality: qualityStr,
@@ -2050,23 +2696,28 @@ async function syncEpisodesForMovie(movieId, slug, provider) {
             if (shouldPromote) {
                 // Phim Trailer → có tập thật → tự động công khai!
                 updatePayload.status = 'public';
-                console.log(`[AutoSync] 🎬 Phim "${slug}" có tập mới → Tự động chuyển từ "chờ duyệt" sang "công khai"!`);
+                console.log(`[AutoSync] 🎬 Phim "${slug}" được bổ sung video → Tự động chuyển từ "chờ duyệt" sang "công khai"!`);
             }
             
             await supabase.from('movies').update(updatePayload).eq('id', movieId);
 
-            // ★ THÔNG BÁO CHUÔNG CHO TẬP MỚI
-            if (toInsert.length > 0 && typeof sendNotificationToAllUsers === 'function') {
-                const epNums = toInsert.map(ep => parseFloat(ep.episode_number)).filter(n => !isNaN(n)).sort((a, b) => a - b);
-                let epString = `thêm ${toInsert.length} tập mới`;
-                if (epNums.length === 1) {
-                    epString = `Tập ${epNums[0]}`;
-                } else if (epNums.length > 1) {
-                    epString = `từ Tập ${epNums[0]} đến Tập ${epNums[epNums.length - 1]}`;
+            // ★ THÔNG BÁO CHUÔNG CHO TẬP MỚI HOẶC BỔ SUNG VIDEO
+            if (totalNewWork > 0 && typeof sendNotificationToAllUsers === 'function') {
+                const typeName = currentMovie?.type === 'series' ? 'Phim bộ' : 'Phim lẻ';
+                const notifTitle = `📺 Cập nhật video [${typeName}]: ${currentMovie?.title || 'Phim'}`;
+                
+                let epString = '';
+                if (toInsert.length > 0) {
+                    const epNums = toInsert.map(ep => parseFloat(ep.episode_number)).filter(n => !isNaN(n)).sort((a, b) => a - b);
+                    if (epNums.length === 1) epString = `Tập ${epNums[0]}`;
+                    else if (epNums.length > 1) epString = `từ Tập ${epNums[0]} đến Tập ${epNums[epNums.length - 1]}`;
+                    else epString = `thêm ${toInsert.length} tập mới`;
+                } else if (mergedEpNames.length > 0) {
+                    const mergedNums = mergedEpNames.map(n => parseFloat(n)).filter(n => !isNaN(n)).sort((a,b)=>a-b);
+                    if (mergedNums.length === 1) epString = `video chính thức cho Tập ${mergedNums[0]}`;
+                    else epString = `video chính thức cho các tập`;
                 }
 
-                const typeName = currentMovie?.type === 'series' ? 'Phim bộ' : 'Phim lẻ';
-                const notifTitle = `📺 Tập mới [${typeName}]: ${currentMovie?.title || 'Phim'}`;
                 const notifMsg = `Trạm Phim vừa cập nhật ${epString} cho "${currentMovie?.title || 'Phim'}". Vào xem ngay!`;
                 sendNotificationToAllUsers(notifTitle, notifMsg, 'new_episode', { movie_id: movieId });
             }
@@ -2089,8 +2740,14 @@ async function syncEpisodesForMovie(movieId, slug, provider) {
  * Chỉ sync phim có total_episodes > 0 và số tập hiện tại < total_episodes.
  * Kiểm tra toggle bật/tắt từ localStorage trước khi chạy.
  */
-async function autoSyncEpisodesIfNeeded() {
+async function autoSyncEpisodesIfNeeded(isManual = false) {
     if (typeof supabase === 'undefined') return;
+
+    const logOut = (msg, type = 'info') => {
+        const cleanMsg = msg.replace(/^\[AutoSync\]\s*/, '');
+        console.log(`[AutoSync] ${cleanMsg}`);
+        if (isManual) _addImportLog(cleanMsg, type);
+    };
 
     // Kiểm tra toggle bật/tắt từ Supabase app_configs
     try {
@@ -2102,7 +2759,7 @@ async function autoSyncEpisodesIfNeeded() {
         // Mặc định là bật (nếu chưa có config thì xem là ON)
         const isEnabled = toggleRow?.value?.enabled !== false;
         if (!isEnabled) {
-            console.log('[AutoSync] ⏸️ Đã tắt bởi admin.');
+            logOut('⏸️ Đã tắt tự động bởi admin.', 'error');
             return;
         }
     } catch (_) {}
@@ -2118,6 +2775,18 @@ async function autoSyncEpisodesIfNeeded() {
         const saved = Number(intervalRow?.value?.hours);
         if (saved >= 1 && saved <= 720) COOLDOWN_HOURS = saved;
     } catch (_) {}
+
+    // Đọc số ngày grace period từ app_configs (admin cài), mặc định 3 ngày nếu chưa cài
+    let GRACE_PERIOD_DAYS = 3;
+    try {
+        const { data: graceRow } = await supabase
+            .from('app_configs')
+            .select('value')
+            .eq('key', 'auto_sync_grace_period_days')
+            .maybeSingle();
+        const savedGrace = Number(graceRow?.value?.days);
+        if (savedGrace >= 1 && savedGrace <= 30) GRACE_PERIOD_DAYS = savedGrace;
+    } catch (_) {}
     const CONFIG_KEY = 'last_episode_sync';
 
     try {
@@ -2132,46 +2801,81 @@ async function autoSyncEpisodesIfNeeded() {
         const hoursSinceLast = (Date.now() - lastSync) / (1000 * 60 * 60);
 
         if (hoursSinceLast < COOLDOWN_HOURS) {
-            console.log(`[AutoSync] ⏱️ Bỏ qua — lần sync cuối ${hoursSinceLast.toFixed(1)}h trước (cooldown ${COOLDOWN_HOURS}h).`);
+            logOut(`⏱️ Bỏ qua — lần sync cuối ${hoursSinceLast.toFixed(1)}h trước (cooldown ${COOLDOWN_HOURS}h).`, 'warning');
             _updateAutoSyncLastInfo(configRow?.value);
             return;
         }
 
-        console.log('[AutoSync] 🔄 Bắt đầu sync tập phim từ API...');
+        logOut('🔄 Bắt đầu sync tập phim từ API...', 'info');
 
         // 2. Kiểm tra API_PROVIDERS có sẵn không
-        if (typeof API_PROVIDERS === 'undefined') { console.warn('[AutoSync] Không tìm thấy API_PROVIDERS.'); return; }
+        if (typeof API_PROVIDERS === 'undefined') { logOut('Không tìm thấy API_PROVIDERS.', 'error'); return; }
 
-        // 3. Lấy phim bộ có api_url_backup VÀ total_episodes > 0
+        // 3. Lấy phim cần check (Phim bộ HOẶC phim đang chờ duyệt)
         const { data: movies } = await supabase
             .from('movies')
-            .select('id, title, api_url_backup, total_episodes')
-            .eq('type', 'series')
+            .select('id, title, api_url_backup, total_episodes, type, status')
+            .or('type.eq.series,status.eq.pending')
             .not('api_url_backup', 'is', null)
-            .neq('api_url_backup', '')
-            .gt('total_episodes', 0); // Chỉ phim có cài tổng số tập
+            .neq('api_url_backup', '');
 
         if (!movies?.length) {
-            console.log('[AutoSync] Không có phim bộ nào đủ điều kiện sync.');
+            logOut('Không có phim nào đủ điều kiện sync.', 'warning');
             return;
         }
 
-        // 4. Lọc: chỉ sync phim chưa đủ tập (số tập hiện có < total_episodes)
+        // 4. Lọc phim cần sync thực sự (Thêm cả phim lẻ có tập bị rỗng video)
         const moviesNeedSync = [];
         for (const movie of movies) {
-            const { count } = await supabase
+            // Lấy toàn bộ episodes của phim này để check sources
+            const { data: eps } = await supabase
                 .from('episodes')
-                .select('*', { count: 'exact', head: true })
+                .select('id, sources, created_at')
                 .eq('movie_id', movie.id);
-            const currentCount = count || 0;
-            if (currentCount < movie.total_episodes) {
+            
+            const currentCount = eps ? eps.length : 0;
+            let needsSync = false;
+            let reason = '';
+
+            // Điều kiện 1: Phim bộ chưa đủ số tập
+            if (movie.type === 'series' && movie.total_episodes > 0 && currentCount < movie.total_episodes) {
+                needsSync = true;
+                reason = `mới có ${currentCount}/${movie.total_episodes} tập`;
+            }
+
+            // Điều kiện 2: Phim đang chờ duyệt (phim trailer, cần check xem đã ra mắt chưa)
+            if (!needsSync && movie.status === 'pending') {
+                needsSync = true;
+                reason = `đang chờ duyệt (trailer)`;
+            }
+
+            // Điều kiện 3: Phim đã có tập, nhưng tập đó bị RỖNG nguồn video (0 sources, hoặc sources rỗng)
+            if (!needsSync && eps && eps.length > 0) {
+                const hasEmptySources = eps.some(ep => !ep.sources || ep.sources.length === 0 || !ep.sources.some(s => s.source));
+                if (hasEmptySources) {
+                    needsSync = true;
+                    reason = `có tập bị rỗng video`;
+                }
+            }
+
+            // Điều kiện 4: Phim đã Full tập, nhưng có tập vừa ra trong vòng grace period ngày qua (Cần quét theo dõi để lấy nguồn Server tải chậm)
+            if (!needsSync && eps && eps.length > 0) {
+                const gracePeriodAgo = Date.now() - (GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000); // Mốc GRACE_PERIOD_DAYS ngày trước
+                const hasRecentEps = eps.some(ep => ep.created_at && (new Date(ep.created_at).getTime() > gracePeriodAgo));
+                if (hasRecentEps) {
+                    needsSync = true;
+                    reason = `đang trong ${GRACE_PERIOD_DAYS} ngày ngóng chờ Nguồn dự phòng (Grace Period)`;
+                }
+            }
+
+            if (needsSync) {
                 moviesNeedSync.push({ ...movie, currentEps: currentCount });
-                console.log(`[AutoSync] Cần sync: "${movie.title}" (${currentCount}/${movie.total_episodes})`);
+                logOut(`Đưa vào hàng chờ: "${movie.title}" - Lý do: ${reason}`, 'info');
             }
         }
 
         if (!moviesNeedSync.length) {
-            console.log('[AutoSync] ✅ Tất cả phim đã đủ tập, không cần sync.');
+            logOut('✅ Tất cả phim đã đủ tập, không cần sync.', 'success');
             // Vẫn lưu timestamp để reset cooldown
             const syncData = { timestamp: Date.now(), totalAdded: 0, movieCount: 0, checkedCount: movies.length };
             await supabase.from('app_configs').upsert({ key: CONFIG_KEY, value: syncData, updated_at: new Date().toISOString() });
@@ -2182,8 +2886,14 @@ async function autoSyncEpisodesIfNeeded() {
         let totalAdded = 0;
         const syncTelegramReports = [];
 
+        if (isManual) _showImportProgress(0, moviesNeedSync.length, 'Bắt đầu quét...');
+        let doneScan = 0;
+
         // 5. Sync từng phim chưa đủ tập — QUÉT TẤT CẢ PROVIDERS CHO MỖI PHIM
         for (const movie of moviesNeedSync) {
+            doneScan++;
+            if (isManual) _showImportProgress(doneScan, moviesNeedSync.length, `Đang xử lý: ${movie.title}`);
+
             // ★ Kiểm tra tạm dừng / hủy
             if (await _checkTestPauseCancel()) { _addImportLog('🛑 Sync bị hủy giữa chừng.', 'error'); break; }
 
@@ -2194,9 +2904,50 @@ async function autoSyncEpisodesIfNeeded() {
 
             let movieTotalAdded = 0;
 
-            // Quét TẤT CẢ providers, không chỉ provider gốc
-            const providerKeys = Object.keys(API_PROVIDERS);
-            for (const key of providerKeys) {
+            // [OPTIMIZE] NHẬN DIỆN PROVIDER GỐC CỦA PHIM (dựa vào api_url_backup)
+            // Thay vì quét TẤT CẢ 3 providers gây ra 404 và làm chậm x3 lần, bộ lọc chỉ lấy nguồn khớp.
+            const targetProviders = new Set();
+            const allKeys = Object.keys(API_PROVIDERS);
+            const backupUrl = (movie.api_url_backup || '').toLowerCase();
+            
+            for (const key of allKeys) {
+                const p = API_PROVIDERS[key];
+                // Phân tích domain của API provider (VD: "https://phimapi.com" -> "phimapi.com")
+                const domain = p.baseUrl.replace(/^https?:\/\//, '').toLowerCase();
+                if (backupUrl.includes(domain)) {
+                    targetProviders.add(key);
+                }
+            }
+
+            // Thu thập thêm từ các nguồn m3u8 nếu admin từng Nạp Đa Nguồn bằng tay
+            // Query riêng episodes cho đúng phim hiện tại (KHÔNG dùng biến `eps` cũ vì nó thuộc scope bước 4)
+            const { data: movieEpsForDetect } = await supabase
+                .from('episodes')
+                .select('sources')
+                .eq('movie_id', movie.id);
+            (movieEpsForDetect || []).forEach(ep => {
+                if (ep.sources && Array.isArray(ep.sources)) {
+                    ep.sources.forEach(src => {
+                        const url = (src.source || '').toLowerCase();
+                        // Nếu là KKPhim (hay dùng phimimg.com / kkphimplayer)
+                        if (url.includes('phimimg.com') || url.includes('kkphim')) targetProviders.add('kkphim');
+                        // Nếu là OPhim (hay dùng opstream / ophim)
+                        if (url.includes('ophim') || url.includes('opstream')) targetProviders.add('ophim');
+                        // Nếu là Nguồn C (hay dùng phimmoi.net / nguonc / streamc)
+                        if (url.includes('nguonc') || url.includes('phimmoi.net') || url.includes('streamc')) targetProviders.add('nguonc');
+                    });
+                }
+            });
+
+            // Nếu không xác định được gì (hiếm), backup là quét tất cả
+            if (targetProviders.size === 0) {
+                allKeys.forEach(k => targetProviders.add(k));
+            } else {
+                const names = Array.from(targetProviders).map(k => API_PROVIDERS[k]?.name).join(', ');
+                logOut(`🎯 Phim "${movie.title}" chỉ quét các nguồn: [${names}]`, 'info');
+            }
+
+            for (const key of targetProviders) {
                 // ★ Kiểm tra tạm dừng / hủy giữa provider
                 if (await _checkTestPauseCancel()) break;
 
@@ -2205,11 +2956,15 @@ async function autoSyncEpisodesIfNeeded() {
                     const result = await syncEpisodesForMovie(movie.id, slug, provider);
                     if (result.added > 0) {
                         movieTotalAdded += result.added;
-                        console.log(`[AutoSync] ✅ "${movie.title}": thêm ${result.added} tập từ ${provider.name}`);
+                        logOut(`✅ "${movie.title}": thêm ${result.added} tập từ ${provider.name}`, 'success');
                     }
                 } catch (syncErr) {
                     // Provider không có phim này hoặc lỗi API → bỏ qua, tiếp tục provider khác
-                    console.warn(`[AutoSync] ⚠️ ${provider.name} lỗi cho "${movie.title}":`, syncErr.message);
+                    if (syncErr.message && syncErr.message.includes('404')) {
+                        console.log(`[AutoSync] ℹ️ Bỏ qua ${provider.name}: không có phim "${slug}" (HTTP 404)`);
+                    } else {
+                        logOut(`⚠️ ${provider.name} lỗi cho "${movie.title}": ${syncErr.message}`, 'warning');
+                    }
                 }
                 await new Promise(r => setTimeout(r, 300)); // Delay nhẹ tránh spam
             }
@@ -2237,20 +2992,13 @@ async function autoSyncEpisodesIfNeeded() {
         await supabase.from('app_configs').upsert({ key: CONFIG_KEY, value: syncData, updated_at: new Date().toISOString() });
         _updateAutoSyncLastInfo(syncData);
 
-        console.log(`[AutoSync] ✅ Hoàn tất: sync ${moviesNeedSync.length}/${movies.length} phim, thêm ${totalAdded} tập mới.`);
+        logOut(`✅ Hoàn tất: sync ${moviesNeedSync.length}/${movies.length} phim, thêm ${totalAdded} tập mới.`, 'done');
+        if (isManual) _showImportProgress(moviesNeedSync.length, moviesNeedSync.length, `Hoàn tất: thêm ${totalAdded} tập`);
 
         if (totalAdded > 0) {
-            if (typeof sendTelegramNotify === 'function') {
-                let msg = `🎬 <b>Trạm Phim Bot</b>\n\n🔄 Vừa Auto-Sync <b>${totalAdded} tập phim mới</b>:\n\n`;
-                syncTelegramReports.slice(0, 15).forEach((ts, idx) => {
-                    msg += `<b>${idx+1}. ${ts.title}</b>\n`;
-                    msg += `   📺 Cập nhật: +${ts.added} tập (Hiện có ${ts.current}/${ts.total})\n\n`;
-                });
-                if (syncTelegramReports.length > 15) {
-                    msg += `<i>... và ${syncTelegramReports.length - 15} phim khác.</i>`;
-                }
-                sendTelegramNotify(msg);
-            }
+            await _sendTelegramInChunks(syncTelegramReports, (part, totalParts) => {
+                return `🎬 <b>Trạm Phim Bot</b>\n\n🔄 Vừa Auto-Sync <b>${totalAdded} tập phim mới</b> ${totalParts > 1 ? `(Phần ${part}/${totalParts})` : ''}:\n\n`;
+            }, true);
         }
 
         // 7. Refresh danh sách tập — CHỈ KHI modal edit episode KHÔNG đang mở
@@ -2396,10 +3144,10 @@ async function toggleTestSyncLoop() {
         if (typeof supabase !== 'undefined') {
             await supabase.from('app_configs').upsert({ key: 'last_episode_sync', value: { timestamp: 0 }, updated_at: new Date().toISOString() });
         }
-        // Chạy sync ngay
-        if (typeof autoSyncEpisodesIfNeeded === 'function') await autoSyncEpisodesIfNeeded();
+        // Chạy sync ngay (cờ isManual = true)
+        if (typeof autoSyncEpisodesIfNeeded === 'function') await autoSyncEpisodesIfNeeded(true);
         if (!_importState.testCancelled) {
-            if (typeof showNotification === 'function') showNotification('✅ Test sync hoàn tất! Xem log F12.', 'success');
+            if (typeof showNotification === 'function') showNotification('✅ Test sync hoàn tất!', 'success');
             _addImportLog('✅ TEST SYNC HOÀN TẤT!', 'done');
         }
     } catch (e) {
@@ -2425,21 +3173,37 @@ async function saveAutoSyncInterval() {
     if (typeof supabase === 'undefined') return;
     const input = document.getElementById('autoSyncIntervalInput');
     const hours = parseInt(input?.value);
+
+    // Đọc số ngày grace period
+    const graceInput = document.getElementById('autoSyncGracePeriodInput');
+    const graceDays = parseInt(graceInput?.value) || 3;
+
     if (!hours || hours < 1 || hours > 720) {
         if (typeof showNotification === 'function') showNotification('Số giờ không hợp lệ (1 - 720h)!', 'error');
         return;
     }
+    if (graceDays < 1 || graceDays > 30) {
+        if (typeof showNotification === 'function') showNotification('Số ngày theo dõi không hợp lệ (1 - 30 ngày)!', 'error');
+        return;
+    }
     try {
-        await supabase.from('app_configs').upsert({
-            key: 'auto_sync_interval_hours',
-            value: { hours, updatedAt: new Date().toISOString() },
-            updated_at: new Date().toISOString(),
-        });
+        await supabase.from('app_configs').upsert([
+            {
+                key: 'auto_sync_interval_hours',
+                value: { hours, updatedAt: new Date().toISOString() },
+                updated_at: new Date().toISOString(),
+            },
+            {
+                key: 'auto_sync_grace_period_days',
+                value: { days: graceDays, updatedAt: new Date().toISOString() },
+                updated_at: new Date().toISOString(),
+            }
+        ]);
         if (typeof showNotification === 'function')
-            showNotification(`✅ Đã lưu: tự động sync mỗi ${hours} giờ`, 'success');
+            showNotification(`✅ Đã lưu: tự động sync mỗi ${hours} giờ, theo dõi tập mới ${graceDays} ngày`, 'success');
     } catch (err) {
-        console.error('[AutoSync] Lỗi lưu interval:', err.message);
-        if (typeof showNotification === 'function') showNotification('Lỗi khi lưu!', 'error');
+        console.error('[AutoSync] Lỗi lưu interval và ngày theo dõi:', err.message);
+        if (typeof showNotification === 'function') showNotification('Lỗi khi lưu cấu hình!', 'error');
     }
 }
 
@@ -2467,12 +3231,13 @@ function initAutoSyncToggleUI() {
     const btn = document.getElementById('btnToggleAutoSync');
     if (btn) btn.disabled = true;
 
-    // Đọc cả 3 config cùng lúc: trạng thái, lần sync cuối, và số giờ
+    // Đọc cả 4 config cùng lúc: trạng thái, lần sync cuối, số giờ, và số ngày theo dõi
     Promise.all([
         supabase.from('app_configs').select('value').eq('key', 'auto_sync_enabled').maybeSingle(),
         supabase.from('app_configs').select('value').eq('key', 'last_episode_sync').maybeSingle(),
         supabase.from('app_configs').select('value').eq('key', 'auto_sync_interval_hours').maybeSingle(),
-    ]).then(([{ data: toggleRow }, { data: syncRow }, { data: intervalRow }]) => {
+        supabase.from('app_configs').select('value').eq('key', 'auto_sync_grace_period_days').maybeSingle(),
+    ]).then(([{ data: toggleRow }, { data: syncRow }, { data: intervalRow }, { data: graceRow }]) => {
         const isEnabled = toggleRow?.value?.enabled !== false;
         _renderAutoSyncToggleBtn(isEnabled);
         if (syncRow?.value) _updateAutoSyncLastInfo(syncRow.value);
@@ -2480,6 +3245,12 @@ function initAutoSyncToggleUI() {
         const savedHours = Number(intervalRow?.value?.hours);
         const input = document.getElementById('autoSyncIntervalInput');
         if (input && savedHours >= 1) input.value = savedHours;
+
+        // Hiện số ngày theo dõi đã lưu
+        const savedGrace = Number(graceRow?.value?.days);
+        const graceInput = document.getElementById('autoSyncGracePeriodInput');
+        if (graceInput && savedGrace >= 1) graceInput.value = savedGrace;
+
         if (btn) btn.disabled = false;
     }).catch(() => {
         _renderAutoSyncToggleBtn(true);
@@ -2685,15 +3456,16 @@ async function _mergeEpisodesSources(movieId, episodesData, providerName) {
 
                 const m3u8Link = ep.link_m3u8 || ep.m3u8 || '';
                 const embedLink = ep.link_embed || ep.embed || '';
+                const safeServerName = providerName === 'nguonc' || providerName === 'Nguồn C' ? 'NguonC' : providerName;
 
                 // Push m3u8 nếu chưa có link này
                 if (m3u8Link && !currentSources.some(s => s.source === m3u8Link)) {
-                    currentSources.push({ label: mainLabel, type: 'hls', source: m3u8Link, server: providerName });
+                    currentSources.push({ label: mainLabel, type: 'hls', source: m3u8Link, server: safeServerName });
                     addedForThisEp++;
                 }
                 // Push embed nếu chưa có link này
                 if (embedLink && !currentSources.some(s => s.source === embedLink)) {
-                    currentSources.push({ label: mainLabel + ' dự phòng', type: 'embed', source: embedLink, server: providerName });
+                    currentSources.push({ label: mainLabel + ' dự phòng', type: 'embed', source: embedLink, server: safeServerName });
                     addedForThisEp++;
                 }
 
@@ -2845,12 +3617,25 @@ async function _crossFetchFromAllProviders(movieId, slug, excludeProvider, movie
                 const c1Arr = c1.split(',').map(s=>s.trim()).filter(Boolean);
                 const c2Arr = c2.split(',').map(s=>s.trim()).filter(Boolean);
                 const hasCommonCountry = c1Arr.some(c => c2.includes(c)) || c2Arr.some(c => c1.includes(c));
-                if (hasCommonCountry) matchScore++;
+                
+                if (hasCommonCountry) {
+                    matchScore++;
+                } else {
+                    _addImportLog(`⚠️ ${otherProvider.name}: Khác quốc gia hoàn toàn. Đã chặn gộp phim Remake.`, 'warning');
+                    continue;
+                }
             }
             
             // 3. Phải CÙNG NĂM
             if (extraCriteria.year && mData.year) {
-                if (Number(extraCriteria.year) === Number(mData.year)) matchScore++;
+                const eYear = Number(extraCriteria.year);
+                const iYear = Number(mData.year);
+                if (eYear === iYear) {
+                    matchScore++;
+                } else if (Math.abs(eYear - iYear) > 1) {
+                    _addImportLog(`⚠️ ${otherProvider.name}: Lệch năm phát hành (${eYear} vs ${iYear}). Đã chặn gộp.`, 'warning');
+                    continue;
+                }
             }
             
             // 4. KIỂM TRA TỔNG TẬP
@@ -3344,16 +4129,17 @@ async function _runAutoImport(force = false) {
             return;
         }
 
-        // 8. Giới hạn số phim import / lần
-        const itemsToImport = newCandidates.slice(0, MAX_PER_RUN);
-        console.log(`[AutoImport] 🚀 Sẽ import ${itemsToImport.length} phim mới (giới hạn ${MAX_PER_RUN}/lần)...`);
+        // 8. Không cắt cứng mảng, lặp đến khi đủ số lượng cài đặt
+        console.log(`[AutoImport] 🚀 Cố gắng import đạt đủ chỉ tiêu ${MAX_PER_RUN} phim mới...`);
 
         // 9. Import từng phim (tuần tự, chống trùng bằng tracking Set)
         let importedCount = 0;
         const importedSlugsThisRun = new Set(); // ★ Theo dõi slug đã import trong run này
         const telegramReports = []; // ★ Theo dõi chi tiết phim đã import cho Telegram
 
-        for (const item of itemsToImport) {
+        for (const item of newCandidates) {
+            // Khi đã Import ĐỦ số lượng chỉ tiêu cài đặt -> dừng
+            if (importedCount >= MAX_PER_RUN) break;
             // ★ Kiểm tra tạm dừng / hủy
             if (await _checkTestPauseCancel()) { _addImportLog('🛑 Import bị hủy giữa chừng.', 'error'); break; }
 
@@ -3417,20 +4203,9 @@ async function _runAutoImport(force = false) {
         if (importedCount > 0) {
             _refreshAdminLists();
             if (typeof notifyDataChange === 'function') await notifyDataChange('movies');
-            if (typeof sendTelegramNotify === 'function') {
-                let msg = `🎬 <b>Trạm Phim Bot</b>\n\n🔄 Vừa Auto-Import thành công <b>${importedCount} phim mới</b>:\n\n`;
-                telegramReports.slice(0, 15).forEach((ts, idx) => {
-                    const typeStr = ts.isTrailer ? `[Trailer] ${ts.typeName}` : ts.typeName;
-                    msg += `<b>${idx+1}. ${ts.title}</b> (${typeStr})\n`;
-                    msg += `   📺 Tập: ${ts.currentEps} / ${ts.totalEps}\n`;
-                    msg += `   💽 Bản: ${ts.versions}\n`;
-                    msg += `   🌐 Nguồn: ${ts.sources}\n\n`;
-                });
-                if (telegramReports.length > 15) {
-                    msg += `<i>... và ${telegramReports.length - 15} phim khác.</i>`;
-                }
-                sendTelegramNotify(msg);
-            }
+            await _sendTelegramInChunks(telegramReports, (part, totalParts) => {
+                return `🎬 <b>Trạm Phim Bot</b>\n\n🔄 Vừa Auto-Import thành công <b>${importedCount} phim mới</b> ${totalParts > 1 ? `(Phần ${part}/${totalParts})` : ''}:\n\n`;
+            }, false);
         }
 
     } catch (err) {
@@ -3565,7 +4340,8 @@ function initAutoImportToggleUI() {
         supabase.from('app_configs').select('value').eq('key', 'auto_import_interval_hours').maybeSingle(),
         supabase.from('app_configs').select('value').eq('key', 'auto_import_max_per_run').maybeSingle(),
         supabase.from('app_configs').select('value').eq('key', 'auto_import_target_year').maybeSingle(),
-    ]).then(([{ data: toggleRow }, { data: importRow }, { data: intervalRow }, { data: maxRow }, { data: yearRow }]) => {
+        supabase.from('app_configs').select('value').eq('key', 'auto_fill_target').maybeSingle(),
+    ]).then(([{ data: toggleRow }, { data: importRow }, { data: intervalRow }, { data: maxRow }, { data: yearRow }, { data: fillRow }]) => {
         const isEnabled = toggleRow?.value?.enabled !== false;
         _renderAutoImportToggleBtn(isEnabled);
         if (importRow?.value) _updateAutoImportLastInfo(importRow.value);
@@ -3582,6 +4358,11 @@ function initAutoImportToggleUI() {
         const savedYear = Number(yearRow?.value?.year);
         const inputY = document.getElementById('autoImportYearInput');
         if (inputY && savedYear >= 1900) inputY.value = savedYear;
+
+        // Khôi phục Auto-Fill target đã lưu
+        const savedFillTarget = Number(fillRow?.value?.target);
+        const inputFill = document.getElementById('autoFillTargetInput');
+        if (inputFill && savedFillTarget >= 1) inputFill.value = savedFillTarget;
 
         // Tải config chặn quốc gia
         _loadExcludeCountrySettings();
@@ -3729,5 +4510,342 @@ async function saveExcludeCountrySettings(showToast = true) {
     } catch (e) {
         console.warn('Lỗi lưu cấu hình chặn quốc gia', e);
         if (showToast && typeof showNotification === 'function') showNotification('Lỗi lưu cấu hình chặn quốc gia', 'error');
+    }
+}
+
+/* ================================================================
+   AUTO-FILL: Tự động quét và thêm phim cho đủ mục tiêu
+   - Admin đặt số phim MỚI cần thêm (VD: 100)
+   - Hệ thống phân trang liên tục 3 nguồn API cho đến khi đủ
+   - Có nút Tạm dừng / Hủy
+   - Áp dụng mọi quy tắc lọc hiện có (năm, quốc gia, chống trùng)
+   ================================================================ */
+
+const _autoFillState = {
+    isRunning: false,
+    isPaused: false,
+    isCancelled: false,
+    targetCount: 0,
+    importedCount: 0,
+    skippedCount: 0,
+    scannedMovies: 0,
+    currentSource: '',
+    currentPage: 0,
+    telegramReports: [],
+};
+
+/**
+ * Bắt đầu Auto-Fill: import phim mới cho đến khi đạt mục tiêu
+ */
+async function startAutoFill() {
+    if (_autoFillState.isRunning) {
+        if (typeof showNotification === 'function') showNotification('Auto-Fill đang chạy rồi!', 'warning');
+        return;
+    }
+
+    const targetInput = document.getElementById('autoFillTargetInput');
+    const target = parseInt(targetInput?.value) || 50;
+    if (target < 1 || target > 500) {
+        if (typeof showNotification === 'function') showNotification('Mục tiêu phải từ 1 - 500 phim!', 'error');
+        return;
+    }
+
+    // Reset state
+    _autoFillState.isRunning = true;
+    _autoFillState.isPaused = false;
+    _autoFillState.isCancelled = false;
+    _autoFillState.targetCount = target;
+    _autoFillState.importedCount = 0;
+    _autoFillState.skippedCount = 0;
+    _autoFillState.scannedMovies = 0;
+    _autoFillState.currentSource = '';
+    _autoFillState.currentPage = 0;
+    _autoFillState.telegramReports = [];
+
+    // UI: hiện nút Tạm dừng / Hủy, ẩn nút Bắt đầu
+    _updateAutoFillUI('running');
+
+    // Lưu mục tiêu vào DB để lần sau mở lại vẫn giữ
+    try {
+        await supabase.from('app_configs').upsert({
+            key: 'auto_fill_target',
+            value: { target, updatedAt: new Date().toISOString() },
+            updated_at: new Date().toISOString(),
+        });
+    } catch (_) {}
+
+    _addImportLog(`🚀 Auto-Fill: Bắt đầu import ${target} phim mới...`, 'info');
+
+    // Đọc cấu hình: năm mục tiêu
+    let TARGET_YEAR = new Date().getFullYear();
+    try {
+        const { data: yearRow } = await supabase.from('app_configs').select('value').eq('key', 'auto_import_target_year').maybeSingle();
+        const savedYear = Number(yearRow?.value?.year);
+        if (savedYear >= 1900 && savedYear <= 2100) TARGET_YEAR = savedYear;
+    } catch (_) {}
+
+    // ★ TỐI ƯU: Tải toàn bộ slug đã có trong DB vào bộ nhớ để skip siêu nhanh
+    _addImportLog(`📦 Đang tải danh sách phim đã có trong DB...`, 'info');
+    const existingSlugs = new Set();
+    try {
+        let from = 0;
+        const BATCH = 1000;
+        while (true) {
+            const { data: batch } = await supabase.from('movies').select('slug').range(from, from + BATCH - 1);
+            if (!batch || batch.length === 0) break;
+            batch.forEach(m => existingSlugs.add(m.slug));
+            if (batch.length < BATCH) break;
+            from += BATCH;
+        }
+    } catch (e) { console.warn('[Auto-Fill] Lỗi tải slug cache:', e.message); }
+    _addImportLog(`📦 Đã cache ${existingSlugs.size} slug từ DB. Bắt đầu quét API...`, 'info');
+
+    // Danh sách endpoint phân trang cho 3 nguồn
+    const SOURCES = [
+        {
+            name: 'KKPhim', id: 'kkphim',
+            buildUrl: (page) => `https://phimapi.com/danh-sach/phim-moi-cap-nhat?page=${page}`,
+            getItems: (data) => data.items || [],
+            getTotalPages: (data) => data.pagination?.totalPages || data.params?.pagination?.totalPages || 50,
+        },
+        {
+            name: 'OPhim', id: 'ophim',
+            buildUrl: (page) => `https://ophim1.com/danh-sach/phim-moi-cap-nhat?page=${page}`,
+            getItems: (data) => data.items || [],
+            getTotalPages: (data) => data.pagination?.totalPages || data.params?.pagination?.totalPages || 50,
+        },
+        {
+            name: 'NguonC', id: 'nguonc',
+            buildUrl: (page) => `https://phim.nguonc.com/api/films/phim-moi-cap-nhat?page=${page}`,
+            getItems: (data) => data.items || data.data || [],
+            getTotalPages: (data) => data.paginate?.total_page || 50,
+        },
+    ];
+
+    const seenSlugs = new Set(); // Chống trùng slug giữa các nguồn
+
+    // Vòng lặp chính: quét từng nguồn, phân trang liên tục
+    for (const source of SOURCES) {
+        if (_autoFillState.isCancelled) break;
+        if (_autoFillState.importedCount >= target) break;
+
+        _autoFillState.currentSource = source.name;
+        let page = 1;
+        let maxPage = 50;
+
+        while (page <= maxPage) {
+            if (_autoFillState.isCancelled) break;
+            if (_autoFillState.importedCount >= target) break;
+
+            // Kiểm tra tạm dừng
+            while (_autoFillState.isPaused && !_autoFillState.isCancelled) {
+                await new Promise(r => setTimeout(r, 1000));
+            }
+            if (_autoFillState.isCancelled) break;
+
+            _autoFillState.currentPage = page;
+            _updateAutoFillProgressUI();
+
+            try {
+                const url = source.buildUrl(page);
+                _addImportLog(`📡 [Auto-Fill] ${source.name} trang ${page}...`, 'info');
+                const res = await fetch(url);
+                if (!res.ok) {
+                    _addImportLog(`⚠️ [Auto-Fill] ${source.name} trang ${page}: HTTP ${res.status}`, 'warning');
+                    break;
+                }
+
+                const data = await res.json();
+                const items = source.getItems(data);
+
+                if (page === 1) {
+                    maxPage = Math.min(source.getTotalPages(data), 500); // Giới hạn 500 trang
+                }
+
+                if (!items || items.length === 0) {
+                    _addImportLog(`📡 [Auto-Fill] ${source.name}: Hết phim ở trang ${page}`, 'info');
+                    break;
+                }
+
+                for (const item of items) {
+                    if (_autoFillState.isCancelled) break;
+                    if (_autoFillState.importedCount >= target) break;
+
+                    while (_autoFillState.isPaused && !_autoFillState.isCancelled) {
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                    if (_autoFillState.isCancelled) break;
+
+                    const slug = item.slug;
+                    if (!slug || seenSlugs.has(slug)) continue;
+                    seenSlugs.add(slug);
+                    _autoFillState.scannedMovies++;
+
+                    // Lọc theo năm
+                    let movieYear = Number(item.year) || 0;
+                    if (!movieYear && item.category) {
+                        for (const key of Object.keys(item.category)) {
+                            const group = item.category[key];
+                            if (group?.group?.name === 'Năm' && group.list?.length) {
+                                movieYear = parseInt(group.list[0].name) || 0;
+                            }
+                        }
+                    }
+                    if (movieYear !== TARGET_YEAR) {
+                        _autoFillState.skippedCount++;
+                        continue;
+                    }
+
+                    // ★ Kiểm tra DB trùng (dùng cache Set — siêu nhanh)
+                    if (existingSlugs.has(slug)) { _autoFillState.skippedCount++; continue; }
+
+                    // Import phim
+                    try {
+                        const result = await importSingleMovieFromApi(slug, { silent: true, providerId: source.id, skipMerge: true });
+                        if (result.success && !result.merged) {
+                            // Chỉ đếm phim THẬT SỰ MỚI (ko đếm gộp nguồn vào phim cũ)
+                            _autoFillState.importedCount++;
+                            existingSlugs.add(slug);
+                            _addImportLog(`✅ [Auto-Fill] ${_autoFillState.importedCount}/${target}: "${item.name || slug}"`, 'success');
+                            if (result.telegramStats) _autoFillState.telegramReports.push(result.telegramStats);
+                            _updateAutoFillProgressUI();
+                        } else if (result.merged) {
+                            // Phim đã có trong DB, chỉ gộp thêm link → không đếm
+                            _autoFillState.skippedCount++;
+                            existingSlugs.add(slug);
+                        } else if (result.duplicate) {
+                            _autoFillState.skippedCount++;
+                        } else {
+                            _addImportLog(`❌ [Auto-Fill] Lỗi "${slug}": ${result.message}`, 'error');
+                        }
+                    } catch (e) {
+                        _addImportLog(`❌ [Auto-Fill] Exception "${slug}": ${e.message}`, 'error');
+                    }
+
+                    await new Promise(r => setTimeout(r, 600));
+                }
+
+            } catch (err) {
+                _addImportLog(`⚠️ [Auto-Fill] Lỗi ${source.name} trang ${page}: ${err.message}`, 'warning');
+            }
+
+            page++;
+            await new Promise(r => setTimeout(r, 300));
+        }
+    }
+
+    // === Hoàn tất ===
+    const wasCancelled = _autoFillState.isCancelled;
+    const imported = _autoFillState.importedCount;
+
+    _addImportLog(wasCancelled
+        ? `🛑 Auto-Fill bị hủy. Đã import ${imported}/${target} phim.`
+        : `🎉 Auto-Fill hoàn tất! Đã import ${imported}/${target} phim mới.`,
+        wasCancelled ? 'warning' : 'done'
+    );
+
+    if (imported > 0) {
+        _refreshAdminLists();
+        if (typeof notifyDataChange === 'function') await notifyDataChange('movies');
+
+        await _sendTelegramInChunks(_autoFillState.telegramReports, (part, totalParts) => {
+            return `🚀 <b>Trạm Phim Bot</b>\n\n🤖 Auto-Fill ${wasCancelled ? 'bị hủy' : 'hoàn tất'}! Đã import <b>${imported}/${target}</b> phim mới ${totalParts > 1 ? `(Phần ${part}/${totalParts})` : ''}:\n\n`;
+        }, false);
+    }
+
+    _autoFillState.isRunning = false;
+    _autoFillState.isPaused = false;
+    _autoFillState.isCancelled = false;
+    _updateAutoFillUI('idle');
+
+    if (typeof showNotification === 'function') {
+        showNotification(
+            wasCancelled ? `🛑 Auto-Fill đã hủy (${imported} phim)` : `🎉 Auto-Fill xong! Đã thêm ${imported} phim mới`,
+            wasCancelled ? 'warning' : 'success'
+        );
+    }
+}
+
+/** Tạm dừng / Tiếp tục Auto-Fill */
+function pauseAutoFill() {
+    if (!_autoFillState.isRunning) return;
+    _autoFillState.isPaused = !_autoFillState.isPaused;
+    const btn = document.getElementById('btnPauseAutoFill');
+    if (btn) {
+        if (_autoFillState.isPaused) {
+            btn.innerHTML = '<i class="fas fa-play"></i> Tiếp tục';
+            btn.style.background = 'rgba(34,197,94,0.15)';
+            btn.style.borderColor = 'rgba(34,197,94,0.5)';
+            btn.style.color = '#22c55e';
+            _addImportLog('⏸️ Auto-Fill đã tạm dừng.', 'warning');
+        } else {
+            btn.innerHTML = '<i class="fas fa-pause"></i> Tạm dừng';
+            btn.style.background = 'rgba(251,191,36,0.1)';
+            btn.style.borderColor = 'rgba(251,191,36,0.5)';
+            btn.style.color = '#fbbf24';
+            _addImportLog('▶️ Auto-Fill đã tiếp tục!', 'info');
+        }
+    }
+}
+
+/** Hủy Auto-Fill ngay lập tức */
+function cancelAutoFill() {
+    if (!_autoFillState.isRunning) return;
+    _autoFillState.isCancelled = true;
+    _autoFillState.isPaused = false;
+    _addImportLog('🛑 Đang hủy Auto-Fill...', 'error');
+}
+
+/** Cập nhật UI trạng thái Auto-Fill */
+function _updateAutoFillUI(state) {
+    const btnStart = document.getElementById('btnStartAutoFill');
+    const btnPause = document.getElementById('btnPauseAutoFill');
+    const btnCancel = document.getElementById('btnCancelAutoFill');
+    const progressWrap = document.getElementById('autoFillProgressWrap');
+    const targetInput = document.getElementById('autoFillTargetInput');
+
+    if (state === 'running') {
+        if (btnStart) btnStart.style.display = 'none';
+        if (btnPause) { btnPause.style.display = ''; btnPause.innerHTML = '<i class="fas fa-pause"></i> Tạm dừng'; }
+        if (btnCancel) btnCancel.style.display = '';
+        if (progressWrap) progressWrap.style.display = 'flex';
+        if (targetInput) targetInput.disabled = true;
+    } else {
+        if (btnStart) btnStart.style.display = '';
+        if (btnPause) btnPause.style.display = 'none';
+        if (btnCancel) btnCancel.style.display = 'none';
+        if (targetInput) targetInput.disabled = false;
+        if (_autoFillState.importedCount === 0 && progressWrap) progressWrap.style.display = 'none';
+    }
+}
+
+/** Cập nhật thanh progress realtime */
+function _updateAutoFillProgressUI() {
+    const bar = document.getElementById('autoFillProgressBar');
+    const text = document.getElementById('autoFillProgressText');
+    const { importedCount, targetCount, currentSource, currentPage } = _autoFillState;
+    const pct = targetCount > 0 ? Math.min(Math.round((importedCount / targetCount) * 100), 100) : 0;
+    if (bar) bar.style.width = pct + '%';
+    if (text) text.textContent = `${importedCount}/${targetCount} (${currentSource} T.${currentPage})`;
+}
+
+/** Lưu số lượng phim Auto-Fill vào DB */
+async function saveAutoFillTarget() {
+    if (typeof supabase === 'undefined') return;
+    const input = document.getElementById('autoFillTargetInput');
+    const target = parseInt(input?.value);
+    if (!target || target < 1 || target > 500) {
+        if (typeof showNotification === 'function') showNotification('Số phim phải từ 1 - 500!', 'error');
+        return;
+    }
+    try {
+        await supabase.from('app_configs').upsert({
+            key: 'auto_fill_target',
+            value: { target, updatedAt: new Date().toISOString() },
+            updated_at: new Date().toISOString(),
+        });
+        if (typeof showNotification === 'function') showNotification(`✅ Đã lưu: Auto-Fill ${target} phim`, 'success');
+    } catch (e) {
+        if (typeof showNotification === 'function') showNotification('Lỗi khi lưu!', 'error');
     }
 }

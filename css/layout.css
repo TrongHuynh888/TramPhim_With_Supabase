@@ -334,6 +334,10 @@
   z-index: 10;
   background: var(--bg-primary); /* Đảm bảo nền liền mạch giữa các section */
 }
+/* PC: Nâng section lên khi có popup hover — tránh bị section khác che */
+.section:has(.movie-card-wrapper:hover) {
+  z-index: 100;
+}
 
 .section-header {
   display: flex;
@@ -369,13 +373,14 @@
 /* Phim Nổi Bật — Wrapper cuộn ngang */
 .featured-scroll-wrapper {
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: clip; /* FIX: dùng clip thay hidden để popup không bị cắt dọc */
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Ẩn thanh cuộn Firefox */
   cursor: grab;
   /* Padding trên/dưới tạo khoảng trống cho popup hiển thị đầy đủ */
-  padding: 50px 40px 220px;
-  margin-top: -50px;
+  /* Tăng padding-top lên 180px để popup không bị cắt mí trên */
+  padding: 180px 40px 220px;
+  margin-top: -180px;
   margin-bottom: -220px;
 }
 .featured-scroll-wrapper:active {
@@ -1219,9 +1224,35 @@
 
 /* Responsive Mobile */
 @media (max-width: 768px) {
-    .center-controls-overlay { gap: 25px; }
-    .play-btn-large { width: 55px; height: 55px; font-size: 22px; }
-    .skip-btn { width: 38px; height: 38px; font-size: 15px; }
+    .center-controls-overlay { gap: 15px; } /* Thu khoảng cách nút tua giữa màn hình */
+    .play-btn-large { width: 50px; height: 50px; font-size: 20px; }
+    .skip-btn { width: 34px; height: 34px; font-size: 14px; }
+    
+    /* Thu gọn thanh điều khiển phía dưới */
+    .custom-video-controls {
+        padding: 10px 8px 5px; /* Giảm padding trên dưới */
+        gap: 5px; /* Giảm gap giữa time, slider và toolbar */
+    }
+    .controls-left, .controls-right, .controls-center {
+        gap: 8px; /* Các icon gần lại */
+    }
+    .control-btn {
+        width: 25px; /* Rút diện tích nút */
+        height: 25px;
+        font-size: 15px; /* Thay vì 18px */
+    }
+    .control-btn.skip-btn-small {
+        width: 32px; /* Tua 10s có text+svg nên rộng hơn chút */
+    }
+    .skip-label {
+        font-size: 10px !important; /* Gọn chữ 10s lại */
+    }
+    .time-display, .time-current, .time-duration {
+        font-size: 11px; /* Nhỏ gọn thời gian text */
+    }
+    .volume-container {
+        width: 25px; /* Box volume cũng cần thu tương tự nút control-btn */
+    }
 }
 /* --- CENTER CONTROLS OVERLAY END --- */
 
