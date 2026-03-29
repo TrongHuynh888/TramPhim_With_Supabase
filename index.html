@@ -101,9 +101,34 @@
         </button>
 
         <!-- Logo -->
-        <a href="javascript:void(0)" class="nav-logo" onclick="showPage('home')">
-          <img src="images/logoTramPhim.png" alt="Trạm Phim" class="logo-img" />
+        <a href="javascript:void(0)" class="nav-logo" onclick="showPage('home')" style="text-decoration: none;">
+          <div class="brand-logo-container">
+            <div class="brand-icon-wrapper">
+              <i class="fas fa-subway brand-train-icon"></i>
+              <i class="fas fa-play brand-play-icon"></i>
+            </div>
+            <div class="brand-text-column">
+              <span class="brand-text-new">Trạm Phim</span>
+              <span class="brand-slogan">Trạm dừng chân của những mọt phim</span>
+            </div>
+          </div>
         </a>
+
+        <!-- Thanh Tìm Kiếm Header -->
+        <div class="nav-search-container" id="navSearchContainer">
+          <i class="fas fa-search search-icon"></i>
+          <input type="text" id="navSearchInput" placeholder="Tìm kiếm phim, diễn viên" autocomplete="off">
+          <button class="clear-search-btn hidden" id="clearNavSearch" onclick="clearNavSearchInput()" title="Xóa">
+            <i class="fas fa-times"></i>
+          </button>
+          
+          <div class="nav-search-dropdown hidden" id="navSearchDropdown">
+            <div class="nav-search-header">Danh sách phim</div>
+            <ul id="navSearchList" class="nav-search-list">
+              <!-- Render logic JS -->
+            </ul>
+          </div>
+        </div>
 
         <!-- Navigation Menu -->
         <div class="nav-menu" id="navMenu">
@@ -178,7 +203,7 @@
         </div>
 
         <!-- Theme + Wallet (nhóm phụ - nằm giữa menu và auth) -->
-        <div class="nav-utilities" style="display: flex; align-items: center;">
+        <div class="nav-utilities" style="display: flex; align-items: center; gap: 12px;">
           <!-- Notification Bell Wrapper -->
           <div class="notification-wrapper">
             <button
@@ -221,7 +246,6 @@
             id="themeToggle"
             onclick="toggleTheme()"
             title="Đổi giao diện"
-            style="margin-right: 10px;"
           >
             <i class="fas fa-moon" id="themeIcon"></i>
           </button>
@@ -231,14 +255,13 @@
             class="btn wallet-btn"
             id="walletBtn"
             onclick="connectWallet()"
-            style="margin-right: 10px;"
           >
             <i class="fas fa-wallet"></i>
             <span class="wallet-btn-text">Kết nối ví</span>
           </button>
 
           <!-- Auth Button (ngay sau Wallet) -->
-          <div id="authContainer" style="position: relative; display: flex; align-items: center; flex-shrink: 0; margin-left: 2px;">
+          <div id="authContainer" style="position: relative; display: flex; align-items: center; flex-shrink: 0;">
             <button
               class="btn btn-primary hidden"
               id="loginBtn"
@@ -1080,6 +1103,42 @@
 
       <div class="footer-bottom">
         <p>&copy; 2026 Trạm Phim. All rights reserved.</p>
+      </div>
+
+      <!-- Watermark Background Logo (Nét mảnh, chìm trong hình nền footer) -->
+      <style>
+        /* Giảm chiều cao dư thừa của Footer */
+        .footer { position: relative; overflow: hidden; padding-top: 40px !important; }
+        .footer-content { padding-bottom: 25px !important; margin-bottom: 0 !important; }
+        .footer-bottom { padding: 15px 0 !important; border-top: none !important; }
+
+        .footer-watermark-logo {
+          position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+          z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center;
+          opacity: 1; 
+        }
+        .bg-watermark-train { font-size: 440px; -webkit-text-stroke: 1.5px rgba(255,255,255,0.06); -webkit-text-fill-color: transparent !important; color: transparent !important; }
+        
+        .bg-watermark-play { 
+          position: absolute; font-size: 105px; top: 43%; left: 50%; transform: translate(-50%, -50%);
+          -webkit-text-stroke: 1.5px rgba(255,255,255,0.06); 
+          -webkit-text-fill-color: var(--bg-secondary) !important; /* Dùng nền thứ cấp che đi bụng bị rỗng */
+          color: var(--bg-secondary) !important;
+        }
+
+        [data-theme="light"] .bg-watermark-train { -webkit-text-stroke-color: rgba(0,0,0,0.18); }
+        [data-theme="light"] .bg-watermark-play { 
+            -webkit-text-stroke-color: rgba(0,0,0,0.18);
+            -webkit-text-fill-color: var(--bg-primary) !important; 
+            color: var(--bg-primary) !important;
+        }
+        
+        /* Chỉnh z-index các phần tử footer lướt lên trên khối nền */
+        .footer-content, .footer-bottom { position: relative; z-index: 2; }
+      </style>
+      <div class="footer-watermark-logo">
+        <i class="fas fa-subway bg-watermark-train"></i>
+        <i class="fas fa-play bg-watermark-play"></i>
       </div>
     </footer>
     

@@ -3479,10 +3479,10 @@ body.has-pseudo-fullscreen::-webkit-scrollbar {
   text-shadow: none;
 }
 [data-theme="light"] .site-marquee-close {
-  background: rgba(0, 0, 0, 0.08);
-  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.3) !important;
+  color: #fff !important;
 }
 [data-theme="light"] .site-marquee-close:hover {
-  background: rgba(0, 0, 0, 0.15);
-  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.5) !important;
+  color: #fff !important;
 }
