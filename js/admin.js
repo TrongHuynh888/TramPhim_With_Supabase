@@ -2094,12 +2094,14 @@ async function fetchMovieFromAPI() {
              posterUrl = `${cdnDomain}/${posterUrl.replace(/^\//, "")}`;
         }
 
-        document.getElementById("moviePoster").value = thumbUrl;
-        document.getElementById("movieBackground").value = posterUrl;
+        // poster_url từ API = ảnh dọc → dùng làm Poster
+        // thumb_url từ API = ảnh ngang → dùng làm Background/Nền
+        document.getElementById("moviePoster").value = posterUrl;
+        document.getElementById("movieBackground").value = thumbUrl;
         
         // Gán preview luôn cho sinh động
-        window.updateImagePreview(thumbUrl, 'posterPreview');
-        window.updateImagePreview(posterUrl, 'bgPreview');
+        window.updateImagePreview(posterUrl, 'posterPreview');
+        window.updateImagePreview(thumbUrl, 'bgPreview');
 
         // --- 3. FILL MÔ TẢ & CHẤT LƯỢNG ---
         let contentDesc = movieData.content || "";
