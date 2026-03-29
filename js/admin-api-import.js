@@ -815,9 +815,32 @@ async function _checkMovieExistsBySlug(slug, extra = null) {
     ];
     
     try {
+        // ★ LỚP 2: Check trực tiếp bằng cột slug UNIQUE trước (nhanh nhất, O(1) index lookup)
+        const { data: slugMatch } = await supabase.from('movies')
+            .select('id')
+            .eq('slug', shortSlug)
+            .maybeSingle();
+        if (slugMatch) {
+            console.log(`[SmartDetection] ✅ Trùng slug UNIQUE: "${shortSlug}" → ID: ${slugMatch.id}`);
+            return slugMatch.id;
+        }
+
+        // ★ LỚP 3: Check bằng tmdb_id (khóa quốc tế, chính xác nhất)
+        if (extra && extra.tmdb_id) {
+            const { data: tmdbMatch } = await supabase.from('movies')
+                .select('id')
+                .eq('tmdb_id', extra.tmdb_id)
+                .maybeSingle();
+            if (tmdbMatch) {
+                console.log(`[SmartDetection] ✅ Trùng tmdb_id: ${extra.tmdb_id} → ID: ${tmdbMatch.id}`);
+                return tmdbMatch.id;
+            }
+        }
+
+        // Lớp cũ: Dò theo api_url_backup + tên phim (fallback cho phim cũ chưa có slug/tmdb_id)
         const orFilter = possibleUrls.map(u => `api_url_backup.eq."${u}"`).join(',');
         
-        let q = supabase.from('movies').select('id, title, origin_title, type, country_id, countries(name), year, total_episodes, api_url_backup');
+        let q = supabase.from('movies').select('id, title, origin_title, type, country_id, countries(name), year, total_episodes, api_url_backup, slug, tmdb_id');
         
         let nameFilters = [];
         if (extra && extra.origin_name && extra.name) {
@@ -853,8 +876,8 @@ async function _checkMovieExistsBySlug(slug, extra = null) {
                 let matchScore = 0; 
                 let nameOrSlugMatched = false;
                 
-                // Kiểm tra trùng Slug ngắn
-                const dbShortSlug = dbm.api_url_backup ? dbm.api_url_backup.replace(/.*\/(phim|film)\//, '').split('?')[0].replace(/\/$/, '') : '';
+                // Kiểm tra trùng Slug ngắn (từ api_url_backup hoặc cột slug)
+                const dbShortSlug = dbm.slug || (dbm.api_url_backup ? dbm.api_url_backup.replace(/.*\/(phim|film)\//, '').split('?')[0].replace(/\/$/, '') : '');
                 if (dbShortSlug === shortSlug) nameOrSlugMatched = true;
                 
                 // Kiểm tra trùng Tên
@@ -925,12 +948,11 @@ async function _checkMovieExistsBySlug(slug, extra = null) {
                 }
 
                 // Luật 3/5 (Tên/Slug bắt buộc + ít nhất 2 tiêu chí phụ)
-                // Vì nhiều đài (như NguonC) thường thiếu Năm hoặc Số Tập trong kết quả search, nên 3/5 kết hợp lệnh `return false` (cấm duyệt nếu rớt vòng chặn) là chuẩn.
                 return matchScore >= 3;
             });
             
             if (validMatch) {
-                console.log(`[SmartDetection] Tìm thấy phim trùng khớp 4/5 hoặc URL. Gộp vào ID: ${validMatch.id}`);
+                console.log(`[SmartDetection] Tìm thấy phim trùng khớp 3/5 hoặc URL. Gộp vào ID: ${validMatch.id}`);
                 return validMatch.id;
             }
         }
@@ -1657,31 +1679,35 @@ async function importSingleMovieFromApi(slug, opts = {}) {
         _addImportLog('🎭 Đang xử lý diễn viên, điểm IMDb & trailer TMDb...', 'info');
         const actorNames = (movie.actor || []).slice(0, 20); // Giới hạn 20 diễn viên
         
-        // Wrap hàm lấy trailer TMDb để an toàn (không lỗi ngắt import)
-        const fetchTrailerSafe = async () => {
+        // Wrap hàm lấy trailer TMDb + tmdb_id để an toàn (không lỗi ngắt import)
+        // ★ LỚP 3: Trả về cả tmdb_id để lưu vào DB làm khóa chống trùng quốc tế
+        const fetchTmdbInfoSafe = async () => {
             try {
-                if (typeof searchTmdbByTitle !== 'function' || typeof getTmdbTrailer !== 'function') return null;
+                if (typeof searchTmdbByTitle !== 'function' || typeof getTmdbTrailer !== 'function') return { trailerKey: null, tmdbId: null };
                 const searchTitle = movie.origin_name || movie.name || '';
                 const tmdbResult = await searchTmdbByTitle(searchTitle, movie.year, movie.name);
                 const tmdbId = tmdbResult ? tmdbResult.id : null;
                 const mediaType = tmdbResult ? (tmdbResult.media_type || 'movie') : 'movie';
-                return await getTmdbTrailer(tmdbId, mediaType, searchTitle, movie.year);
-            } catch(e) { return null; }
+                const trailerKey = await getTmdbTrailer(tmdbId, mediaType, searchTitle, movie.year);
+                return { trailerKey, tmdbId };
+            } catch(e) { return { trailerKey: null, tmdbId: null }; }
         };
 
-        const [castData, imdbRating, tmdbTrailerKey] = await Promise.all([
+        const [castData, imdbRating, tmdbInfo] = await Promise.all([
             _resolveActorsForImport(actorNames),
             // Sử dụng hàm Global trong utils.js hỗ trợ Cơ chế Tự Dụng Pool Khi Quá Tải
             _fetchImdbRatingGlobal(movie.origin_name || movie.name || '', movie.year),
-            fetchTrailerSafe() // Tự động lấy trailer
+            fetchTmdbInfoSafe() // Tự động lấy trailer + tmdb_id
         ]);
+        const tmdbTrailerKey = tmdbInfo.trailerKey;
+        const tmdbId = tmdbInfo.tmdbId; // ★ TMDb ID để lưu vào DB
 
         // 8. Build movieData - theo đúng whitelist bảng movies Supabase
-        // whitelist: id, title, origin_title, poster_url, background_url, description,
+        // whitelist: id, slug, title, origin_title, poster_url, background_url, description,
         //   year, type, duration, quality, status, age_limit, series_id, price, rating,
-        //   total_episodes, api_url_backup, cast_data, tags, versions, category_id, country_id,
-        //   created_at, updated_at, view_count, tmdb_trailer_key
-        const movieId = `${safeSlug}-${Date.now().toString().slice(-6)}`;
+        //   tmdb_id, total_episodes, api_url_backup, cast_data, tags, versions, category_id, country_id,
+        //   created_at, updated_at, tmdb_trailer_key
+        let movieId = `${safeSlug}-${Date.now().toString().slice(-6)}`; // Dùng let vì có thể bị thay đổi bởi upsert
 
 
         // Tính total_episodes: ưu tiên từ API, fallback theo type
@@ -1737,6 +1763,7 @@ async function importSingleMovieFromApi(slug, opts = {}) {
 
         const movieData = {
             id:             movieId,
+            slug:           safeSlug, // ★ LỚP 2: Lưu slug vào cột UNIQUE để DB chặn trùng
             title:          movie.name || 'Không rõ',
             origin_title:   movie.origin_name || movie.origin_title || '',
             poster_url:     posterUrl,
@@ -1752,6 +1779,7 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             price:          0,
             rating:         0,
             imdb_rating:    imdbRating, // Điểm IMDb thật từ OMDB API
+            tmdb_id:        tmdbId || null, // ★ LỚP 3: TMDb ID quốc tế, chống trùng chính xác nhất
             view_count:     undefined, // Đã xóa cột, không gửi lên DB
             total_episodes: totalEps,
             duration:       parsedDuration,
@@ -1769,14 +1797,15 @@ async function importSingleMovieFromApi(slug, opts = {}) {
         };
 
         // Lọc whitelist - chỉ gửi field có trong bảng movies Supabase
+        // ★ Thêm 'slug' và 'tmdb_id' vào whitelist cho Lớp 2 & 3
         const _WHITELIST = [
-            'id', 'title', 'origin_title', 'poster_url', 'background_url', 'description',
+            'id', 'slug', 'title', 'origin_title', 'poster_url', 'background_url', 'description',
             'year', 'type', 'duration', 'quality', 'status', 'age_limit', 'series_id',
-            'price', 'rating', 'imdb_rating', 'total_episodes', 'api_url_backup', 'cast_data', 'tags',
+            'price', 'rating', 'imdb_rating', 'tmdb_id', 'total_episodes', 'api_url_backup', 'cast_data', 'tags',
             'versions', 'category_ids', 'country_id', 'part', 'tmdb_trailer_key',
             'created_at', 'updated_at',
         ];
-        const _NUM_FIELDS = ['year', 'price', 'rating', 'imdb_rating', 'total_episodes'];
+        const _NUM_FIELDS = ['year', 'price', 'rating', 'imdb_rating', 'tmdb_id', 'total_episodes'];
         const finalMovieData = {};
         _WHITELIST.forEach(k => {
             if (movieData[k] !== undefined) {
@@ -1789,15 +1818,33 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             }
         });
 
-        // 9. Insert phim vào Supabase
+        // 9. ★ LỚP 2: UPSERT phim vào Supabase (thay vì insert)
+        // Dùng slug làm conflict key → nếu trùng slug thì CẬP NHẬT thay vì tạo phim mới trùng
+        // Đây là lưới an toàn cuối cùng ở cấp DB, sau tất cả các lớp check JS
 
-        _addImportLog(`💾 Đang lưu "${movie.name}" vào database...`, 'info');
-        const { error: insertErr } = await supabase.from('movies').insert(finalMovieData);
+        _addImportLog(`💾 Đang lưu "${movie.name}" vào database (upsert trên slug)...`, 'info');
+        const { data: upsertData, error: insertErr } = await supabase
+            .from('movies')
+            .upsert(finalMovieData, { 
+                onConflict: 'slug',
+                ignoreDuplicates: false // Cho phép cập nhật nếu trùng slug
+            })
+            .select('id')
+            .single();
         if (insertErr) throw new Error(insertErr.message);
+        
+        // Nếu upsert trả về ID khác movieId → phim đã tồn tại, đã được cập nhật thay vì tạo mới
+        const wasExisting = upsertData && upsertData.id !== movieId;
+        if (wasExisting) {
+            _addImportLog(`⚠️ Phim đã tồn tại trong DB (slug trùng). Đã cập nhật thay vì tạo mới.`, 'warning');
+            // ★ Quan trọng: reassign movieId để import tập phim + notification dùng đúng ID
+            movieId = upsertData.id;
+        }
         _addImportLog('✅ Đã lưu phim vào database thành công!', 'success');
 
-        // ★ Tự động đẩy thông báo chuông (hệ thống) cho tất cả users (cả Trailer và Phim đầy đủ)
-        if (typeof sendNotificationToAllUsers === 'function') {
+        // ★ Tự động đẩy thông báo chuông (hệ thống) cho tất cả users
+        // Chỉ gửi khi phim MỚI thật sự, không gửi khi upsert cập nhật phim cũ (tránh spam)
+        if (!wasExisting && typeof sendNotificationToAllUsers === 'function') {
             const isTrailer = finalMovieData.status === 'pending';
             const typeName = finalMovieData.type === 'series' ? 'Phim bộ' : 'Phim lẻ';
             

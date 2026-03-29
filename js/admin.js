@@ -1537,6 +1537,137 @@ window.goToMovieFromError = function(movieTitle, movieId) {
         }
     }, 300);
 };
+
+// ============================================================
+// LỌC PHIM TRÙNG LẶP (DUPLICATE DETECTION)
+// ============================================================
+let _isDuplicateFilterActive = false;
+
+/**
+ * Toggle chế độ lọc phim trùng lặp
+ * Khi bật: chỉ hiển thị các nhóm phim bị trùng nhau
+ * Khi tắt: quay về danh sách bình thường
+ */
+function toggleDuplicateMoviesFilter() {
+    _isDuplicateFilterActive = !_isDuplicateFilterActive;
+    const btn = document.getElementById('btnFilterDuplicates');
+    
+    if (_isDuplicateFilterActive) {
+        if (btn) {
+            btn.style.background = 'rgba(255, 152, 0, 0.4)';
+            btn.style.borderColor = '#ff9800';
+            btn.innerHTML = '<i class="fas fa-clone"></i> Đang lọc trùng <i class="fas fa-times-circle" style="margin-left: 4px;"></i>';
+        }
+        showNotification('🔍 Đang quét phim trùng lặp...', 'info');
+        
+        const duplicates = _findDuplicateMovies(allAdminMovies || []);
+        
+        if (duplicates.length === 0) {
+            showNotification('✅ Không tìm thấy phim trùng lặp nào!', 'success');
+            _isDuplicateFilterActive = false;
+            if (btn) {
+                btn.style.background = 'rgba(255, 152, 0, 0.15)';
+                btn.style.borderColor = 'rgba(255, 152, 0, 0.35)';
+                btn.innerHTML = '<i class="fas fa-clone"></i> Lọc phim trùng';
+            }
+            return;
+        }
+        
+        showNotification('⚠️ Tìm thấy ' + duplicates.length + ' phim nằm trong nhóm trùng lặp!', 'warning');
+        currentAdminMoviePage = 1;
+        renderAdminMoviesList(duplicates);
+        updateAdminMovieStats(duplicates);
+    } else {
+        if (btn) {
+            btn.style.background = 'rgba(255, 152, 0, 0.15)';
+            btn.style.borderColor = 'rgba(255, 152, 0, 0.35)';
+            btn.innerHTML = '<i class="fas fa-clone"></i> Lọc phim trùng';
+        }
+        filterAdminMovies();
+    }
+}
+
+/**
+ * Tìm các phim trùng lặp trong danh sách
+ * Tiêu chí: origin_title+year, title+year, slug gốc (bỏ timestamp)
+ * @returns {Array} Mảng các phim nằm trong nhóm trùng, sắp theo tên
+ */
+function _findDuplicateMovies(movies) {
+    if (!movies || movies.length === 0) return [];
+    
+    // Chuẩn hóa tên: bỏ dấu, lowercase, xóa ký tự đặc biệt
+    var normalize = function(str) {
+        if (!str) return '';
+        return str.toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+            .replace(/[^a-z0-9\s]/g, '')
+            .replace(/\s+/g, ' ').trim();
+    };
+    
+    // Lấy slug gốc từ ID (bỏ phần timestamp cuối: "-123456")
+    var getBaseSlug = function(id) {
+        if (!id) return '';
+        return id.replace(/-\d{6,}$/, '').trim();
+    };
+    
+    // Map nhóm trùng: key → Set<movieIndex>
+    var groupMap = {};
+    
+    movies.forEach(function(m, idx) {
+        var year = Number(m.year) || 0;
+        var originTitle = normalize(m.originTitle || m.origin_title || '');
+        var title = normalize(m.title || '');
+        var baseSlug = getBaseSlug(m.id);
+        
+        // Key 1: origin_title + year (chính xác nhất)
+        if (originTitle && year) {
+            var key1 = 'origin:' + originTitle + '|' + year;
+            if (!groupMap[key1]) groupMap[key1] = [];
+            groupMap[key1].push(idx);
+        }
+        
+        // Key 2: title + year
+        if (title && year) {
+            var key2 = 'title:' + title + '|' + year;
+            if (!groupMap[key2]) groupMap[key2] = [];
+            groupMap[key2].push(idx);
+        }
+        
+        // Key 3: slug gốc (bỏ timestamp)
+        if (baseSlug) {
+            var key3 = 'slug:' + baseSlug;
+            if (!groupMap[key3]) groupMap[key3] = [];
+            groupMap[key3].push(idx);
+        }
+    });
+    
+    // Lọc ra các nhóm có >= 2 phim (là trùng)
+    var duplicateIndices = {};
+    Object.keys(groupMap).forEach(function(key) {
+        var indices = groupMap[key];
+        if (indices.length >= 2) {
+            indices.forEach(function(idx) { duplicateIndices[idx] = true; });
+        }
+    });
+    
+    // Trả về mảng phim trùng, sắp xếp theo title
+    var duplicates = Object.keys(duplicateIndices)
+        .map(function(idx) { return movies[Number(idx)]; })
+        .sort(function(a, b) {
+            var tA = normalize(a.title || '');
+            var tB = normalize(b.title || '');
+            if (tA !== tB) return tA.localeCompare(tB);
+            // Cùng tên → sắp theo ngày tạo (cũ trước, mới sau)
+            var dA = new Date(a.created_at || a.createdAt || 0).getTime();
+            var dB = new Date(b.created_at || b.createdAt || 0).getTime();
+            return dA - dB;
+        });
+    
+    console.log('[DuplicateDetection] Tìm thấy ' + duplicates.length + ' phim trùng');
+    return duplicates;
+}
+
 /**
  * Lọc danh sách phim (Admin)
  */
@@ -1547,6 +1678,16 @@ function filterAdminMovies(skipPageReset = false) {
   const categorySelect = document.getElementById("adminFilterMovieCategory");
   const countrySelect = document.getElementById("adminFilterCountry");
   const sortSelect = document.getElementById("adminSortMovies");
+  // Nếu đang ở chế độ lọc trùng, tự tắt khi admin thay đổi bộ lọc khác
+  if (_isDuplicateFilterActive) {
+      _isDuplicateFilterActive = false;
+      const btn = document.getElementById('btnFilterDuplicates');
+      if (btn) {
+          btn.style.background = 'rgba(255, 152, 0, 0.15)';
+          btn.style.borderColor = 'rgba(255, 152, 0, 0.35)';
+          btn.innerHTML = '<i class="fas fa-clone"></i> Lọc phim trùng';
+      }
+  }
   
   // Reset về trang 1 khi người dùng lọc — KHÔNG reset khi changeAdminMoviePage gọi
   if (!skipPageReset && typeof currentAdminMoviePage !== 'undefined') {
@@ -2580,9 +2721,9 @@ async function handleMovieSubmit(event) {
 
     // --- [FIX] CHUẨN HÓA DỮ LIỆU TRƯỚC KHI GỬI LÊN SUPABASE ---
     const whitelist = [
-        'id', 'title', 'origin_title', 'poster_url', 'background_url', 'description', 
+        'id', 'slug', 'title', 'origin_title', 'poster_url', 'background_url', 'description', 
         'year', 'type', 'duration', 'quality', 'status', 'age_limit', 'series_id', 
-        'price', 'rating', 'total_episodes', 'api_url_backup', 'cast_data', 'tags', 
+        'price', 'rating', 'tmdb_id', 'total_episodes', 'api_url_backup', 'cast_data', 'tags', 
         'versions', 'category_ids', 'country_id', 'created_at', 'updated_at'
     ];
 
@@ -2646,6 +2787,10 @@ async function handleMovieSubmit(event) {
 
             finalMovieData.rating = 0;
             
+            // ★ LỚP 2: Tự sinh slug cho phim thêm thủ công (chống trùng cấp DB)
+            if (!finalMovieData.slug) {
+                finalMovieData.slug = generateSeriesIdFromTitle(movieData.title) || finalMovieData.id;
+            }
 
             const { error } = await supabase.from('movies').insert(finalMovieData);
             if (error) {
@@ -2840,8 +2985,31 @@ async function deleteMovie(movieId) {
     showNotification("Đã xóa phim và dọn dẹp ảnh R2 (nếu có)!", "success");
     notifyDataChange("movies"); 
 
-    if (typeof loadMovies === 'function') await loadMovies();
-    await loadAdminMovies();
+    // ★ Nếu đang ở chế độ lọc phim trùng → chỉ bỏ phim vừa xóa, giữ danh sách lọc
+    if (_isDuplicateFilterActive) {
+        // Xóa phim khỏi mảng cache local (không cần reload toàn bộ từ DB)
+        allAdminMovies = (allAdminMovies || []).filter(m => m.id !== movieId);
+        // Re-scan danh sách trùng từ mảng đã cập nhật
+        const duplicates = _findDuplicateMovies(allAdminMovies);
+        if (duplicates.length === 0) {
+            showNotification('✅ Đã xóa hết phim trùng! Quay về danh sách bình thường.', 'success');
+            _isDuplicateFilterActive = false;
+            const btn = document.getElementById('btnFilterDuplicates');
+            if (btn) {
+                btn.style.background = 'rgba(255, 152, 0, 0.15)';
+                btn.style.borderColor = 'rgba(255, 152, 0, 0.35)';
+                btn.innerHTML = '<i class="fas fa-clone"></i> Lọc phim trùng';
+            }
+            filterAdminMovies();
+        } else {
+            renderAdminMoviesList(duplicates);
+            updateAdminMovieStats(duplicates);
+        }
+        if (typeof loadMovies === 'function') loadMovies(); // Cập nhật frontend
+    } else {
+        if (typeof loadMovies === 'function') await loadMovies();
+        await loadAdminMovies();
+    }
   } catch (error) {
     console.error("Lỗi xóa phim Supabase:", error);
     showNotification("Không thể xóa phim!", "error");
