@@ -134,7 +134,7 @@ function renderTrailersTable(dataToRender) {
                     <button class="btn btn-sm btn-primary" onclick="openTrailerEditModal('${movie.id}', \`${escapeHtml(movie.tmdb_trailer_key || '')}\`, \`${escapeHtml(movie.title)}\`, \`${escapeHtml(movie.origin_title || '')}\`, '${movie.year}')" title="Chỉnh sửa Trailer">
                         <i class="fas fa-edit"></i>
                     </button>
-                    ${hasKey ? `<a href="https://youtube.com/watch?v=${movie.tmdb_trailer_key}" target="_blank" class="btn btn-sm" style="background: rgba(255,255,255,0.1);"><i class="fas fa-external-link-alt"></i></a>` : ''}
+                    ${hasKey && typeof parseTrailerSource === 'function' ? `<a href="${parseTrailerSource(movie.tmdb_trailer_key)?.externalUrl || '#'}" target="_blank" class="btn btn-sm" style="background: rgba(255,255,255,0.1);" title="Mở xem ngoài"><i class="fas fa-external-link-alt"></i></a>` : ''}
                 </td>
             </tr>
         `;
@@ -182,7 +182,7 @@ function openTrailerEditModal(id, key, name, origin_name, year) {
 }
 
 /**
- * Tiện ích: Render Iframe xem trước khi user nhập key Youtube
+ * Tiện ích: Render Iframe xem trước — hỗ trợ YouTube, Vimeo, và URL trực tiếp
  */
 function previewAdminTrailer() {
     let key = document.getElementById('trailerEditInput').value.trim();
@@ -195,7 +195,17 @@ function previewAdminTrailer() {
         return;
     }
 
-    // Nếu user nhập full link Youtube, lọc lấy ID
+    // Dùng parseTrailerSource (từ tmdb.js) để nhận diện nguồn và tạo embed URL
+    if (typeof parseTrailerSource === 'function') {
+        const source = parseTrailerSource(key);
+        if (source && source.embedUrl) {
+            iframe.src = source.embedUrl;
+            previewDiv.style.display = 'block';
+            return;
+        }
+    }
+
+    // Fallback: nếu parseTrailerSource chưa load, xử lý cơ bản
     if (key.includes('youtube.com/watch?v=')) {
         key = key.split('v=')[1].split('&')[0];
         document.getElementById('trailerEditInput').value = key;
@@ -204,7 +214,7 @@ function previewAdminTrailer() {
         document.getElementById('trailerEditInput').value = key;
     }
 
-    if (key.length === 11 || key.length > 5) { // YT ID usually 11 chars
+    if (key.length >= 5) {
         iframe.src = `https://www.youtube.com/embed/${key}`;
         previewDiv.style.display = 'block';
     } else {
@@ -232,8 +242,8 @@ async function autoFetchAdminTrailer() {
             const tmdbId = tmdbResult ? tmdbResult.id : null;
             const mediaType = tmdbResult ? (tmdbResult.media_type || 'movie') : 'movie';
             
-            // getTmdbTrailer đã tích hợp sẵn fallback Kino/Invidious bên trong nó
-            const trailerKey = await getTmdbTrailer(tmdbId, mediaType, title, year);
+            // getTmdbTrailer hỗ trợ YouTube + Vimeo từ TMDb
+            const trailerKey = await getTmdbTrailer(tmdbId, mediaType, originTitle || viTitle, year);
             if (trailerKey) {
                 document.getElementById('trailerEditInput').value = trailerKey;
                 previewAdminTrailer();

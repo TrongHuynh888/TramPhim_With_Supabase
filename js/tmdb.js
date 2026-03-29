@@ -152,11 +152,11 @@ async function getTmdbDetails(tmdbId, mediaType = 'movie') {
 }
 
 /**
- * Lấy trailer YouTube từ TMDb (Bao gồm fallback KinoCheck & Invidious)
+ * Lấy trailer từ TMDb (hỗ trợ YouTube + Vimeo)
  * @param {number} tmdbId
  * @param {string} mediaType
- * @param {string} movieTitle - Tên phim để fallback Invidious
- * @param {number|string} movieYear - Năm để fallback Invidious
+ * @param {string} movieTitle - Tên phim (để log)
+ * @param {number|string} movieYear - Năm (để log)
  * @returns {string|null} - YouTube key của trailer hoặc null
  */
 async function getTmdbTrailer(tmdbId, mediaType = 'movie', movieTitle = '', movieYear = '') {
@@ -188,13 +188,18 @@ async function getTmdbTrailer(tmdbId, mediaType = 'movie', movieTitle = '', movi
                 });
             }
 
+            // Ưu tiên: YouTube Official Trailer > YouTube Trailer > Vimeo Trailer > YouTube Teaser > Vimeo Teaser > Bất kỳ video nào
             const trailer = videos.find(v => v.site === 'YouTube' && v.type === 'Trailer' && v.official)
                 || videos.find(v => v.site === 'YouTube' && v.type === 'Trailer')
+                || videos.find(v => v.site === 'Vimeo' && v.type === 'Trailer')
                 || videos.find(v => v.site === 'YouTube' && v.type === 'Teaser')
-                || videos.find(v => v.site === 'YouTube');
+                || videos.find(v => v.site === 'Vimeo' && v.type === 'Teaser')
+                || videos.find(v => v.site === 'YouTube')
+                || videos.find(v => v.site === 'Vimeo');
 
             if (trailer && trailer.key) {
-                trailerKey = trailer.key;
+                // Nếu là Vimeo → lưu theo format "vimeo:{id}" để phân biệt với YouTube ID
+                trailerKey = trailer.site === 'Vimeo' ? `vimeo:${trailer.key}` : trailer.key;
             }
         } catch (e) {
             console.warn('[TMDb] Lỗi lấy trailer:', e.message);
@@ -207,8 +212,9 @@ async function getTmdbTrailer(tmdbId, mediaType = 'movie', movieTitle = '', movi
         return trailerKey;
     }
 
-    if (typeof _addImportLog === 'function') _addImportLog(`❌ Không tìm được Trailer trên TMDb.`, 'error');
-    if (typeof _trailerBulkLog === 'function' && typeof _bulkScanTrailerRunning !== 'undefined' && _bulkScanTrailerRunning) _trailerBulkLog(`❌ Không tìm được Trailer trên TMDb.`);
+    // Invidious fallback đã bị loại bỏ vì tất cả instances đều block CORS từ browser
+    if (typeof _addImportLog === 'function') _addImportLog(`❌ Không tìm được Trailer trên TMDb (phim này chưa có video trên TMDb).`, 'error');
+    if (typeof _trailerBulkLog === 'function' && typeof _bulkScanTrailerRunning !== 'undefined' && _bulkScanTrailerRunning) _trailerBulkLog(`❌ Không có trailer trên TMDb.`);
     return null;
 }
 
@@ -493,15 +499,92 @@ function _logAutoFixToDb(movieId, fallbackUrl, type) {
 }
 
 /**
- * Hiện modal trailer YouTube
- * @param {string} youtubeKey - YouTube video key
+ * Phân tích trailer key/URL để xác định loại nguồn và tạo embed URL
+ * Hỗ trợ: YouTube ID, vimeo:{id}, full YouTube URL, full Vimeo URL, URL trực tiếp
+ * @param {string} trailerValue - Giá trị trailer từ DB
+ * @returns {{ type: string, embedUrl: string, externalUrl: string }}
+ */
+function parseTrailerSource(trailerValue) {
+    if (!trailerValue) return null;
+    const val = trailerValue.trim();
+
+    // 1. Format "vimeo:{id}" (lưu từ TMDb)
+    if (val.startsWith('vimeo:')) {
+        const vimeoId = val.replace('vimeo:', '');
+        return {
+            type: 'vimeo',
+            embedUrl: `https://player.vimeo.com/video/${vimeoId}?autoplay=1`,
+            externalUrl: `https://vimeo.com/${vimeoId}`
+        };
+    }
+
+    // 2. Full URL Vimeo (user nhập thủ công)
+    if (val.includes('vimeo.com/')) {
+        const vimeoMatch = val.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+        if (vimeoMatch) {
+            return {
+                type: 'vimeo',
+                embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1`,
+                externalUrl: `https://vimeo.com/${vimeoMatch[1]}`
+            };
+        }
+    }
+
+    // 3. Full URL YouTube (user nhập thủ công)
+    if (val.includes('youtube.com/watch?v=')) {
+        const ytId = val.split('v=')[1].split('&')[0];
+        return {
+            type: 'youtube',
+            embedUrl: `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0`,
+            externalUrl: `https://youtube.com/watch?v=${ytId}`
+        };
+    }
+    if (val.includes('youtu.be/')) {
+        const ytId = val.split('youtu.be/')[1].split('?')[0];
+        return {
+            type: 'youtube',
+            embedUrl: `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0`,
+            externalUrl: `https://youtube.com/watch?v=${ytId}`
+        };
+    }
+
+    // 4. Full URL khác (mp4, m3u8, hoặc bất kỳ embed link)
+    if (val.startsWith('http://') || val.startsWith('https://')) {
+        return {
+            type: 'url',
+            embedUrl: val,
+            externalUrl: val
+        };
+    }
+
+    // 5. Mặc định: YouTube ID (11 ký tự hoặc tương đương)
+    return {
+        type: 'youtube',
+        embedUrl: `https://www.youtube.com/embed/${val}?autoplay=1&rel=0`,
+        externalUrl: `https://youtube.com/watch?v=${val}`
+    };
+}
+
+/**
+ * Hiện modal trailer đa nguồn (YouTube / Vimeo / URL trực tiếp)
+ * @param {string} trailerValue - YouTube key, vimeo:{id}, hoặc full URL
  * @param {string} movieTitle - Tên phim để hiển thị trong modal
  */
-function showTrailerModal(youtubeKey, movieTitle) {
-    if (!youtubeKey) {
+function showTrailerModal(trailerValue, movieTitle) {
+    if (!trailerValue) {
         showNotification('Không tìm thấy trailer cho phim này!', 'warning');
         return;
     }
+
+    const source = parseTrailerSource(trailerValue);
+    if (!source) {
+        showNotification('Định dạng trailer không hợp lệ!', 'error');
+        return;
+    }
+
+    // Icon theo loại nguồn
+    const iconMap = { youtube: 'fab fa-youtube', vimeo: 'fab fa-vimeo-v', url: 'fas fa-play-circle' };
+    const icon = iconMap[source.type] || 'fas fa-play-circle';
 
     // Kiểm tra modal đã có chưa, nếu chưa thì tạo mới
     let modal = document.getElementById('tmdbTrailerModal');
@@ -512,7 +595,7 @@ function showTrailerModal(youtubeKey, movieTitle) {
         modal.innerHTML = `
             <div class="tmdb-trailer-container">
                 <div class="tmdb-trailer-header">
-                    <h3 class="tmdb-trailer-title"><i class="fab fa-youtube"></i> <span id="tmdbTrailerTitle"></span></h3>
+                    <h3 class="tmdb-trailer-title"><i id="tmdbTrailerIcon" class="${icon}"></i> <span id="tmdbTrailerTitle"></span></h3>
                     <button class="tmdb-trailer-close" onclick="closeTrailerModal()" title="Đóng">
                         <i class="fas fa-times"></i>
                     </button>
@@ -536,9 +619,11 @@ function showTrailerModal(youtubeKey, movieTitle) {
 
     // Điền nội dung
     const titleEl = document.getElementById('tmdbTrailerTitle');
+    const iconEl = document.getElementById('tmdbTrailerIcon');
     const iframe = document.getElementById('tmdbTrailerIframe');
     if (titleEl) titleEl.textContent = `Trailer - ${movieTitle}`;
-    if (iframe) iframe.src = `https://www.youtube.com/embed/${youtubeKey}?autoplay=1&rel=0`;
+    if (iconEl) iconEl.className = icon;
+    if (iframe) iframe.src = source.embedUrl;
 
     // Hiện modal
     modal.classList.add('active');
@@ -605,7 +690,7 @@ async function bulkScanTmdbTrailers() {
     }
     const key = getTmdbKey();
     if (!key) { 
-        showNotification('Chưa cấu hình TMDb API Key. Sẽ chỉ sử dụng nguồn dự phòng (Invidious) để quét Trailer!', 'info'); 
+        showNotification('Chưa cấu hình TMDb API Key. Không thể quét Trailer!', 'warning'); 
     }
     if (!window.supabase) { showNotification('Chưa có Supabase!', 'error'); return; }
 
@@ -647,7 +732,7 @@ async function bulkScanTmdbTrailers() {
             const tmdbId = tmdbResult ? tmdbResult.id : null;
             const mediaType = tmdbResult ? (tmdbResult.media_type || 'movie') : 'movie';
 
-            // Lấy trailer key (getTmdbTrailer đã có tính năng tự fallback sang Invidious nếu tmdbId rỗng)
+            // Lấy trailer key từ TMDb (YouTube hoặc Vimeo)
             const trailerKey = await getTmdbTrailer(tmdbId, mediaType, searchTitle, movie.year);
             if (trailerKey) {
                 // Lưu trực tiếp vào bảng movies

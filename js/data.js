@@ -346,7 +346,7 @@ function normalizeMovieData(movie) {
     movie.ageLimit = movie.ageLimit || movie.age_limit || "";
     movie.countryId = movie.countryId || movie.country_id || "";
     movie.imdbRating = movie.imdbRating || movie.imdb_rating || null;
-    movie.tmdb_trailer_key = movie.tmdb_trailer_key || null; // TMDb trailer YouTube key (bulk scan)
+    movie.tmdb_trailer_key = movie.tmdb_trailer_key || null; // Trailer key (YouTube ID / vimeo:ID / full URL)
     
     // --- ĐỒNG BỘ SỐ TẬP HIỆN CÓ ---
     // Tính toán từ mảng episodes nếu có (kết quả của join hoặc cache)

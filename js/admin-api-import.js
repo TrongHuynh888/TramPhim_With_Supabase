@@ -765,14 +765,12 @@ function _detectProviderFromUrl(url) {
  * @param {array}  episodes - Mảng episodes từ API
  */
 function _isTrailerOnly(movie, episodes) {
-    // 1. episode_current chứa "Trailer" → chắc chắn chỉ có trailer
-    const epCurrent = (movie.episode_current || movie.current_episode || '').toLowerCase().trim();
-    if (epCurrent.includes('trailer')) return true;
-
-    // 2. Không có episodes hoặc episodes rỗng → coi như trailer
+    // 1. Không có episodes hoặc episodes rỗng → coi như trailer
     if (!episodes || episodes.length === 0) return true;
 
-    // 3. Kiểm tra xem có ít nhất 1 tập có link m3u8 hoặc embed thực sự không
+    // 2. Kiểm tra xem có ít nhất 1 tập có link m3u8 hoặc embed thực sự không
+    //    → ƯU TIÊN KIỂM TRA LINK THẬT TRƯỚC, bất kể episode_current ghi gì
+    //    (Nhiều API ghi episode_current="Trailer" nhưng episodes vẫn có link video thật)
     let hasRealEp = false;
     for (const srv of episodes) {
         const items = srv.server_data || srv.items || [];
@@ -783,10 +781,16 @@ function _isTrailerOnly(movie, episodes) {
         }
         if (hasRealEp) break;
     }
-    // Không có tập nào có link thực → coi như trailer
-    if (!hasRealEp) return true;
 
-    return false;
+    // Nếu CÓ ít nhất 1 tập có link video thật → KHÔNG PHẢI trailer only
+    if (hasRealEp) return false;
+
+    // 3. Không có link thật + episode_current chứa "Trailer" → chắc chắn chỉ có trailer
+    const epCurrent = (movie.episode_current || movie.current_episode || '').toLowerCase().trim();
+    if (epCurrent.includes('trailer')) return true;
+
+    // 4. Không có tập nào có link thực → coi như trailer
+    return true;
 }
 
 
