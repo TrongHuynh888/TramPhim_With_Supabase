@@ -30,7 +30,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 100px; /* Fixed height optimized */
+  height: 70px; /* Fixed height optimized - Reduced for search bar */
 }
 /* --- Logo & Menu --- */
 .nav-logo {
@@ -40,12 +40,12 @@
   position: relative;
   z-index: 1001; 
   max-width: max-content;
-  margin-right: 30px; 
+  margin-right: 20px; 
   padding: 0; /* Remove padding to allow flex center */
   height: 100%; /* Full height to align items */
 }
 .nav-logo .logo-img {
-  height: 80px; /* Increased size to 80px */
+  height: 45px; /* Reduced from 80px */
   width: auto;
   object-fit: contain;
   max-width: 250px; 
@@ -72,7 +72,8 @@
 .nav-link {
   color: var(--text-secondary);
   font-weight: 500;
-  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: 13px; /* Reduced font size to fit more items */
+  padding: 8px 12px;
   border-radius: var(--border-radius-sm);
   transition: all var(--transition-fast);
   position: relative;
@@ -145,10 +146,151 @@
   overflow: hidden;
 }
 
+/* ============================================
+   NAV SEARCH (MỚI)
+   ============================================ */
+.nav-search-container {
+  flex: 1;
+  max-width: 300px; /* Nhỏ gọn hơn bình thường */
+  position: relative;
+  margin: 0 15px;
+  display: flex;
+  align-items: center;
+  background: rgba(20, 20, 30, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px !important; 
+  padding: 0 16px;
+  height: 44px;
+  transition: all 0.3s ease;
+}
+.nav-search-container:hover {
+  background: rgba(30, 30, 45, 0.8);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.nav-search-container:focus-within {
+  background: #151520;
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  max-width: 340px; /* Dài thêm 1 ít khi focus */
+}
+.nav-search-container input {
+  width: 100%;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  color: #fff !important;
+  padding: 0 35px 0 35px; /* Giữ chỗ trống cho 2 bên nút */
+  font-size: 0.95rem;
+}
+.nav-search-container input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+}
+.nav-search-container:focus-within input::placeholder {
+  opacity: 0.3;
+}
+.nav-search-container .search-icon {
+  position: absolute;
+  left: 15px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 15px;
+  pointer-events: none;
+  transition: color 0.3s;
+}
+.nav-search-container:focus-within .search-icon {
+  color: #fff;
+}
+.nav-search-container .clear-search-btn {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  padding: 5px;
+  font-size: 14px;
+  transition: color 0.3s;
+}
+.nav-search-container .clear-search-btn:hover {
+  color: #fff;
+}
+.nav-search-dropdown {
+  position: absolute;
+  top: calc(100% + 15px);
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px 0;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+  z-index: 2005;
+  max-height: 480px;
+  overflow-y: auto;
+}
+[data-theme="light"] .nav-search-dropdown {
+  background: var(--bg-primary);
+}
+.nav-search-header {
+  padding: 5px 15px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+.nav-search-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.nav-search-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+  text-decoration: none;
+}
+.nav-search-item:hover {
+  background: var(--bg-glass);
+}
+.nav-search-item img {
+  width: 45px;
+  height: 65px;
+  border-radius: 6px;
+  object-fit: cover;
+  margin-right: 15px;
+}
+.nav-search-info {
+  flex: 1;
+  min-width: 0;
+}
+.nav-search-info h4 {
+  margin: 0 0 5px 0;
+  font-size: 14px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-search-info p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.nav-search-noresult {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+
 /* Notification Bell Button - Viá»n trÃ²n giá»ng theme-toggle */
 .notification-btn {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: transparent;
   border: 2px solid var(--border-color);
@@ -157,7 +299,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-lg);
+  font-size: 1.1rem; /* Giảm cỡ icon khỏi chật */
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -171,7 +313,6 @@
   position: relative;
   display: flex;
   align-items: center;
-  margin-right: 15px;
   z-index: 5001;
 }
 
@@ -179,19 +320,21 @@
 .notification-badge {
   display: none;
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: -2px;
+  right: -4px;
   background: #e50914;
   color: white;
-  border-radius: 50%;
-  padding: 2px 6px;
-  font-size: 10px;
+  border-radius: 10px;
+  padding: 2px 4px;
+  font-size: 9px;
+
+    width: 32px;
   font-weight: bold;
-  box-shadow: 0 0 8px rgba(229, 9, 20, 0.6);
+  box-shadow: 0 0 6px rgba(229, 9, 20, 0.6);
   pointer-events: none;
-  min-width: 18px;
+  min-width: 14px;
   text-align: center;
-  line-height: 1.4;
+  line-height: 1.2;
 }
 
 /* Dropdown thÃ´ng bÃ¡o */
@@ -447,15 +590,15 @@
 /* Theme Toggle & Mobile Menu */
 .theme-toggle,
 .mobile-menu-toggle {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: transparent;
   color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-lg);
+  font-size: 1.1rem;
   cursor: pointer;
   border: none;
   transition: all var(--transition-fast);
@@ -492,6 +635,11 @@
   text-decoration: none;
   position: relative;
   overflow: hidden;
+}
+
+.wallet-btn {
+  padding: 8px 16px !important;
+  font-size: 0.9rem !important;
 }
 
 .btn:hover {
@@ -869,6 +1017,8 @@
 
 .match-badge i {
   font-size: 9px;
+
+    width: 32px;
 }
 .movie-card-static .card-body {
   padding: 10px;
@@ -1099,7 +1249,7 @@
 /* TiÃªu Äá» tá»± do co giÃ£n */
 .popup-title-new {
   font-family: "Montserrat", sans-serif; /* Äáº£m báº£o font tháº³ng */
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   margin-bottom: 10px;
   color: var(--accent-primary); /* MÃ u chá»§ Äáº¡o web */
@@ -1869,7 +2019,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 16px;
   cursor: pointer;
   transform: scale(0.8);
   transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -2919,12 +3069,12 @@
   position: fixed;
   bottom: 25px;
   right: 25px;
-  width: 70px;
-  height: 70px;
+  width: 50px;
+  height: 50px;
   background: #ffffff;
   color: #000000;
   border: none;
-  border-radius: 18px;
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2953,16 +3103,20 @@ body.modal-open .scroll-top-btn {
 }
 
 .scroll-top-btn i {
-  font-size: 24px;
-  margin-bottom: 4px;
+  font-size: 16px;
+  margin-bottom: 2px;
 }
 
 .scroll-top-btn span {
-  font-family: 'Montserrat', sans-serif;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-  line-height: 1;
+  font-family: 'Roboto', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0px;
+  line-height: 1.2;
+  width: 36px;
+  text-align: center;
+  white-space: normal;
+  word-wrap: break-word;
   text-transform: uppercase;
 }
 
@@ -2981,15 +3135,17 @@ body.modal-open .scroll-top-btn {
   .scroll-top-btn {
     bottom: 20px;
     right: 20px;
-    width: 60px;
-    height: 60px;
-    border-radius: 15px;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
   }
   .scroll-top-btn i {
-    font-size: 18px;
+    font-size: 16px;
   }
   .scroll-top-btn span {
     font-size: 9px;
+
+    width: 32px;
   }
 }
 
@@ -3727,6 +3883,37 @@ body.modal-open .scroll-top-btn {
 }
 
 /* --- Ã tÃ¬m kiáº¿m & Bá» lá»c (Trang Kho Phim) --- */
+/* --- Ô Tìm Kiếm Header --- */
+[data-theme="light"] .nav-search-container {
+  background: rgba(0, 0, 0, 0.04) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+[data-theme="light"] .nav-search-container:hover {
+  background: rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(0, 0, 0, 0.2) !important;
+}
+[data-theme="light"] .nav-search-container:focus-within {
+  background: #fff !important;
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .nav-search-container input {
+  color: #111 !important;
+}
+[data-theme="light"] .nav-search-container input::placeholder {
+  color: rgba(0, 0, 0, 0.4) !important;
+}
+[data-theme="light"] .nav-search-container .search-icon,
+[data-theme="light"] .nav-search-container .clear-search-btn {
+  color: rgba(0, 0, 0, 0.5) !important;
+}
+[data-theme="light"] .nav-search-container:focus-within .search-icon {
+  color: var(--accent-primary) !important;
+}
+[data-theme="light"] .nav-search-container .clear-search-btn:hover {
+  color: #111 !important;
+}
+
 [data-theme="light"] .search-box {
   background: #fff !important;
   border-color: var(--border-color) !important;
@@ -4703,4 +4890,111 @@ body.modal-open .scroll-top-btn {
 .episode-badge-trailer {
   background: linear-gradient(135deg, #7f8c8d, #95a5a6);
   color: #fff;
+}
+
+@media (max-width: 992px) {
+    .nav-search-container {
+        display: none !important;
+    }
+}
+
+/* =========================================
+   TEXT LOGO - TRẠM PHIM 
+   ========================================= */
+.brand-logo-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Inter', sans-serif;
+  text-decoration: none;
+  transition: transform 0.3s ease;
+}
+.brand-logo-container:hover {
+  transform: scale(1.03);
+}
+.brand-icon {
+  font-size: 26px;
+  color: var(--accent-primary);
+  filter: drop-shadow(0 0 8px rgba(229, 9, 20, 0.4));
+  margin-top: 2px;
+}
+.brand-text {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+  display: flex;
+  align-items: baseline;
+}
+.brand-highlight {
+  color: var(--accent-primary);
+  font-weight: 900;
+}
+
+[data-theme="light"] .brand-text {
+  color: #111111;
+}
+
+/* NEW TRAIN LOGO */
+.brand-icon-wrapper { position: relative; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+.brand-train-icon { font-size: 38px; color: #a382e6; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); z-index: 1; }
+.brand-play-icon { position: absolute; top: 48%; left: 50%; transform: translate(-50%, -50%); font-size: 13px; color: #221836; z-index: 2; }
+.brand-text-column { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
+.brand-text-new { font-size: 26px; font-weight: 800; color: #e2dbf0; letter-spacing: -0.5px; line-height: 1; }
+.brand-slogan { font-size: 11.5px; color: #948da5; font-weight: 500; letter-spacing: 0.2px; margin-top: 4px; }
+[data-theme='light'] .brand-train-icon { color: #261d3f; }
+[data-theme='light'] .brand-play-icon { color: #fff; }
+[data-theme='light'] .brand-text-new { color: #261d3f; }
+[data-theme='light'] .brand-slogan { color: #7b7194; }
+
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Quicksand:wght@600;700&display=swap');
+.brand-text-new { font-family: 'Quicksand', 'Nunito', sans-serif !important; font-weight: 700 !important; font-size: 28px !important; letter-spacing: 0px !important; }
+.brand-slogan { font-family: 'Nunito', 'Quicksand', sans-serif !important; font-weight: 600 !important; letter-spacing: 0.3px !important; font-size: 11px !important; margin-top: 1px !important; }
+
+/* Reset font logo ve giong he thong */
+.brand-text-new { font-family: var(--font-primary), 'Inter', sans-serif !important; font-weight: 800 !important; font-size: 26px !important; letter-spacing: -0.5px !important; }
+.brand-slogan { font-family: var(--font-primary), 'Inter', sans-serif !important; font-weight: 500 !important; letter-spacing: 0.2px !important; font-size: 11px !important; margin-top: 4px !important; }
+
+/* TIE FILM WINGS */
+.brand-icon-wrapper::before, .brand-icon-wrapper::after { content: ''; position: absolute; top: 40%; transform: translateY(-50%); width: 15px; height: 16px; border-top: 3px solid #a382e6; border-bottom: 3px solid #a382e6; background-image: repeating-linear-gradient(to right, transparent, transparent 3px, #a382e6 3px, #a382e6 6px); z-index: 0; }
+.brand-icon-wrapper::before { left: -14px; border-left: 3px solid #a382e6; border-radius: 4px 0 0 4px; }
+.brand-icon-wrapper::after { right: -14px; border-right: 3px solid #a382e6; border-radius: 0 4px 4px 0; }
+.brand-play-icon { color: #a382e6 !important; top: 42% !important; margin-left: 1px; }
+[data-theme='light'] .brand-icon-wrapper::before, [data-theme='light'] .brand-icon-wrapper::after { border-top-color: #b59bf5; border-bottom-color: #b59bf5; background-image: repeating-linear-gradient(to right, transparent, transparent 3px, #b59bf5 3px, #b59bf5 6px); }
+[data-theme='light'] .brand-icon-wrapper::before { border-left-color: #b59bf5; }
+[data-theme='light'] .brand-icon-wrapper::after { border-right-color: #b59bf5; }
+[data-theme='light'] .brand-play-icon { color: #b59bf5 !important; }
+
+/* XOA WINGS */
+.brand-icon-wrapper::before, .brand-icon-wrapper::after { display: none !important; }
+.brand-play-icon { color: #221836 !important; margin-left: 0 !important; top: 48% !important; }
+[data-theme='light'] .brand-play-icon { color: #fff !important; }
+
+/* =========================================
+   BILINGUAL SUBTITLES (SONG NGỮ)
+   ========================================= */
+video::-webkit-media-text-track-display {
+    transform: translateY(-40px) !important; /* Đẩy lên vừa phải cách xa Vietsub cứng */
+}
+
+video::cue {
+    color: #e8e8e8 !important; /* Trắng bạc tinh tế */
+    background: transparent !important; /* Bỏ nền đen */
+    text-shadow: 
+        0px 2px 5px rgba(0,0,0,0.9), 
+        0px 0px 8px rgba(0,0,0,0.9),
+        0px 0px 2px rgba(0,0,0,1) !important; /* Viền chữ cực nét */
+    font-size: 1.05rem !important; /* Thu nhỏ chữ lại cho tinh tế */
+    font-family: 'Inter', var(--font-primary, 'Quicksand'), sans-serif !important;
+    font-weight: 500 !important; /* Cân bằng lại độ dày nét mảnh hơn */
+    letter-spacing: 0.5px !important;
+}
+
+@media (max-width: 768px) {
+    video::-webkit-media-text-track-display {
+        transform: translateY(-25px) !important;
+    }
+    video::cue {
+        font-size: 0.85rem !important; /* Nét thanh hơn trên Mobile */
+    }
 }

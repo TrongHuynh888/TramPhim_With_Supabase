@@ -2427,11 +2427,11 @@
    ============================================ */
 .site-marquee-bar {
   position: fixed;
-  top: 90px;
+  top: 70px; /* Khớp với chiều cao 70px của Navbar mới */
   left: 0;
   right: 0;
-  height: 36px;
-  line-height: 36px; /* Canh giữa dọc chính xác */
+  height: 28px; /* Giảm chiều cao thanh */
+  line-height: 28px; /* Canh giữa dọc chính xác */
   overflow: hidden;
   background: linear-gradient(90deg, #0a0a1a, #141432, #1a1040, #141432, #0a0a1a);
   background-size: 200% 100%;
@@ -2454,8 +2454,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  padding-top: 10px; /* Hạ icon loa xuống chút */
+  font-size: 13px;
+  padding-top: 2px; /* Căn chỉnh icon loa cho thanh 28px */
   z-index: 3;
   /* Nền che chữ — fade từ đặc sang trong suốt */
   background: linear-gradient(90deg, var(--marquee-bg, #0a0a1a) 60%, transparent 100%);
@@ -2489,10 +2489,10 @@
   white-space: nowrap;
   animation: siteMarqueeRun 12s linear infinite;
   font-weight: 700;
-  font-size: 0.92rem;
-  line-height: 36px; /* Khớp với height của bar = canh giữa hoàn hảo */
+  font-size: 0.85rem; /* Giữ font phù hợp với chiều cao 28px */
+  line-height: 28px; /* Khớp với height của bar */
   color: #fbbf24;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   text-shadow: 0 0 8px rgba(251, 191, 36, 0.4), 0 0 20px rgba(251, 191, 36, 0.15);
   will-change: transform;
   backface-visibility: hidden;
@@ -2505,15 +2505,12 @@
   100% { transform: translate3d(-100%, 0, 0); }
 }
 
-/* Đẩy content xuống khi marquee đang bật */
-body.marquee-active #mainContent {
-  padding-top: 38px;
-}
+/* Đẩy content xuống khi marquee đang bật - Đã xoá bỏ để banner luôn sát mí trên */
 
 /* === RESPONSIVE MOBILE: Marquee nằm sát dưới menu === */
 @media (max-width: 768px) {
   .site-marquee-bar {
-    top: 60px !important; /* Sát dưới navbar mobile */
+    top: 70px !important; /* Khớp với chiều cao Navbar */
     height: 28px !important; /* Mỏng hơn trên mobile */
     line-height: 28px !important;
     padding: 0 28px 0 30px !important;
@@ -2532,16 +2529,14 @@ body.marquee-active #mainContent {
     width: 18px !important;
     height: 18px !important;
     font-size: 8px !important;
-  }
-  body.marquee-active #mainContent {
-    padding-top: 34px !important;
+    transform: translateY(-50%) !important;
   }
 }
 .site-marquee-close {
   position: absolute;
   right: 8px;
   top: 50%;
-  transform: translateY(-30%); /* Hạ nút X xuống chút */
+  transform: translateY(-50%); /* Đã canh chỉnh hoàn toàn giữa chiều dọc */
   background: rgba(255,255,255,0.1);
   border: none;
   color: rgba(255,255,255,0.6);
@@ -2771,3 +2766,43 @@ body.marquee-active #mainContent {
 }
 
 /* API Explorer styles: xem css/admin-api-explorer.css */
+
+/* ═══════════════ INLINE EPISODE EDITOR ═══════════════ */
+#inlineEpisodeEditorContainer {
+  animation: slideUpFade 0.3s ease forwards;
+}
+
+/* Sticky Bottom Bar - Nút Lưu/Hủy bám dính cuối trang */
+.inline-episode-sticky-bar {
+  position: fixed;
+  bottom: 0;
+  left: 260px; /* Tính theo sidebar width */
+  right: 0;
+  background: var(--bg-secondary);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding: 12px 30px;
+  z-index: 200;
+  box-shadow: 0 -5px 30px rgba(0,0,0,0.6);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  transition: left 0.3s ease;
+}
+
+/* Khi sidebar collapsed */
+.admin-sidebar.collapsed ~ .admin-content .inline-episode-sticky-bar {
+  left: 80px;
+}
+
+/* Mobile: Sticky bar full width */
+@media (max-width: 768px) {
+  .inline-episode-sticky-bar {
+    left: 0 !important;
+    padding: 10px 15px;
+  }
+  
+  #inlineEpisodeEditorContainer .admin-panel-header {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+}

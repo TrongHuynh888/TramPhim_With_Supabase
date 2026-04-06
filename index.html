@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="vi" data-theme="dark">
   <head>
+    <meta charset="UTF-8" />
     <link rel="stylesheet" href="css/upgrade.css?v=3" />
     <link rel="stylesheet" href="css/variables.css?v=3" />
     <link rel="stylesheet" href="css/base.css?v=3" />
@@ -20,7 +21,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
     <!--<link rel="stylesheet" href="css/style.css" />-->
-    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
@@ -84,6 +84,7 @@
     <script src="js/emoji-picker.js" defer></script>
     <script src="js/home-comments.js" defer></script>
     <script src="js/admin-api-keys.js" defer></script>
+    <script src="js/admin-episodes.js" defer></script>
 
     <!-- Custom CSS -->
   </head>
@@ -101,9 +102,34 @@
         </button>
 
         <!-- Logo -->
-        <a href="javascript:void(0)" class="nav-logo" onclick="showPage('home')">
-          <img src="images/logoTramPhim.png" alt="Trạm Phim" class="logo-img" />
+        <a href="javascript:void(0)" class="nav-logo" onclick="showPage('home')" style="text-decoration: none;">
+          <div class="brand-logo-container">
+            <div class="brand-icon-wrapper">
+              <i class="fas fa-subway brand-train-icon"></i>
+              <i class="fas fa-play brand-play-icon"></i>
+            </div>
+            <div class="brand-text-column">
+              <span class="brand-text-new">Trạm Phim</span>
+              <span class="brand-slogan">Trạm dừng chân của những mọt phim</span>
+            </div>
+          </div>
         </a>
+
+        <!-- Thanh Tìm Kiếm Header -->
+        <div class="nav-search-container" id="navSearchContainer">
+          <i class="fas fa-search search-icon"></i>
+          <input type="text" id="navSearchInput" placeholder="Tìm kiếm phim, diễn viên" autocomplete="off">
+          <button class="clear-search-btn hidden" id="clearNavSearch" onclick="clearNavSearchInput()" title="Xóa">
+            <i class="fas fa-times"></i>
+          </button>
+          
+          <div class="nav-search-dropdown hidden" id="navSearchDropdown">
+            <div class="nav-search-header">Danh sách phim</div>
+            <ul id="navSearchList" class="nav-search-list">
+              <!-- Render logic JS -->
+            </ul>
+          </div>
+        </div>
 
         <!-- Navigation Menu -->
         <div class="nav-menu" id="navMenu">
@@ -178,7 +204,7 @@
         </div>
 
         <!-- Theme + Wallet (nhóm phụ - nằm giữa menu và auth) -->
-        <div class="nav-utilities" style="display: flex; align-items: center;">
+        <div class="nav-utilities" style="display: flex; align-items: center; gap: 12px;">
           <!-- Notification Bell Wrapper -->
           <div class="notification-wrapper">
             <button
@@ -221,7 +247,6 @@
             id="themeToggle"
             onclick="toggleTheme()"
             title="Đổi giao diện"
-            style="margin-right: 10px;"
           >
             <i class="fas fa-moon" id="themeIcon"></i>
           </button>
@@ -231,14 +256,13 @@
             class="btn wallet-btn"
             id="walletBtn"
             onclick="connectWallet()"
-            style="margin-right: 10px;"
           >
             <i class="fas fa-wallet"></i>
             <span class="wallet-btn-text">Kết nối ví</span>
           </button>
 
           <!-- Auth Button (ngay sau Wallet) -->
-          <div id="authContainer" style="position: relative; display: flex; align-items: center; flex-shrink: 0; margin-left: 2px;">
+          <div id="authContainer" style="position: relative; display: flex; align-items: center; flex-shrink: 0;">
             <button
               class="btn btn-primary hidden"
               id="loginBtn"
@@ -730,6 +754,25 @@
                     </div>
                   </div>
                   <div class="controls-right">
+                    <!-- BẢNG CHỌN PHỤ ĐỀ (CC) -->
+                    <div class="settings-container cc-container">
+                      <button class="control-btn" id="ccBtn" onclick="toggleSubtitleMenu()" style="display:none;" title="Phụ đề / CC">
+                        <i class="fas fa-closed-captioning"></i>
+                      </button>
+                      <div class="subtitle-popup-menu" id="ccSubtitleMenu" style="display: none;">
+                        <div class="subtitle-menu-header">
+                          <span class="smt-title">Phụ Đề</span>
+                          <div class="smt-mode-switch">
+                            <button class="smt-mode-btn" id="smtBtnOn" onclick="setSubtitleMode('on')">Bật</button>
+                            <button class="smt-mode-btn" id="smtBtnOff" onclick="setSubtitleMode('off')">Tắt</button>
+                          </div>
+                        </div>
+                        <div class="subtitle-lang-list" id="ccLangList">
+                          <!-- JS render: <div class="smt-lang-item" onclick="...">Tiếng Việt <i class="fas fa-check"></i></div> -->
+                        </div>
+                      </div>
+                    </div>
+
                     <div class="settings-container">
                       <button class="control-btn" id="settingsBtn" onclick="toggleSettingsMenu()">
                         <i class="fas fa-cog"></i>
@@ -740,14 +783,13 @@
                           <span class="settings-value" id="currentSpeedVal">Chuẩn</span>
                           <i class="fas fa-chevron-right"></i>
                         </div>
-                        <div class="settings-item" onclick="showSubMenu('color')">
-                          <span>Màu phụ đề</span>
-                          <span class="settings-value" id="currentColorVal">White</span>
-                          <i class="fas fa-chevron-right"></i>
-                        </div>
                         <div class="settings-item" id="qualitySettingsItem" onclick="showSubMenu('quality')" style="display:none;">
                           <span>Chất lượng</span>
                           <span class="settings-value" id="currentQualityVal">Tự động</span>
+                          <i class="fas fa-chevron-right"></i>
+                        </div>
+                        <div class="settings-item" onclick="showSubMenu('subtitleStyle')">
+                          <span>Tuỳ chỉnh phụ đề</span>
                           <i class="fas fa-chevron-right"></i>
                         </div>
                       </div>
@@ -762,20 +804,145 @@
                         <div class="submenu-item" onclick="setSpeed(1.5)">1.5x</div>
                         <div class="submenu-item" onclick="setSpeed(2)">2x</div>
                       </div>
-                      <div class="settings-submenu" id="colorMenu">
-                        <div class="submenu-header" onclick="hideSubMenu()">
-                          <i class="fas fa-chevron-left"></i> Màu phụ đề
-                        </div>
-                        <div class="submenu-item active" data-color="white" onclick="setSubtitleColor('white')">TRẮNG</div>
-                        <div class="submenu-item" data-color="yellow" onclick="setSubtitleColor('yellow')" style="color: yellow;">VÀNG</div>
-                        <div class="submenu-item" data-color="cyan" onclick="setSubtitleColor('cyan')" style="color: cyan;">XANH DƯƠNG</div>
-                        <div class="submenu-item" data-color="green" onclick="setSubtitleColor('green')" style="color: #4caf50;">XANH LÁ</div>
-                      </div>
                       <div class="settings-submenu" id="qualityMenu">
                         <div class="submenu-header" onclick="hideSubMenu()">
                           <i class="fas fa-chevron-left"></i> Chất lượng video
                         </div>
                         <div class="submenu-item active" data-level="-1" onclick="setQuality(-1)">Tự động</div>
+                      </div>
+
+                      <!-- SUBMENU TUỲ CHỈNH PHỤ ĐỀ -->
+                      <div class="settings-submenu sub-style-menu" id="subtitleStyleMenu">
+                        <div class="submenu-header" onclick="hideSubMenu()">
+                          <i class="fas fa-chevron-left"></i> Tuỳ chỉnh phụ đề
+                        </div>
+                        <!-- Màu chữ -->
+                        <div class="sub-style-row" onclick="showSubMenu('subColor')">
+                          <span>Màu chữ</span>
+                          <span class="sub-style-preview">
+                            <span class="sub-color-dot" id="subColorDot"></span>
+                            <span id="subColorLabel">Trắng</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                        <!-- Cỡ chữ -->
+                        <div class="sub-style-row" onclick="showSubMenu('subSize')">
+                          <span>Cỡ chữ</span>
+                          <span class="sub-style-preview">
+                            <span id="subSizeLabel">16pt</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                        <!-- Font chữ -->
+                        <div class="sub-style-row" onclick="showSubMenu('subFont')">
+                          <span>Font chữ</span>
+                          <span class="sub-style-preview">
+                            <span id="subFontLabel">Mặc định</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                        <!-- Viền chữ -->
+                        <div class="sub-style-row" onclick="showSubMenu('subOutline')">
+                          <span>Viền chữ</span>
+                          <span class="sub-style-preview">
+                            <span id="subOutlineLabel">Đổ bóng</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                        <!-- Màu nền -->
+                        <div class="sub-style-row" onclick="showSubMenu('subBg')">
+                          <span>Màu nền</span>
+                          <span class="sub-style-preview">
+                            <span class="sub-color-dot" id="subBgDot" style="background:#000"></span>
+                            <span id="subBgLabel">Đen</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                        <!-- Độ trong nền -->
+                        <div class="sub-style-row" onclick="showSubMenu('subBgOpacity')">
+                          <span>Độ trong nền</span>
+                          <span class="sub-style-preview">
+                            <span id="subBgOpacityLabel">0%</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                        <!-- Vị trí -->
+                        <div class="sub-style-row" onclick="showSubMenu('subPosition')">
+                          <span>Vị trí</span>
+                          <span class="sub-style-preview">
+                            <span id="subPositionLabel">Dưới</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- CÁC SUBMENU CON CỦA TUỲ CHỈNH PHỤ ĐỀ -->
+                      <div class="settings-submenu" id="subColorMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Màu chữ
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('color','#ffffff','Trắng')"><span class="sub-color-dot" style="background:#fff"></span> Trắng</div>
+                        <div class="submenu-item" onclick="setSubStyle('color','#ffeb3b','Vàng')"><span class="sub-color-dot" style="background:#ffeb3b"></span> Vàng</div>
+                        <div class="submenu-item" onclick="setSubStyle('color','#00ffff','Cyan')"><span class="sub-color-dot" style="background:#00ffff"></span> Cyan</div>
+                        <div class="submenu-item" onclick="setSubStyle('color','#4caf50','Xanh lá')"><span class="sub-color-dot" style="background:#4caf50"></span> Xanh lá</div>
+                        <div class="submenu-item" onclick="setSubStyle('color','#ff5722','Cam')"><span class="sub-color-dot" style="background:#ff5722"></span> Cam</div>
+                      </div>
+                      <div class="settings-submenu" id="subSizeMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Cỡ chữ
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('fontSize','12pt','12pt')">12pt</div>
+                        <div class="submenu-item" onclick="setSubStyle('fontSize','14pt','14pt')">14pt</div>
+                        <div class="submenu-item" onclick="setSubStyle('fontSize','16pt','16pt')">16pt</div>
+                        <div class="submenu-item" onclick="setSubStyle('fontSize','20pt','20pt')">20pt</div>
+                        <div class="submenu-item" onclick="setSubStyle('fontSize','24pt','24pt')">24pt</div>
+                        <div class="submenu-item" onclick="setSubStyle('fontSize','28pt','28pt')">28pt</div>
+                      </div>
+                      <div class="settings-submenu" id="subFontMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Font chữ
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('fontFamily','inherit','Mặc định')">Mặc định</div>
+                        <div class="submenu-item" style="font-family:'Arial'" onclick="setSubStyle('fontFamily','Arial','Arial')">Arial</div>
+                        <div class="submenu-item" style="font-family:'Roboto'" onclick="setSubStyle('fontFamily','Roboto','Roboto')">Roboto</div>
+                        <div class="submenu-item" style="font-family:'Times New Roman'" onclick="setSubStyle('fontFamily','Times New Roman','Times New Roman')">Times New Roman</div>
+                        <div class="submenu-item" style="font-family:'Courier New'" onclick="setSubStyle('fontFamily','Courier New','Courier New')">Courier New</div>
+                      </div>
+                      <div class="settings-submenu" id="subOutlineMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Viền chữ
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('outline','shadow','Đổ bóng')">Đổ bóng</div>
+                        <div class="submenu-item" onclick="setSubStyle('outline','outline','Viền đậm')">Viền đậm</div>
+                        <div class="submenu-item" onclick="setSubStyle('outline','raised','Nổi')">Nổi</div>
+                        <div class="submenu-item" onclick="setSubStyle('outline','none','Không')">Không</div>
+                      </div>
+                      <div class="settings-submenu" id="subBgMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Màu nền
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('bgColor','#000000','Đen')"><span class="sub-color-dot" style="background:#000"></span> Đen</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgColor','#ffffff','Trắng')"><span class="sub-color-dot" style="background:#fff;border:1px solid #555"></span> Trắng</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgColor','#1a237e','Xanh Navy')"><span class="sub-color-dot" style="background:#1a237e"></span> Xanh Navy</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgColor','transparent','Trong suốt')"><span class="sub-color-dot" style="background:transparent;border:1px dashed #555"></span> Trong suốt</div>
+                      </div>
+                      <div class="settings-submenu" id="subBgOpacityMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Độ trong nền
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('bgOpacity','0','0%')">0%</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgOpacity','0.25','25%')">25%</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgOpacity','0.5','50%')">50%</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgOpacity','0.75','75%')">75%</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgOpacity','1','100%')">100%</div>
+                      </div>
+                      <div class="settings-submenu" id="subPositionMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Vị trí phụ đề
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('position','bottom','Dưới')">Dưới</div>
+                        <div class="submenu-item" onclick="setSubStyle('position','middle','Giữa')">Giữa</div>
+                        <div class="submenu-item" onclick="setSubStyle('position','top','Trên')">Trên</div>
                       </div>
                     </div>
                     <button class="control-btn" id="pipBtn" onclick="togglePiP()" title="Hình trong hình">
@@ -1081,6 +1248,42 @@
       <div class="footer-bottom">
         <p>&copy; 2026 Trạm Phim. All rights reserved.</p>
       </div>
+
+      <!-- Watermark Background Logo (Nét mảnh, chìm trong hình nền footer) -->
+      <style>
+        /* Giảm chiều cao dư thừa của Footer */
+        .footer { position: relative; overflow: hidden; padding-top: 40px !important; }
+        .footer-content { padding-bottom: 25px !important; margin-bottom: 0 !important; }
+        .footer-bottom { padding: 15px 0 !important; border-top: none !important; }
+
+        .footer-watermark-logo {
+          position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+          z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center;
+          opacity: 1; 
+        }
+        .bg-watermark-train { font-size: 440px; -webkit-text-stroke: 1.5px rgba(255,255,255,0.06); -webkit-text-fill-color: transparent !important; color: transparent !important; }
+        
+        .bg-watermark-play { 
+          position: absolute; font-size: 105px; top: 43%; left: 50%; transform: translate(-50%, -50%);
+          -webkit-text-stroke: 1.5px rgba(255,255,255,0.06); 
+          -webkit-text-fill-color: var(--bg-secondary) !important; /* Dùng nền thứ cấp che đi bụng bị rỗng */
+          color: var(--bg-secondary) !important;
+        }
+
+        [data-theme="light"] .bg-watermark-train { -webkit-text-stroke-color: rgba(0,0,0,0.18); }
+        [data-theme="light"] .bg-watermark-play { 
+            -webkit-text-stroke-color: rgba(0,0,0,0.18);
+            -webkit-text-fill-color: var(--bg-primary) !important; 
+            color: var(--bg-primary) !important;
+        }
+        
+        /* Chỉnh z-index các phần tử footer lướt lên trên khối nền */
+        .footer-content, .footer-bottom { position: relative; z-index: 2; }
+      </style>
+      <div class="footer-watermark-logo">
+        <i class="fas fa-subway bg-watermark-train"></i>
+        <i class="fas fa-play bg-watermark-play"></i>
+      </div>
     </footer>
     
     <!-- MODAL: CUỘC GỌI ĐẾN (INCOMING CALL) - Redesign v2.0 -->
@@ -1196,14 +1399,14 @@
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="js/globals.js?v=2"></script>
-    <script src="js/utils.js?v=2"></script>
-    <script src="js/data.js?v=2"></script>
+    <script src="js/utils.js?v=6"></script>
+    <script src="js/data.js?v=3"></script>
 
-    <script src="js/auth.js?v=3.1"></script>
-    <script src="js/notifications.js?v=3"></script>
-    <script src="js/user.js?v=8"></script>
-    <script src="js/home.js?v=3"></script>
-    <script src="js/detail.js?v=2"></script>
+    <script src="js/auth.js?v=5"></script>
+    <script src="js/notifications.js?v=4"></script>
+    <script src="js/user.js?v=9"></script>
+    <script src="js/home.js?v=4"></script>
+    <script src="js/detail.js?v=5"></script>
     <!-- Chart.js, Admin, Community, Watch Party → LAZY LOAD trong utils.js khi cần -->
     <script src="js/contact-admin.js?v=1"></script>
 

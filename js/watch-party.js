@@ -3425,16 +3425,13 @@ window.wpShowSubMenu = function(type) {
     document.getElementById("wpSettingsMenu").style.display = "none";
     if (type === 'speed') document.getElementById("wpSpeedMenu").style.display = "flex";
     else if (type === 'quality') document.getElementById("wpQualityMenu").style.display = "flex";
-    else if (type === 'color') document.getElementById("wpColorMenu").style.display = "flex";
 };
 
 window.wpHideSubMenu = function() {
     const speed = document.getElementById("wpSpeedMenu");
     const quality = document.getElementById("wpQualityMenu");
-    const color = document.getElementById("wpColorMenu");
     if (speed) speed.style.display = "none";
     if (quality) quality.style.display = "none";
-    if (color) color.style.display = "none";
     document.getElementById("wpSettingsMenu").style.display = "flex";
 };
 
@@ -3500,54 +3497,7 @@ window.wpSetQuality = function(levelIndex) {
     wpToggleSettings();
 };
 
-// --- Subtitle Color (All users) ---
-window.wpSetSubtitleColor = function(color) {
-    // Áp dụng màu cho phụ đề của video
-    if (player && player.tagName === "VIDEO" && player.textTracks) {
-        for (let i = 0; i < player.textTracks.length; i++) {
-            const track = player.textTracks[i];
-            if (track.cues) {
-                for (let j = 0; j < track.cues.length; j++) {
-                    track.cues[j].snapToLines = false;
-                    track.cues[j].line = 90;
-                }
-            }
-        }
-    }
 
-    // Lưu màu vào CSS variable cho video
-    const container = document.getElementById("wpVideoContainer");
-    if (container) {
-        container.style.setProperty("--subtitle-color", color);
-    }
-
-    // Áp màu trực tiếp qua style tag
-    let styleTag = document.getElementById("wp-subtitle-style");
-    if (!styleTag) {
-        styleTag = document.createElement("style");
-        styleTag.id = "wp-subtitle-style";
-        document.head.appendChild(styleTag);
-    }
-    styleTag.textContent = `
-        #partyHtml5Player::cue {
-            color: ${color} !important;
-            background: rgba(0,0,0,0.5) !important;
-        }
-    `;
-
-    // Update UI
-    const label = document.getElementById("wpColorVal");
-    const names = { white: "Trắng", yellow: "Vàng", cyan: "Xanh dương", green: "Xanh lá" };
-    if (label) label.textContent = names[color] || color;
-
-    // Mark active
-    document.querySelectorAll("#wpColorMenu .submenu-item").forEach(item => {
-        item.classList.toggle("active", item.dataset.color === color);
-    });
-
-    wpHideSubMenu();
-    wpToggleSettings();
-};
 
 // --- Fullscreen (All users) ---
 window.wpToggleFullscreen = function() {

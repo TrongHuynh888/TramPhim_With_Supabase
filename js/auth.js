@@ -221,6 +221,14 @@ async function handleForgotPassword(event) {
 function initAuthStateListener() {
     supabase.auth.onAuthStateChange((event, session) => {
         console.log("🔑 Auth event:", event);
+        
+        // Bỏ qua auth state change khi AI đang xử lý phụ đề
+        // (tránh việc Supabase re-init gây reload/flicker trang)
+        if (window.__aiProcessing) {
+            console.warn("[AI Shield] Bỏ qua Auth event '" + event + "' vì AI đang xử lý phụ đề!");
+            return;
+        }
+        
         const user = session ? session.user : null;
 
         // Xử lý sự kiện đặt lại mật khẩu (khi user click link từ email)
@@ -246,7 +254,7 @@ function initAuthStateListener() {
             return;
         }
 
-        handleAuthStateChange(user);
+        handleAuthStateChange(user, event);
     });
 }
 
@@ -256,7 +264,7 @@ initAuthStateListener();
 /**
  * Xử lý khi trạng thái chuyển đổi
  */
-async function handleAuthStateChange(user) {
+async function handleAuthStateChange(user, authEvent) {
   currentUser = user;
 
   if (user) {
@@ -337,7 +345,17 @@ async function handleAuthStateChange(user) {
           setTimeout(updateAllWatchProgress, 100);
       }
 
-      if (currentMovieId) checkAndUpdateVideoAccess();
+      // CHỈ tải lại quyền xem video (có thể gây tải lại video từ đầu)
+      // NẾU người dùng thực sự Đăng nhập mới hoặc Đăng xuất. 
+      // TUYỆT ĐỐI KHÔNG làm khi Token Refresh ngầm, vì sẽ làm đứt video đang xem.
+      if (currentMovieId) {
+          if (authEvent === 'SIGNED_IN' || authEvent === 'SIGNED_OUT') {
+              console.log("🔄 Trạng thái Auth thay đổi lớn (Đăng nhập/Đăng xuất), tải lại trình phát...");
+              checkAndUpdateVideoAccess();
+          } else {
+              console.log("🔄 Bỏ qua tải lại video do chỉ là Token Refresh hoặc Event nhỏ: " + authEvent);
+          }
+      }
 
     } catch (error) {
       console.error("Lỗi handleAuthStateChange:", error);
@@ -348,6 +366,11 @@ async function handleAuthStateChange(user) {
     isAdmin = false;
     updateAuthUI(false);
     renderAllInitialMovies();
+    
+    // Nếu bị mất quyền thật (log out), lúc đó mới chặn video
+    if (currentMovieId && authEvent === 'SIGNED_OUT') {
+         checkAndUpdateVideoAccess();
+    }
   }
 }
 

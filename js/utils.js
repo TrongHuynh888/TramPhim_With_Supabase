@@ -271,6 +271,12 @@ function escapeHtml(text) {
 // ============================================
 
 function showPage(pageName, addToHistory = true) {
+  // Bỏ qua điều hướng trang khi AI đang xử lý phụ đề
+  if (window.__aiProcessing && pageName !== 'admin') {
+    console.warn("[AI Shield] Bỏ qua showPage('" + pageName + "') vì AI đang xử lý phụ đề!");
+    return;
+  }
+  
   // 0. Cập nhật URL (Sử dụng Hash Routing để fix lỗi F5)
   if (addToHistory) {
       let basePath = window.APP_BASE_PATH || "";
@@ -356,7 +362,7 @@ function showPage(pageName, addToHistory = true) {
         window._adminScriptsLoaded = true;
         lazyLoadScriptBundle([
             'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js',
-            'js/admin.js?v=3',
+            'js/admin.js?v=16',
             'js/admin-api-explorer.js?v=3',
             'js/admin-api-import.js?v=3',
             'js/admin-trailers.js?v=1'
@@ -480,8 +486,8 @@ function closeModal(modalId) {
       modal.classList.remove("active");
     }
     
-    // Dọn dẹp hàng đợi upload nếu đóng movieModal hoặc episodeModal
-    if (modalId === "movieModal" || modalId === "episodeModal") {
+    // Dọn dẹp hàng đợi upload nếu đóng movieModal
+    if (modalId === "movieModal") {
         if (window.pendingUploads) window.pendingUploads = {};
         if (window.pendingR2Uploads) window.pendingR2Uploads = {};
     }

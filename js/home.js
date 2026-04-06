@@ -1391,3 +1391,106 @@ function createLandscapeMovieCard(movie) {
     `;
 }
 
+// ============================================
+// NAV TÌM KIẾM TRỰC TIẾP (HEADER)
+// ============================================
+document.addEventListener("DOMContentLoaded", () => {
+    const navSearchInput = document.getElementById("navSearchInput");
+    const clearNavSearch = document.getElementById("clearNavSearch");
+    const navSearchDropdown = document.getElementById("navSearchDropdown");
+    const navSearchList = document.getElementById("navSearchList");
+
+    if (!navSearchInput) return;
+
+    // Sử dụng hàm debounce có sẵn nếu có, không thì fallback
+    const debounceNavSearch = typeof debounce === 'function' ? debounce : (func, wait) => {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    };
+
+    const renderNavSearchDebounced = debounceNavSearch(function(query) {
+        renderNavSearchResults(query);
+    }, 300);
+
+    navSearchInput.addEventListener("input", function() {
+        const query = (typeof removeDiacritics === 'function' ? removeDiacritics(this.value.trim()) : this.value.trim().toLowerCase());
+        
+        if (query.length > 0) {
+            clearNavSearch.classList.remove("hidden");
+            navSearchDropdown.classList.remove("hidden");
+            renderNavSearchDebounced(query);
+        } else {
+            clearNavSearch.classList.add("hidden");
+            navSearchDropdown.classList.add("hidden");
+        }
+    });
+
+    // Đóng dropdown khi click ra ngoài
+    document.addEventListener("click", function(e) {
+        const container = document.getElementById("navSearchContainer");
+        if (container && !container.contains(e.target) && navSearchDropdown) {
+            navSearchDropdown.classList.add("hidden");
+        }
+    });
+    
+    // Mở lại dropdown nếu click vào input mà đã có chữ
+    navSearchInput.addEventListener("focus", function() {
+        if (this.value.trim().length > 0) {
+            navSearchDropdown.classList.remove("hidden");
+        }
+    });
+});
+
+// Xóa nội dung thanh tìm kiếm header
+window.clearNavSearchInput = function() {
+    const navSearchInput = document.getElementById("navSearchInput");
+    if (navSearchInput) {
+        navSearchInput.value = "";
+        navSearchInput.dispatchEvent(new Event("input"));
+        navSearchInput.focus();
+    }
+};
+
+// Render kết quả dropdown tìm kiếm
+function renderNavSearchResults(query) {
+    const navSearchList = document.getElementById("navSearchList");
+    if (!navSearchList) return;
+
+    if (typeof allMovies === 'undefined' || !allMovies || allMovies.length === 0) {
+        navSearchList.innerHTML = "<li class='nav-search-noresult'>Đang tải dữ liệu...</li>";
+        return;
+    }
+
+    const filtered = allMovies.filter(movie => {
+        const q = query.toLowerCase();
+        let match = false;
+        if (typeof removeDiacritics === 'function') {
+            match = removeDiacritics(movie.title).includes(query) || (movie.originTitle && removeDiacritics(movie.originTitle).includes(query));
+        } else {
+            match = movie.title.toLowerCase().includes(q) || (movie.originTitle && movie.originTitle.toLowerCase().includes(q));
+        }
+        return match;
+    }).slice(0, 5); // Lấy top 5
+
+    if (filtered.length === 0) {
+        navSearchList.innerHTML = "<li class='nav-search-noresult'>Không tìm thấy phim phù hợp</li>";
+        return;
+    }
+
+    const dfImage = "https://placehold.co/300x450/2a2a3a/FFFFFF?text=NO+POSTER";
+    
+    navSearchList.innerHTML = filtered.map(movie => `
+        <li>
+            <a href="javascript:void(0)" class="nav-search-item" onclick="document.getElementById('navSearchDropdown').classList.add('hidden'); viewMovieIntro('${movie.id}')">
+                <img src="${movie.posterUrl}" onerror="this.onerror=null; this.src='${dfImage}'">
+                <div class="nav-search-info">
+                    <h4>${movie.title}</h4>
+                    <p>${movie.originTitle || movie.year || "Đang cập nhật"}</p>
+                </div>
+            </a>
+        </li>
+    `).join("");
+}

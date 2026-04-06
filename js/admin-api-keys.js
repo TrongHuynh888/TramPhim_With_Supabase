@@ -106,6 +106,26 @@ const API_KEYS_CONFIG = [
         getValue: () => dbSettingsCache['tmdb_api_key'] || '',
         category: 'dynamic',
         hasTmdbToggles: true
+    },
+    {
+        id: 'gemini_api_key',
+        title: 'Gemini AI API Key',
+        service: 'Dịch Phụ Đề AI (Chuẩn Ngữ Cảnh)',
+        icon: 'fas fa-brain',
+        description: 'Mã bản quyền của Google Gemini. Dùng thay cho Google Dịch để dịch phụ đề chuẩn rạp chiếu phim (Lấy tại aistudio.google.com).',
+        isReadonly: false,
+        getValue: () => dbSettingsCache['gemini_api_key'] || '',
+        category: 'dynamic'
+    },
+    {
+        id: 'groq_api_key',
+        title: 'Groq API Key',
+        service: 'Dịch Phụ Đề AI (Siêu Nhanh — Llama 3.3)',
+        icon: 'fas fa-bolt',
+        description: 'Khóa API từ Groq — Tốc độ dịch siêu nhanh (300+ token/s) dùng Llama 3.3 70B. Miễn phí tại console.groq.com → API Keys → Create.',
+        isReadonly: false,
+        getValue: () => dbSettingsCache['groq_api_key'] || '',
+        category: 'dynamic'
     }
 ];
 
@@ -1343,3 +1363,24 @@ function lockSudoNow() {
     
     renderSudoLockScreen();
 }
+
+// ============================================
+// AUTO PRE-LOAD API KEYS FOR BACKGROUND TASKS (AI SUBTITLE)
+// ============================================
+document.addEventListener("DOMContentLoaded", () => {
+    // Đợi 2 giây để chắc chắn window.supabase đã được khởi tạo
+    setTimeout(async () => {
+        if (typeof window.supabase !== 'undefined') {
+            try {
+                // Kiểm tra bảng và nạp ngay dbSettingsCache
+                await checkSettingsTable();
+                if (hasSystemSettingsTable) {
+                    await loadSettingsFromDB();
+                    console.log("[Trạm Phim] Đã tải trước", Object.keys(dbSettingsCache).length, "cấu hình API Core vào nền.");
+                }
+            } catch (error) {
+                console.warn("[Trạm Phim] Lỗi tải trước API Keys:", error);
+            }
+        }
+    }, 2000);
+});

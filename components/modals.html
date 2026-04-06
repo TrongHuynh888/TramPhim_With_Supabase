@@ -610,198 +610,7 @@
       </div>
     </div>
 
-    <!-- Episode Modal -->
-    <div class="modal-overlay no-click-outside" id="episodeModal">
-      <div class="modal" style="max-width: 1100px; width: 95%;">
-        <div class="modal-header">
-          <h3 class="modal-title" id="episodeModalTitle">Thêm Tập Mới</h3>
-          <button class="modal-close" onclick="closeEpisodeModal()">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-        <div class="modal-body">
-          <form id="episodeForm" onsubmit="handleEpisodeSubmit(event)">
-            <input type="hidden" id="episodeIndex" />
-            <div class="form-group" id="episodeNumberGroup">
-              <label class="form-label">Số tập *</label>
-              <input type="text" class="form-input" id="episodeNumber" placeholder="Ví dụ: 1 hoặc Tập Đặc Biệt" required />
-            </div>
-            <!-- Multi-Version Sources -->
-            <div class="form-group">
-                <label class="form-label">Danh sách phiên bản (Sources)</label>
-                <div id="sourceListContainer" style="display: flex; flex-direction: column; gap: 10px;">
-                    <!-- Source items will be added here by JS -->
-                </div>
-                <button type="button" class="btn btn-secondary btn-sm" style="margin-top: 10px;" onclick="addSourceInput()">
-                    <i class="fas fa-plus"></i> Thêm phiên bản
-                </button>
-            </div>
-            
-            <!-- Trường ẩn để tương thích ngược với code cũ -->
-            <input type="hidden" id="episodeYoutubeId" />
-            <!-- BỔ SUNG: KHUNG PREVIEW VIDEO ĐỂ LẤY THỜI GIAN INTRO -->
-            <div class="intro-preview-container" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
-                <label class="form-label" style="color: var(--accent-primary); display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                    <i class="fas fa-play-circle"></i> Xem trước để đánh dấu Bỏ qua intro
-                </label>
-
-                <!-- Vùng chứa các nút chuyển đổi phiên bản video -->
-                <div id="adminPreviewSourceSwitch" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
-                    <!-- Nút sẽ được chèn tự động bằng JS -->
-                </div>
-                
-                <div id="adminIntroPlayerWrapper" style="width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 4px; overflow: hidden; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; position: relative;">
-                    <!-- Video hoặc Iframe sẽ được chèn vào đây bằng JS -->
-                    <div id="adminIntroPlayerPlaceholder" style="text-align: center; color: #666;">
-                        <i class="fas fa-video-slash fa-2x mb-2"></i>
-                        <p style="font-size: 0.9rem;">Chưa có video. Hãy nhập link video bên trên.</p>
-                    </div>
-
-                    <!-- Overlay nút tua ±10s ở giữa video -->
-                    <div id="adminPreviewOverlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 44px); z-index: 5; pointer-events: none;">
-                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 40px; pointer-events: auto;">
-                            <button type="button" onclick="adminPreviewSkip(-10)" title="Tua lùi 10 giây" style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.5); color: #fff; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
-                                <i class="fas fa-undo-alt"></i>
-                            </button>
-                            <button type="button" onclick="adminPreviewTogglePlay()" id="adminPreviewPlayBtn" title="Play/Pause" style="width: 56px; height: 56px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.8); background: rgba(0,0,0,0.5); color: #fff; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
-                                <i class="fas fa-play"></i>
-                            </button>
-                            <button type="button" onclick="adminPreviewSkip(10)" title="Tua tới 10 giây" style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.5); color: #fff; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
-                                <i class="fas fa-redo-alt"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Custom controls bar phía dưới -->
-                    <div id="adminPreviewControls" style="display: none; position: absolute; bottom: 0; left: 0; width: 100%; background: linear-gradient(transparent, rgba(0,0,0,0.85)); padding: 8px 12px 6px; z-index: 6;">
-                        <input type="range" id="adminPreviewSeekbar" min="0" max="100" value="0" step="1" style="width: 100%; height: 6px; cursor: pointer; accent-color: var(--accent-primary); margin-bottom: 4px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: #ccc; font-family: monospace;">
-                            <span id="adminPreviewTimeDisplay">00:00 / 00:00</span>
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <span id="adminPreviewSecondDisplay" style="color: var(--accent-primary); font-weight: 600;"></span>
-                                <button type="button" onclick="adminPreviewFullscreen()" title="Toàn màn hình" style="background: none; border: none; color: #ccc; font-size: 1rem; cursor: pointer; padding: 2px 4px; transition: color 0.2s;">
-                                    <i class="fas fa-expand"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Nút action ngay dưới video -->
-                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="getCurrentTimeFromPreview()" style="height: 34px; white-space: nowrap; font-size: 0.82rem;">
-                        <i class="fas fa-clock"></i> Lấy thời gian hiện tại
-                    </button>
-                    <button type="button" class="btn btn-warning btn-sm" onclick="previewSkipIntro()" style="height: 34px; white-space: nowrap; font-size: 0.82rem;">
-                        <i class="fas fa-fast-forward"></i> Thử nhảy đoạn này
-                    </button>
-                    <div style="display: flex; align-items: center; gap: 6px; margin-left: auto; height: 34px;">
-                        <input type="checkbox" id="applyIntroToAll" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent-primary);">
-                        <label for="applyIntroToAll" style="margin-bottom: 0; font-size: 0.82rem; font-weight: 600; color: #ffc107; cursor: pointer;">
-                            Áp dụng tất cả tập
-                        </label>
-                    </div>
-                </div>
-
-                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                    <!-- Intro bắt đầu -->
-                    <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
-                        <label class="form-label" style="font-size: 0.82rem; color: #f39c12; display: flex; align-items: center; gap: 6px; cursor: pointer; margin-bottom: 6px;">
-                            <input type="radio" name="timeCaptureTarget" value="introStart" style="width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: #f39c12;">
-                            <span>Intro bắt đầu:</span>
-                        </label>
-                        <div style="display: flex; align-items: center; gap: 5px;">
-                            <input type="number" id="introBeginMinute" class="form-input" placeholder="0" min="0" style="width: 58px; text-align: center; border-color: #f39c12; padding: 5px;">
-                            <span class="text-muted" style="font-size: 0.8rem;">p</span>
-                            <input type="number" id="introBeginSecond" class="form-input" placeholder="0" min="0" max="59" style="width: 58px; text-align: center; border-color: #f39c12; padding: 5px;">
-                            <span class="text-muted" style="font-size: 0.8rem;">s</span>
-                        </div>
-                    </div>
-
-                    <!-- Intro kết thúc -->
-                    <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
-                        <label class="form-label" style="font-size: 0.82rem; display: flex; align-items: center; gap: 6px; cursor: pointer; margin-bottom: 6px;">
-                            <input type="radio" name="timeCaptureTarget" value="intro" checked style="width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: var(--accent-primary);">
-                            <span>Intro kết thúc:</span>
-                        </label>
-                        <div style="display: flex; align-items: center; gap: 5px;">
-                            <input type="number" id="introEndMinute" class="form-input" placeholder="0" min="0" style="width: 58px; text-align: center; padding: 5px;">
-                            <span class="text-muted" style="font-size: 0.8rem;">p</span>
-                            <input type="number" id="introEndSecond" class="form-input" placeholder="0" min="0" max="59" style="width: 58px; text-align: center; padding: 5px;">
-                            <span class="text-muted" style="font-size: 0.8rem;">s</span>
-                        </div>
-                    </div>
-
-                    <!-- Outro -->
-                    <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
-                        <label class="form-label" style="font-size: 0.82rem; color: #4ecdc4; display: flex; align-items: center; gap: 6px; cursor: pointer; margin-bottom: 6px;">
-                            <input type="radio" name="timeCaptureTarget" value="outro" style="width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: #4ecdc4;">
-                            <span>Outro (chuyển tập):</span>
-                        </label>
-                        <div style="display: flex; align-items: center; gap: 5px;">
-                            <input type="number" id="outroStartMinute" class="form-input" placeholder="0" min="0" style="width: 58px; text-align: center; border-color: #4ecdc4; padding: 5px;">
-                            <span class="text-muted" style="font-size: 0.8rem;">p</span>
-                            <input type="number" id="outroStartSecond" class="form-input" placeholder="0" min="0" max="59" style="width: 58px; text-align: center; border-color: #4ecdc4; padding: 5px;">
-                            <span class="text-muted" style="font-size: 0.8rem;">s</span>
-                        </div>
-                    </div>
-                </div>
-
-                <small class="text-muted" style="display: block; margin-top: 8px; font-size: 0.8rem;">
-                    * Lưu ý: "Intro bắt đầu" (mốc intro xuất hiện, mặc định 0s). "Intro kết thúc" (nhảy tới đây khi bỏ qua). "Chuyển tập" (hiện thông báo từ lúc đánh dấu Outro).
-                </small>
-            </div>
-            <!-- END BỔ SUNG -->
-
-            <div
-              style="display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 16px"
-            >
-              <div class="form-group">
-                <label class="form-label">Thời lượng</label>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                  <div class="input-with-label" style="position: relative;">
-                    <input type="number" id="episodeDurationHour" class="form-input" placeholder="0" min="0" style="padding-right: 35px;">
-                    <span style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #888; pointer-events: none;">giờ</span>
-                  </div>
-                  <div class="input-with-label" style="position: relative;">
-                    <input type="number" id="episodeDurationMinute" class="form-input" placeholder="0" min="0" style="padding-right: 45px;">
-                    <span style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #888; pointer-events: none;">phút</span>
-                  </div>
-                </div>
-                <input type="hidden" id="episodeDuration" />
-              </div>
-              <div class="form-group">
-    <label class="form-label">Chất lượng</label>
-    <select class="form-select" id="episodeQuality">
-        <option value="360p">360p</option>
-        <option value="480p">480p</option>
-        <option value="720p">720p</option>
-        <option value="720p60">720p60</option>
-        <option value="1080p">1080p</option>
-        <option value="1080p60" selected>1080p60</option> 
-        <option value="2K">2K (1440p)</option>
-        <option value="4K">4K (2160p)</option>
-    </select>
-</div>
-            </div>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <button
-            class="btn btn-secondary"
-            onclick="closeEpisodeModal()"
-          >
-            Hủy
-          </button>
-          <button
-            class="btn btn-primary"
-            onclick="document.getElementById('episodeForm').requestSubmit()"
-          >
-            <i class="fas fa-save"></i> Lưu
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Episode Modal đã được chuyển sang Inline Editor trong admin.html -->
 
     <!-- Import Episodes Batch Modal (NEW) -->
     <div class="modal-overlay" id="importEpisodesModal">
@@ -1468,4 +1277,21 @@
           </button>
         </div>
       </div>
+    </div>
+
+    <!-- Modal Xác nhận Xóa Phụ đề -->
+    <div class="modal-overlay" id="deleteSubtitleConfirmModal" style="z-index: 100000;">
+        <div class="modal" style="max-width: 420px; width: 90%; text-align: center; padding: 30px; border: 1px solid #dc3545; box-shadow: 0 10px 30px rgba(0,0,0,0.8); background: #1a1a24;">
+            <i class="fas fa-trash-alt" style="font-size: 50px; color: #dc3545; margin-bottom: 20px;"></i>
+            <h3 style="margin-bottom: 12px; color: #fff; font-size: 1.5rem;">Cảnh báo dọn dẹp Đám mây!</h3>
+            <p style="color: #bbb; font-size: 0.95rem; margin-bottom: 24px; line-height: 1.6;">Bạn có chắc chắn muốn xóa phụ đề này không?<br>Hành động này sẽ xóa hẳn file gốc khỏi hệ thống lưu trữ <strong>Supabase</strong> để giải phóng bộ nhớ. <em>(Tuyệt đối không thể hoàn tác)</em>.</p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button class="btn btn-secondary" onclick="closeModal('deleteSubtitleConfirmModal')" style="flex: 1; padding: 10px 0;">
+                    Thôi từ từ...
+                </button>
+                <button class="btn btn-danger" onclick="executeSubtitleDeletion()" style="flex: 1; padding: 10px 0; font-weight: bold; box-shadow: 0 4px 15px rgba(220,53,69,0.4);">
+                    <i class="fas fa-trash-alt"></i> Xóa vĩnh viễn
+                </button>
+            </div>
+        </div>
     </div>

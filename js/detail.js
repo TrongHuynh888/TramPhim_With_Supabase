@@ -580,9 +580,52 @@ document.addEventListener("mouseout", (e) => {
 });
 
 /**
- * Xử lý bật/tắt các switch trên thanh công cụ
+ * Lấy key lưu trạng thái switch theo tài khoản user
  */
-function toggleSwitch(id) {
+function getSwitchStorageKey() {
+    const uid = (typeof currentUser !== 'undefined' && currentUser && currentUser.id) ? currentUser.id : 'guest';
+    return 'switchStates_' + uid;
+}
+
+/**
+ * Lưu trạng thái tất cả switch vào localStorage theo user
+ */
+function saveSwitchStates() {
+    const switchIds = ['swNextEpisode', 'swCinemaMode', 'swAntiLe', 'swStrange', 'swReaction', 'swAutoFallback'];
+    const states = {};
+    switchIds.forEach(id => {
+        const sw = document.getElementById(id);
+        if (sw) states[id] = sw.classList.contains('on');
+    });
+    localStorage.setItem(getSwitchStorageKey(), JSON.stringify(states));
+}
+
+/**
+ * Khôi phục trạng thái switch từ localStorage theo user (gọi khi trang load)
+ */
+function restoreSwitchStates() {
+    const saved = JSON.parse(localStorage.getItem(getSwitchStorageKey()) || '{}');
+    
+    Object.keys(saved).forEach(id => {
+        const sw = document.getElementById(id);
+        if (!sw) return;
+        
+        const shouldBeOn = saved[id];
+        const currentlyOn = sw.classList.contains('on');
+        
+        // Chỉ toggle nếu trạng thái hiện tại khác trạng thái đã lưu
+        if (shouldBeOn !== currentlyOn) {
+            toggleSwitch(id, true); // silent = true để không lưu lại lần nữa
+        }
+    });
+}
+
+/**
+ * Xử lý bật/tắt các switch trên thanh công cụ
+ * @param {string} id - ID của switch
+ * @param {boolean} silent - Nếu true thì không lưu lại localStorage (dùng khi restore)
+ */
+function toggleSwitch(id, silent) {
     const sw = document.getElementById(id);
     if (!sw) return;
 
@@ -655,7 +698,16 @@ function toggleSwitch(id) {
             }
         }
     }
+    
+    // Lưu trạng thái sau khi toggle (trừ khi đang restore)
+    if (!silent) saveSwitchStates();
 }
+
+// Khôi phục trạng thái switch khi trang load xong
+document.addEventListener('DOMContentLoaded', function() {
+    // Delay nhẹ để chắc chắn DOM đã render xong
+    setTimeout(restoreSwitchStates, 300);
+});
 
 /**
  * Tự động chuyển sang server khác khi video bị lỗi (switch Auto Server = ON)
@@ -939,14 +991,7 @@ function setSpeed(rate) {
     hideSubMenu();
 }
 
-/**
- * Chỉnh màu phụ đề (Giả lập UI)
- */
-function setSubtitleColor(color) {
-    document.getElementById("currentColorVal").textContent = color.toUpperCase();
-    showNotification(`Đã đổi màu phụ đề sang ${color}`, "info");
-    hideSubMenu();
-}
+
 
 /**
  * Chỉnh chất lượng (HLS)
@@ -1583,6 +1628,87 @@ async function checkAndUpdateVideoAccess() {
       html5Player.classList.add("hidden");
       html5Player.pause();
       html5Player.src = "";
+      html5Player.innerHTML = ""; // Clear old tracks
+      
+      // ✅ BILINGUAL & MULTI-LANGUAGE SUBTITLE INJECTION
+      const availableSubs = [];
+      const subCols = [
+          { code: 'vi', prefix: 'VN', label: 'Tiếng Việt (Vietnamese)', field: 'subtitle_vi_url' },
+          { code: 'en', prefix: 'US', label: 'Tiếng Anh (English)', field: 'subtitle_en_url' },
+          { code: 'zh', prefix: 'CN', label: 'Tiếng Trung (Chinese)', field: 'subtitle_zh_url' },
+          { code: 'ko', prefix: 'KR', label: 'Tiếng Hàn (Korean)', field: 'subtitle_ko_url' },
+          { code: 'ja', prefix: 'JP', label: 'Tiếng Nhật (Japanese)', field: 'subtitle_ja_url' }
+      ];
+
+      // Đọc các track thực tế có trong Database
+      subCols.forEach(col => {
+          if (episode && episode[col.field]) {
+              availableSubs.push({ ...col, url: episode[col.field] });
+          }
+      });
+      
+      window.currentAvailableSubs = availableSubs;
+
+      const ccBtn = document.getElementById("ccBtn");
+      const ccLangList = document.getElementById("ccLangList");
+      
+      // Luôn hiện nút CC nếu có tuỳ chọn
+      if (availableSubs.length > 0) {
+          if (ccBtn) ccBtn.style.display = "flex";
+          
+          let prefState = localStorage.getItem('preferredSubtitleState') !== 'off' ? 'on' : 'off';
+          let prefLang = localStorage.getItem('preferredSubtitleLang') || 'vi';
+          
+          if (!availableSubs.find(s => s.code === prefLang)) {
+              if (availableSubs.length > 0) prefLang = availableSubs[0].code;
+          }
+
+          // RENDER 5 NGÔN NGỮ CHÍNH
+          if (ccLangList) {
+              ccLangList.innerHTML = subCols.map(s => {
+                  const hasTrack = availableSubs.find(a => a.code === s.code);
+                  const isPref = (prefState === 'on' && s.code === prefLang);
+
+                  return `
+                  <div class="smt-lang-item ${isPref ? 'active' : ''} ${!hasTrack ? 'disabled-track' : ''}" 
+                       data-lang="${s.code}" 
+                       onclick="changeSubtitleLang('${s.code}')">
+                      <span><span class="smt-lang-prefix">${s.prefix}</span> ${s.label}</span>
+                  </div>
+                  `;
+              }).join('');
+          }
+          
+          // Hack CORS Load Tracks
+          Promise.all(availableSubs.map(sub => {
+              return fetch(sub.url)
+                  .then(resp => resp.text())
+                  .then(vttText => {
+                      const vttBlob = new Blob([vttText], { type: 'text/vtt' });
+                      const vttBlobUrl = URL.createObjectURL(vttBlob);
+                      
+                      const track = document.createElement('track');
+                      track.kind = 'subtitles';
+                      track.label = sub.label;
+                      track.srclang = sub.code;
+                      track.src = vttBlobUrl; 
+                      
+                      if (prefState === 'on' && sub.code === prefLang) {
+                          track.default = true;
+                      }
+                      html5Player.appendChild(track);
+                  })
+                  .catch(err => console.error("Lỗi tải phụ đề:", sub.label, err));
+          })).then(() => {
+              // Re-apply state
+              if(window.setSubtitleMode) window.setSubtitleMode(prefState, true);
+          });
+      } else {
+          if (ccBtn) {
+              ccBtn.style.display = "none";
+              ccBtn.classList.remove("cc-btn-active");
+          }
+      }
       
       // ✅ RESET ERROR OVERLAY
       const errorOverlay = document.getElementById("videoError");
@@ -2850,6 +2976,12 @@ window.toggleSettingsMenu = function() {
     const menu = document.getElementById("settingsMenu");
     const speedMenu = document.getElementById("speedMenu");
     const qualityMenu = document.getElementById("qualityMenu");
+    const ccMenu = document.getElementById("ccSubtitleMenu"); // Close CC menu if open
+    
+    if (ccMenu && ccMenu.style.display === "flex") {
+        ccMenu.style.display = "none";
+    }
+
     if (menu.style.display === "flex") {
         menu.style.display = "none";
         speedMenu.style.display = "none";
@@ -2874,24 +3006,193 @@ function initSubtitleTracks(video) {
 }
 
 window.showSubMenu = function(type) {
+    // Ẩn menu chính và tất cả submenu trước
     document.getElementById("settingsMenu").style.display = "none";
-    if (type === 'speed') {
-        document.getElementById("speedMenu").style.display = "flex";
-    } else if (type === 'color') {
-        document.getElementById("colorMenu").style.display = "flex";
-    } else if (type === 'quality') {
-        document.getElementById("qualityMenu").style.display = "flex";
+    document.querySelectorAll(".settings-submenu").forEach(m => m.style.display = "none");
+    
+    const menuMap = {
+        'speed': 'speedMenu',
+        'quality': 'qualityMenu', 
+        'subtitleStyle': 'subtitleStyleMenu',
+        'subColor': 'subColorMenu',
+        'subSize': 'subSizeMenu',
+        'subFont': 'subFontMenu',
+        'subOutline': 'subOutlineMenu',
+        'subBg': 'subBgMenu',
+        'subBgOpacity': 'subBgOpacityMenu',
+        'subPosition': 'subPositionMenu'
+    };
+    const targetId = menuMap[type];
+    if (targetId) {
+        const el = document.getElementById(targetId);
+        if (el) el.style.display = "flex";
     }
 };
 
 window.hideSubMenu = function() {
-    document.getElementById("speedMenu").style.display = "none";
-    const colorMenu = document.getElementById("colorMenu");
-    if (colorMenu) colorMenu.style.display = "none";
-    const qualityMenu = document.getElementById("qualityMenu");
-    if (qualityMenu) qualityMenu.style.display = "none";
+    document.querySelectorAll(".settings-submenu").forEach(m => m.style.display = "none");
     document.getElementById("settingsMenu").style.display = "flex";
 };
+
+// --- TUỲ CHỈNH PHỤ ĐỀ (::cue CSS Injection + Per-User Storage) ---
+
+// Lấy storage key theo tài khoản user hiện tại
+function getSubStyleKey() {
+    const uid = (typeof currentUser !== 'undefined' && currentUser && currentUser.id) ? currentUser.id : 'guest';
+    return 'subStyles_' + uid;
+}
+
+// Defaults
+const SUB_STYLE_DEFAULTS = {
+    color: '#ffffff', fontSize: '16pt', fontFamily: 'inherit',
+    outline: 'shadow', bgColor: '#000000', bgOpacity: '0', position: 'bottom'
+};
+
+window._subStyles = JSON.parse(localStorage.getItem(getSubStyleKey()) || JSON.stringify(SUB_STYLE_DEFAULTS));
+// Đảm bảo có trường position nếu user cũ chưa có
+if (!window._subStyles.position) window._subStyles.position = 'bottom';
+
+// Khởi tạo lại giao diện khi trang load
+function restoreSubStyleUI() {
+    const s = window._subStyles;
+    const labels = {
+        color: { '#ffffff':'Trắng','#ffeb3b':'Vàng','#00ffff':'Cyan','#4caf50':'Xanh lá','#ff5722':'Cam' },
+        outline: { 'shadow':'Đổ bóng','outline':'Viền đậm','raised':'Nổi','none':'Không' },
+        bgColor: { '#000000':'Đen','#ffffff':'Trắng','#1a237e':'Xanh Navy','transparent':'Trong suốt' },
+        position: { 'bottom':'Dưới','middle':'Giữa','top':'Trên' }
+    };
+    const setLabel = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+    const setDot = (id, color) => { const el = document.getElementById(id); if(el) el.style.background = color; };
+    
+    setLabel('subColorLabel', labels.color[s.color] || 'Trắng');
+    setDot('subColorDot', s.color);
+    setLabel('subSizeLabel', s.fontSize);
+    setLabel('subFontLabel', s.fontFamily === 'inherit' ? 'Mặc định' : s.fontFamily);
+    setLabel('subOutlineLabel', labels.outline[s.outline] || 'Đổ bóng');
+    setLabel('subBgLabel', labels.bgColor[s.bgColor] || 'Đen');
+    setDot('subBgDot', s.bgColor);
+    const opacityPercent = Math.round(parseFloat(s.bgOpacity) * 100) + '%';
+    setLabel('subBgOpacityLabel', opacityPercent);
+    setLabel('subPositionLabel', labels.position[s.position] || 'Dưới');
+    
+    applySubStyle();
+}
+restoreSubStyleUI();
+
+// Khi user đăng nhập/đổi tài khoản → reload lại cài đặt phụ đề của họ
+window.reloadSubStyleForUser = function() {
+    window._subStyles = JSON.parse(localStorage.getItem(getSubStyleKey()) || JSON.stringify(SUB_STYLE_DEFAULTS));
+    if (!window._subStyles.position) window._subStyles.position = 'bottom';
+    restoreSubStyleUI();
+};
+
+// Áp dụng style vào video::cue bằng cách inject <style> tag
+function applySubStyle() {
+    const s = window._subStyles;
+    let styleEl = document.getElementById('custom-cue-style');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'custom-cue-style';
+        document.head.appendChild(styleEl);
+    }
+    
+    // Tính text-shadow theo kiểu viền
+    let textShadow = 'none';
+    if (s.outline === 'shadow') textShadow = '2px 2px 4px rgba(0,0,0,0.9)';
+    else if (s.outline === 'outline') textShadow = '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000';
+    else if (s.outline === 'raised') textShadow = '0px 1px 3px rgba(0,0,0,0.8), 0px 2px 6px rgba(0,0,0,0.5)';
+    
+    // Tính background cho ::cue  
+    let bgRgba = 'transparent';
+    if (s.bgColor && s.bgColor !== 'transparent') {
+        const hex = s.bgColor.replace('#','');
+        const r = parseInt(hex.substring(0,2),16);
+        const g = parseInt(hex.substring(2,4),16);
+        const b = parseInt(hex.substring(4,6),16);
+        bgRgba = `rgba(${r},${g},${b},${s.bgOpacity})`;
+    }
+    
+    styleEl.textContent = `
+        video::cue {
+            color: ${s.color} !important;
+            font-size: ${s.fontSize} !important;
+            font-family: ${s.fontFamily === 'inherit' ? 'inherit' : "'" + s.fontFamily + "'"} !important;
+            text-shadow: ${textShadow} !important;
+            background: ${bgRgba} !important;
+            outline: none !important;
+        }
+    `;
+    
+    // Áp dụng vị trí phụ đề bằng cách set cue.line cho tất cả track đang hiển thị
+    applySubPosition(s.position);
+}
+
+// Thay đổi vị trí phụ đề bằng VTT Cue API
+function applySubPosition(pos) {
+    const video = document.getElementById('html5Player');
+    if (!video || !video.textTracks) return;
+    
+    let lineVal = -1; // Mặc định: dưới cùng
+    if (pos === 'top') lineVal = 0;
+    else if (pos === 'middle') lineVal = -8;
+    // bottom = -1 (default)
+    
+    for (let i = 0; i < video.textTracks.length; i++) {
+        const track = video.textTracks[i];
+        if (track.cues) {
+            for (let j = 0; j < track.cues.length; j++) {
+                track.cues[j].line = lineVal;
+            }
+        }
+    }
+}
+
+window.setSubStyle = function(prop, value, label) {
+    window._subStyles[prop] = value;
+    localStorage.setItem(getSubStyleKey(), JSON.stringify(window._subStyles));
+    
+    // Cập nhật label hiển thị
+    const labelMap = {
+        color: ['subColorLabel', 'subColorDot'],
+        fontSize: ['subSizeLabel'],
+        fontFamily: ['subFontLabel'],
+        outline: ['subOutlineLabel'],
+        bgColor: ['subBgLabel', 'subBgDot'],
+        bgOpacity: ['subBgOpacityLabel'],
+        position: ['subPositionLabel']
+    };
+    const targets = labelMap[prop];
+    if (targets) {
+        const labelEl = document.getElementById(targets[0]);
+        if (labelEl) labelEl.textContent = label;
+        if (targets[1]) {
+            const dotEl = document.getElementById(targets[1]);
+            if (dotEl) dotEl.style.background = value;
+        }
+    }
+    
+    applySubStyle();
+    
+    // Quay về menu Tuỳ chỉnh phụ đề
+    showSubMenu('subtitleStyle');
+};
+
+// --- CLICK OUTSIDE: Tự đóng menu khi bấm ra ngoài ---
+document.addEventListener('click', function(e) {
+    // Kiểm tra xem click có nằm trong vùng settings-container hoặc cc-container không
+    const settingsContainer = e.target.closest('.settings-container');
+    const ccContainer = e.target.closest('.cc-container');
+    
+    // Nếu click NGOÀI cả 2 vùng → đóng tất cả menu
+    if (!settingsContainer && !ccContainer) {
+        const settingsMenu = document.getElementById('settingsMenu');
+        const ccMenu = document.getElementById('ccSubtitleMenu');
+        
+        if (settingsMenu) settingsMenu.style.display = 'none';
+        if (ccMenu) ccMenu.style.display = 'none';
+        document.querySelectorAll('.settings-submenu').forEach(m => m.style.display = 'none');
+    }
+});
 
 // --- HLS QUALITY LOGIC ---
 function populateQualityMenu(hls) {
@@ -2971,36 +3272,90 @@ window.setQuality = function(levelIndex) {
     window.toggleSettingsMenu();
 };
 
-window.setSubtitleColor = function(colorKey) {
-    const video = document.getElementById("html5Player");
-    const color = SUBTITLE_COLORS[colorKey];
+
+
+
+window.toggleSubtitleMenu = function() {
+    const ccMenu = document.getElementById("ccSubtitleMenu");
+    if (!ccMenu) return;
     
-    // Create or update dynamic style for cues
-    let style = document.getElementById("custom-cue-style");
-    if (!style) {
-        style = document.createElement("style");
-        style.id = "custom-cue-style";
-        document.head.appendChild(style);
+    const settingsMenu = document.getElementById("settingsMenu");
+    if (settingsMenu && settingsMenu.style.display === "flex") {
+        settingsMenu.style.display = "none";
     }
     
-    // Webkit specific for Chrome/Safari
-    style.innerHTML = `
-        video::cue {
-            color: ${color} !important;
-            background: rgba(0, 0, 0, 0.5) !important;
+    if (ccMenu.style.display === "none" || !ccMenu.style.display) {
+        ccMenu.style.display = "flex";
+    } else {
+        ccMenu.style.display = "none";
+    }
+};
+
+window.setSubtitleMode = function(mode, skipSave = false) {
+    const btnOn = document.getElementById("smtBtnOn");
+    const btnOff = document.getElementById("smtBtnOff");
+    const ccBtn = document.getElementById("ccBtn");
+    const video = document.getElementById("html5Player");
+    const prefLangFallback = window.currentAvailableSubs && window.currentAvailableSubs.length > 0 ? window.currentAvailableSubs[0].code : 'vi';
+    
+    if (mode === 'on') {
+        if(btnOn) btnOn.classList.add("active");
+        if(btnOff) btnOff.classList.remove("active");
+        if(ccBtn) ccBtn.classList.add("cc-btn-active");
+        if(!skipSave) localStorage.setItem('preferredSubtitleState', 'on');
+        
+        // Bật ngôn ngữ ưa thích (1-track duy nhất)
+        let prefLang = localStorage.getItem('preferredSubtitleLang') || prefLangFallback;
+        
+        if (video && video.textTracks) {
+            let found = false;
+            for (let i = 0; i < video.textTracks.length; i++) {
+                if (video.textTracks[i].language === prefLang) {
+                    video.textTracks[i].mode = "showing";
+                    found = true;
+                } else {
+                    video.textTracks[i].mode = "hidden";
+                }
+            }
+            if (!found && video.textTracks.length > 0) {
+                video.textTracks[0].mode = "showing";
+                prefLang = video.textTracks[0].language;
+                if(!skipSave) localStorage.setItem('preferredSubtitleLang', prefLang);
+            }
         }
-    `;
+        
+    } else {
+        if(btnOn) btnOn.classList.remove("active");
+        if(btnOff) btnOff.classList.add("active");
+        if(ccBtn) ccBtn.classList.remove("cc-btn-active");
+        if(!skipSave) localStorage.setItem('preferredSubtitleState', 'off');
+        
+        if (video && video.textTracks) {
+            for (let i = 0; i < video.textTracks.length; i++) {
+                video.textTracks[i].mode = "hidden";
+            }
+        }
+    }
     
-    // Update active UI
-    document.querySelectorAll("#colorMenu .submenu-item").forEach(item => {
-        item.classList.remove("active");
-        if(item.dataset.color === colorKey) item.classList.add("active");
+    // Cập nhật giao diện dấu tick
+    const items = document.querySelectorAll('.smt-lang-item');
+    items.forEach(el => {
+        if (mode === 'on' && el.dataset.lang === localStorage.getItem('preferredSubtitleLang')) {
+            el.classList.add('active');
+        } else {
+            el.classList.remove('active');
+        }
     });
+};
+
+window.changeSubtitleLang = function(langCode) {
+    localStorage.setItem('preferredSubtitleLang', langCode);
+    setSubtitleMode('on', false);
     
-    document.getElementById("currentColorVal").textContent = colorKey.charAt(0).toUpperCase() + colorKey.slice(1);
-    
-    window.hideSubMenu();
-    window.toggleSettingsMenu();
+    setTimeout(() => {
+        const ccMenu = document.getElementById("ccSubtitleMenu");
+        if (ccMenu) ccMenu.style.display = "none";
+    }, 200); // Ẩn mượt menu
 };
 
 window.setSpeed = function(speed) {
@@ -5657,3 +6012,8 @@ function initMiniPlayerInteraction() {
 
 // Khởi chạy
 initMiniPlayerInteraction();
+
+// Tự động load tuỳ chọn
+document.addEventListener("DOMContentLoaded", () => {
+    // ...
+});

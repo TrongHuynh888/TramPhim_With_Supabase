@@ -1376,10 +1376,37 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             }
         }
 
+        // --- TỰ ĐỘNG ÉP KIỂU PHIM BỘ NẾU SỐ TẬP > 1 ---
+        let actualEps = 0;
+        if (Array.isArray(episodes) && episodes.length > 0) {
+            const firstServer = episodes[0];
+            if (firstServer.server_data && Array.isArray(firstServer.server_data)) {
+                actualEps = firstServer.server_data.length; // Kiểu KKPhim/OPhim
+            } else if (firstServer.items && Array.isArray(firstServer.items)) {
+                actualEps = firstServer.items.length; // Kiểu NguonC
+            }
+        }
+        const maxEps = Math.max(cTotal, actualEps);
+
+        if (movie.type === 'single' && maxEps > 1) {
+            _addImportLog(`⚠️ Phim khai báo là [Phim lẻ] nhưng có ${maxEps} tập -> Tự động ép thành [Phim bộ]`, 'warning');
+            movie.type = 'series';
+            cTotal = maxEps;
+            movie.episode_total = maxEps.toString();
+        }
+
         // --- BIỆN PHÁP CHẶN QUỐC GIA (EXCLUDE COUNTRY) ---
         if (_importState.excludeCountryEnabled && _importState.excludeCountryText && cText) {
-            const blockedCountries = _importState.excludeCountryText.toLowerCase().split(',').map(s=>s.trim()).filter(Boolean);
-            const movieCountries = cText.toLowerCase();
+            const normalizeStr = (str) => {
+                if (!str) return '';
+                return str.normalize('NFD') // Tách dấu
+                          .replace(/[\u0300-\u036f]/g, '') // Bỏ dấu
+                          .toLowerCase()
+                          .replace(/đ/g, 'd')
+                          .replace(/[^a-z0-9]/g, ''); // Bỏ khoảng trắng và ký tự đặc biệt
+            };
+            const blockedCountries = _importState.excludeCountryText.split(',').map(s => normalizeStr(s)).filter(Boolean);
+            const movieCountries = normalizeStr(cText);
             const isBlocked = blockedCountries.some(bc => movieCountries.includes(bc));
             if (isBlocked) {
                 _addImportLog(`🚫 Thuộc quốc gia bị chặn (${cText}). Đã bỏ qua.`, 'warning');
@@ -3052,11 +3079,11 @@ async function autoSyncEpisodesIfNeeded(isManual = false) {
             }, true);
         }
 
-        // 7. Refresh danh sách tập — CHỈ KHI modal edit episode KHÔNG đang mở
-        // (tránh đóng modal preview khi admin đang xem/chỉnh tập)
-        const episodeModal = document.getElementById('episodeModal');
-        const isModalOpen = episodeModal && (episodeModal.style.display === 'flex' || episodeModal.classList.contains('active') || episodeModal.classList.contains('show'));
-        if (totalAdded > 0 && !isModalOpen && typeof selectedMovieForEpisodes !== 'undefined' && selectedMovieForEpisodes) {
+        // 7. Refresh danh sách tập — CHỈ KHI inline editor KHÔNG đang mở
+        // (tránh làm gián đoạn khi admin đang xem/chỉnh tập)
+        const inlineEditor = document.getElementById('inlineEpisodeEditorContainer');
+        const isEditorOpen = inlineEditor && inlineEditor.style.display !== 'none';
+        if (totalAdded > 0 && !isEditorOpen && typeof selectedMovieForEpisodes !== 'undefined' && selectedMovieForEpisodes) {
             if (typeof loadEpisodesForMovie === 'function') loadEpisodesForMovie(selectedMovieForEpisodes, false);
         }
 
