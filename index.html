@@ -976,6 +976,78 @@
                   <!-- JS sẽ render danh sách tập vào đây -->
                 </div>
               </div>
+
+              
+              <!-- JW PLAYER MODALS -->
+              <div class="jw-modal" id="jwAboutModal" style="display: none;">
+                <div class="jw-modal-overlay" onclick="closeJwModals()"></div>
+                <div class="jw-modal-content jw-about-content">
+                  <div class="jw-about-col">
+                    <div class="jw-info-row"><strong>Title</strong> <span id="jwA_title">Unknown Title</span></div>
+                    <div class="jw-info-row"><strong>Media ID</strong> (none)</div>
+                    <div class="jw-info-row"><strong>Player ID</strong> KB5zFt7A</div>
+                    <div class="jw-info-row"><strong>Analytics ID</strong> GCCG</div>
+                    <div class="jw-info-row"><strong>Stream Type</strong> hls</div>
+                    <div class="jw-info-row"><strong>Viewport</strong> <span id="jwA_vp">1600x900</span></div>
+                    <div class="jw-info-row"><strong>Dropped Frames</strong> <span id="jwA_drop">2/941</span></div>
+                    <div class="jw-info-row"><strong>BW / Dowlink / Type</strong> <span id="jwA_bw">7.9 / 10 / 4g</span></div>
+                    <div class="jw-progress-bar"><div class="jw-progress-bar-fill jw-blue" id="jwA_bwFill" style="width: 100%"></div></div>
+                    <div class="jw-info-row" style="margin-top: 5px;"><strong>Buffer Health</strong> <span id="jwA_buf">25.07s</span></div>
+                    <div class="jw-progress-bar"><div class="jw-progress-bar-fill jw-blue" id="jwA_bufFill" style="width: 100%"></div></div>
+                  </div>
+                  <div class="jw-about-col">
+                    <div class="jw-info-row"><strong>Duration</strong> <span id="jwA_dur">01:35:26</span></div>
+                    <div class="jw-info-row"><strong>Client ID</strong> <span id="jwA_cid">134tfn91czag</span></div>
+                    <div class="jw-info-row"><strong>Feed ID</strong> (none)</div>
+                    <div class="jw-info-row"><strong>Stream Host</strong> s6.kkphimplayer6.com</div>
+                    <div class="jw-info-row"><strong>Provider</strong> hlsjs</div>
+                    <div class="jw-info-row"><strong>Resolution / Mode</strong> <span id="jwA_res">1920x800 / manual</span></div>
+                    <div class="jw-info-row"><strong>Version</strong> 8.38.3</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="jw-modal" id="jwShortcutsModal" style="display: none;">
+                <div class="jw-modal-overlay" onclick="closeJwModals()"></div>
+                <div class="jw-modal-content jw-sc-content">
+                  <div class="jw-sc-header">
+                    <strong>Keyboard Shortcuts</strong>
+                    <div class="jw-sc-toggle" onclick="this.classList.toggle('off')">
+                        <span class="jw-sc-text">Enabled</span>
+                        <div class="jw-sc-switch"></div>
+                    </div>
+                  </div>
+                  <div class="jw-sc-list">
+                    <div class="jw-sc-item"><span>Shortcuts Open/Close</span><div class="jw-sc-keys"><kbd>/ or ?</kbd></div></div>
+                    <div class="jw-sc-item"><span>Play/Pause</span><div class="jw-sc-keys"><kbd>SPACE</kbd></div></div>
+                    <div class="jw-sc-item"><span>Increase Volume</span><div class="jw-sc-keys"><kbd>&uarr;</kbd></div></div>
+                    <div class="jw-sc-item"><span>Decrease Volume</span><div class="jw-sc-keys"><kbd>&darr;</kbd></div></div>
+                    <div class="jw-sc-item"><span>Seek Forward</span><div class="jw-sc-keys"><kbd>&rarr;</kbd></div></div>
+                    <div class="jw-sc-item"><span>Seek Backward</span><div class="jw-sc-keys"><kbd>&larr;</kbd></div></div>
+                    <div class="jw-sc-item"><span>Captions On/Off</span><div class="jw-sc-keys"><kbd>c</kbd></div></div>
+                    <div class="jw-sc-item"><span>Fullscreen/Exit Fullscreen</span><div class="jw-sc-keys"><kbd>f</kbd></div></div>
+                    <div class="jw-sc-item"><span>Mute/Unmute</span><div class="jw-sc-keys"><kbd>m</kbd></div></div>
+                    <div class="jw-sc-item"><span>Decrease Caption Size</span><div class="jw-sc-keys"><kbd>-</kbd></div></div>
+                    <div class="jw-sc-item"><span>Increase Caption Size</span><div class="jw-sc-keys"><kbd>+ or =</kbd></div></div>
+                    <div class="jw-sc-item"><span>Seek %</span><div class="jw-sc-keys"><kbd>0-9</kbd></div></div>
+                  </div>
+                </div>
+              </div>
+              <!-- CUSTOM RIGHT CLICK MENU (JW PLAYER STYLE) -->
+              <div class="video-context-menu" id="videoContextMenu" style="display: none;">
+                <ul class="context-menu-list">
+                  <li onclick="ctxShowInfo()">Thông tin về video này</li>
+                  <li onclick="ctxShowShortcuts()">Phím Tắt</li>
+                  <li onclick="togglePiP()">Picture in Picture (PiP)</li>
+                  <li class="context-powered" onclick="window.open('https://jwplayer.com/','_blank')">
+                    <svg viewBox="0 0 24 24" fill="none" class="jw-logo-svg" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px; margin-right: 5px;">
+                       <polyline points="3 14 7 14 10 4 14 20 18 10 22 10"></polyline>
+                    </svg>
+                    Cung cấp bởi JW Player 8.46.2
+                  </li>
+                </ul>
+              </div>
+
             </div> <!-- End video-container -->
 
             <!-- REACTION SIDEBAR (Vertical Floating) - Outside video-container -->

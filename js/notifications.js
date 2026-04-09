@@ -36,6 +36,12 @@ function initNotifications(user, isAdmin) {
     loadInitialNotifications(user.id, isAdmin);
 
     // 2. Lắng nghe Realtime qua Channel (kênh chính)
+    // Hủy kênh cũ nếu đã tồn tại để tránh lỗi duplicate listener
+    const existingChannel = supabase.getChannels().find(c => c.topic === 'realtime:public:notifications');
+    if (existingChannel) {
+        supabase.removeChannel(existingChannel);
+    }
+
     const notificationChannel = supabase
       .channel('public:notifications')
       .on('postgres_changes', { 

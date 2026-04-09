@@ -3009,48 +3009,14 @@ async function autoSyncEpisodesIfNeeded(isManual = false) {
 
             let movieTotalAdded = 0;
 
-            // [OPTIMIZE] NHẬN DIỆN PROVIDER GỐC CỦA PHIM (dựa vào api_url_backup)
-            // Thay vì quét TẤT CẢ 3 providers gây ra 404 và làm chậm x3 lần, bộ lọc chỉ lấy nguồn khớp.
+            // YÊU CẦU: Luôn quét tất cả providers để bổ sung CẢ TẬP VÀ NGUỒN (Backup Server)
+            // Thay vì bị giới hạn bởi provider gốc ban đầu, ta quét toàn bộ các nguồn.
             const targetProviders = new Set();
             const allKeys = Object.keys(API_PROVIDERS);
-            const backupUrl = (movie.api_url_backup || '').toLowerCase();
-            
-            for (const key of allKeys) {
-                const p = API_PROVIDERS[key];
-                // Phân tích domain của API provider (VD: "https://phimapi.com" -> "phimapi.com")
-                const domain = p.baseUrl.replace(/^https?:\/\//, '').toLowerCase();
-                if (backupUrl.includes(domain)) {
-                    targetProviders.add(key);
-                }
-            }
+            allKeys.forEach(k => targetProviders.add(k));
 
-            // Thu thập thêm từ các nguồn m3u8 nếu admin từng Nạp Đa Nguồn bằng tay
-            // Query riêng episodes cho đúng phim hiện tại (KHÔNG dùng biến `eps` cũ vì nó thuộc scope bước 4)
-            const { data: movieEpsForDetect } = await supabase
-                .from('episodes')
-                .select('sources')
-                .eq('movie_id', movie.id);
-            (movieEpsForDetect || []).forEach(ep => {
-                if (ep.sources && Array.isArray(ep.sources)) {
-                    ep.sources.forEach(src => {
-                        const url = (src.source || '').toLowerCase();
-                        // Nếu là KKPhim (hay dùng phimimg.com / kkphimplayer)
-                        if (url.includes('phimimg.com') || url.includes('kkphim')) targetProviders.add('kkphim');
-                        // Nếu là OPhim (hay dùng opstream / ophim)
-                        if (url.includes('ophim') || url.includes('opstream')) targetProviders.add('ophim');
-                        // Nếu là Nguồn C (hay dùng phimmoi.net / nguonc / streamc)
-                        if (url.includes('nguonc') || url.includes('phimmoi.net') || url.includes('streamc')) targetProviders.add('nguonc');
-                    });
-                }
-            });
-
-            // Nếu không xác định được gì (hiếm), backup là quét tất cả
-            if (targetProviders.size === 0) {
-                allKeys.forEach(k => targetProviders.add(k));
-            } else {
-                const names = Array.from(targetProviders).map(k => API_PROVIDERS[k]?.name).join(', ');
-                logOut(`🎯 Phim "${movie.title}" chỉ quét các nguồn: [${names}]`, 'info');
-            }
+            const names = Array.from(targetProviders).map(k => API_PROVIDERS[k]?.name).join(', ');
+            logOut(`🎯 Phim "${movie.title}" quét đa nguồn bổ sung tập/server: [${names}]`, 'info');
 
             for (const key of targetProviders) {
                 // ★ Kiểm tra tạm dừng / hủy giữa provider

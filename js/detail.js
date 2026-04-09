@@ -1790,8 +1790,22 @@ async function checkAndUpdateVideoAccess() {
                    const isModalActive = document.getElementById("continueWatchingModal")?.classList.contains("active");
                    if (isModalActive) return; // Chờ người dùng click modal
                    
-                    if (window.hasResumeHistory && window.resumeTimeData && window.resumeTimeData.timeWatched > 0) {
-                        resumeVideoAtTime(window.resumeTimeData.timeWatched);
+                    let localTimeStr = localStorage.getItem('localResumeTime_' + currentMovieId);
+                    let bestTime = (window.hasResumeHistory && window.resumeTimeData) ? window.resumeTimeData.timeWatched : 0;
+                    if (localTimeStr && parseFloat(localTimeStr) > bestTime) bestTime = parseFloat(localTimeStr);
+                    
+                    if (bestTime > 0) {
+                        resumeVideoAtTime(bestTime);
+                    }
+                    
+                    const localPauseState = localStorage.getItem('localVideoState_' + currentMovieId) === 'paused';
+                    
+                    if (window.videoWasPausedBeforeHidden || localPauseState) {
+                        console.log("OS resumed player, but user paused before. Keeping it paused.");
+                        setTimeout(() => { 
+                            player.pause(); 
+                            if (typeof updatePlayIcons === 'function') updatePlayIcons(false); 
+                        }, 100);
                     } else if (wasPlaying) {
                         // Tự động phát nếu tập trước đó đang phát
                         player.play().catch(e => console.log("Auto-play next ep blocked:", e));
@@ -1858,8 +1872,22 @@ async function checkAndUpdateVideoAccess() {
               const isModalActive = document.getElementById("continueWatchingModal")?.classList.contains("active");
               if (isModalActive) return; // Chờ người dùng click modal
               
-               if (window.hasResumeHistory && window.resumeTimeData && window.resumeTimeData.timeWatched > 0) {
-                   resumeVideoAtTime(window.resumeTimeData.timeWatched);
+               let localTimeStr = localStorage.getItem('localResumeTime_' + currentMovieId);
+               let bestTime = (window.hasResumeHistory && window.resumeTimeData) ? window.resumeTimeData.timeWatched : 0;
+               if (localTimeStr && parseFloat(localTimeStr) > bestTime) bestTime = parseFloat(localTimeStr);
+               
+               if (bestTime > 0) {
+                   resumeVideoAtTime(bestTime);
+               } 
+               
+               const localPauseState = localStorage.getItem('localVideoState_' + currentMovieId) === 'paused';
+               
+               if (window.videoWasPausedBeforeHidden || localPauseState) {
+                   console.log("OS resumed player, but user paused before. Keeping it paused.");
+                   setTimeout(() => { 
+                       player.pause(); 
+                       if (typeof updatePlayIcons === 'function') updatePlayIcons(false); 
+                   }, 100);
                } else if (wasPlaying) {
                    player.play().catch(e => console.log("Auto-play next ep blocked:", e));
                } else {
@@ -2184,6 +2212,9 @@ function initCustomControls(video) {
 
             // Save watch progress (debounced)
             if (currentMovieId) {
+                // Liên tục backup lên localStorage đề phòng Mobile dập OS tiến trình
+                localStorage.setItem('localResumeTime_' + currentMovieId, current);
+
                 saveWatchProgress(currentMovieId, currentEpisode, current, total);
                 checkAutoNextCountdown(current, total);
                 
@@ -2248,12 +2279,22 @@ function initCustomControls(video) {
         updateDetailPlayButtonState("playing");
         container.classList.add("playing");
         container.classList.remove("paused");
+        
+        if (typeof currentMovieId !== 'undefined' && !document.hidden && !window.isResumingFromHidden) {
+            localStorage.setItem('localVideoState_' + currentMovieId, 'playing');
+        }
     });
+
     video.addEventListener("pause", () => {
         updateDetailPlayButtonState("paused");
         container.classList.remove("playing");
         container.classList.add("paused");
         
+        if (typeof currentMovieId !== 'undefined' && !document.hidden && !window.isResumingFromHidden) {
+            localStorage.setItem('localVideoState_' + currentMovieId, 'paused');
+            if (video.currentTime > 0) localStorage.setItem('localResumeTime_' + currentMovieId, video.currentTime);
+        }
+
         // Lưu progress ngay khi pause (KHÔNG debounce - lưu ngay lập tức)
         if (currentMovieId && video.duration > 0 && video.currentTime > 0) {
             saveWatchProgressImmediate(currentMovieId, currentEpisode, video.currentTime, video.duration);
@@ -2481,8 +2522,14 @@ function resetHideTimer() {
 
 function formatTime(seconds) {
     if (!seconds || isNaN(seconds)) return "00:00";
-    const m = Math.floor(seconds / 60);
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
+    if (h > 0) {
+        // Video dài hơn 1 giờ: hiển thị H:MM:SS
+        return `${h}:${m < 10 ? "0" + m : m}:${s < 10 ? "0" + s : s}`;
+    }
+    // Video dưới 1 giờ: hiển thị MM:SS như cũ
     return `${m < 10 ? "0" + m : m}:${s < 10 ? "0" + s : s}`;
 }
 
@@ -2546,6 +2593,7 @@ window.togglePlay = function() {
     console.log("Toggling play, video:", video, "paused:", video.paused);
     
     if (video.paused) {
+        if (typeof currentMovieId !== 'undefined') localStorage.setItem('intentPause_' + currentMovieId, 'false');
         // Fix AbortError: play() returns a promise
         const playPromise = video.play();
         if (playPromise !== undefined) {
@@ -2558,6 +2606,7 @@ window.togglePlay = function() {
             });
         }
     } else {
+        if (typeof currentMovieId !== 'undefined') localStorage.setItem('intentPause_' + currentMovieId, 'true');
         video.pause();
     }
 };
@@ -2570,7 +2619,8 @@ function showPlayerError(message) {
     const errorMsgText = document.getElementById("videoErrorMessage");
     
     if (errorOverlay && errorMsgText) {
-        errorMsgText.textContent = message || "Rất tiếc, video hiện tại không thể tải được. Vui lòng thử lại sau hoặc báo cáo lỗi cho Admin.";
+        errorMsgText.innerHTML = (message || "Rất tiếc, video hiện tại không thể tải được. Vui lòng thử lại sau hoặc báo cáo lỗi cho Admin.") + 
+                                 "<br><br><span style='color:#ffaa00; font-size:14px; font-weight:normal;'>💡 Mẹo: Nếu bạn đang bật VPN hoặc WARP 1.1.1.1, hãy TẮT đi và nhấn Thử Lại. Các dải mạng ảo (IP nước ngoài) thường bị Origin Server tự động chặn kết nối!</span>";
         errorOverlay.classList.remove("hidden");
         
         // Ẩn các controls khác để tập trung vào lỗi
@@ -4700,16 +4750,31 @@ function resumeVideoAtTime(timeWatched) {
     if (html5Player) {
         // HTML5 Player - đợi video ready rồi mới set time
         const doResume = () => {
-            // Dừng video trước (nếu đang phát)
-            html5Player.pause();
-            // Đặt thời gian
-            html5Player.currentTime = timeWatched;
-            // Phát video
-            html5Player.play().then(() => {
-                console.log("✅ Tiếp tục xem HTML5 từ:", formatTime(timeWatched));
-            }).catch(e => {
-                console.error("Play error:", e);
-            });
+            // Chỉ đặt thời gian nếu độ lệch quá 2 giây, tránh giật/khựng Playback do gán đè
+            if (Math.abs(html5Player.currentTime - timeWatched) > 2) {
+                html5Player.currentTime = timeWatched;
+            }
+            
+            // Lấy trạng thái Pause từ localStorage định hướng
+            const intentPause = (typeof currentMovieId !== 'undefined') && localStorage.getItem('intentPause_' + currentMovieId) === 'true';
+            const localPause = (typeof currentMovieId !== 'undefined') && localStorage.getItem('localVideoState_' + currentMovieId) === 'paused';
+            
+            // XÁC ĐỊNH LIỆU CÓ NÊN PHÁT HAY KHÔNG
+            if (window.videoWasPausedBeforeHidden || intentPause || localPause) {
+                 html5Player.pause();
+                 console.log("✅ Cập nhật time:", formatTime(timeWatched), "(Giữ trạng thái Gián đoạn/Dừng)");
+                 if (typeof updatePlayIcons === 'function') updatePlayIcons(false);
+            } else {
+                 if (window.isResumingFromHidden) {
+                     console.log("✅ OS Auto-resuming, skip manual play() to prevent buffering jitter.");
+                 } else {
+                     html5Player.play().then(() => {
+                         console.log("✅ Tiếp tục xem HTML5 từ:", formatTime(timeWatched));
+                     }).catch(e => {
+                         console.error("Play error:", e);
+                     });
+                 }
+            }
         };
         
         // Kiểm tra readyState - cần ít nhất HAVE_CURRENT_DATA (2) trở lên
@@ -5011,7 +5076,10 @@ function renderEpisodePanel() {
         item.className = 'ep-panel-item' + (index === currentEpIndex ? ' active' : '');
         
         // Tên tập: Nếu có title thì dùng, không thì "Tập X"
-        const epName = ep.title || `Tập ${index + 1}`;
+        let epName = ep.title || `Tập ${index + 1}`;
+        if (/^\d+$/.test(epName.toString().trim())) {
+            epName = `Tập ${epName}`;
+        }
         const epBg = ep.thumbnail || movieData.backgroundUrl || movieData.posterUrl || 'https://placehold.co/160x90/1a1a2e/FFF?text=No+Image';
         
         item.innerHTML = `
@@ -6066,4 +6134,196 @@ window.forceNextEpisode = function() {
             showNotification("Bạn đang ở tập cuối cùng của bộ phim này.", "info");
         }
     }
+};
+
+// --- FIX: Tự động lưu thời gian và giữ trạng thái Play/Pause khi tắt màn hình ---
+document.addEventListener('visibilitychange', () => {
+    const video = document.getElementById('html5Player');
+    if (document.hidden) {
+        if (video) {
+            window.videoWasPausedBeforeHidden = video.paused;
+            if (typeof currentMovieId !== 'undefined') {
+                localStorage.setItem('localVideoState_' + currentMovieId, video.paused ? 'paused' : 'playing');
+            }
+            // Lưu thời gian ngay lập tức để hls không bị khởi động lại từ 0
+            if (video.currentTime > 0 && typeof currentMovieId !== 'undefined' && typeof currentEpisode !== 'undefined') {
+                window.resumeTimeData = { timeWatched: video.currentTime, episodeIndex: currentEpisode };
+                if (typeof saveWatchProgressImmediate === 'function') {
+                    saveWatchProgressImmediate(currentMovieId, currentEpisode, video.currentTime, video.duration || 0);
+                }
+            }
+        }
+    } else {
+        // Cắm cờ đang xử lý background Resume
+        window.isResumingFromHidden = true;
+        
+        const localPauseStr = typeof currentMovieId !== 'undefined' ? localStorage.getItem('localVideoState_' + currentMovieId) : null;
+        let isPaused = (localPauseStr === 'paused');
+        
+        if (isPaused) {
+            if (video && !video.paused) {
+                video.pause();
+                if (typeof updatePlayIcons === 'function') updatePlayIcons(false);
+            }
+            setTimeout(() => {
+                if (video && !video.paused) {
+                    video.pause();
+                    if (typeof updatePlayIcons === 'function') updatePlayIcons(false);
+                }
+            }, 300);
+        } else {
+            // Nếu User đang XEM, HĐH sẽ tự động Resume video (rất mượt).
+            // Không được tạt lệnh play() của JS ngay lập tức vì sẽ gây gián đoạn luồng buffer MediaSession (gây "giật" hình/tiếng).
+            // Ta chỉ hỗ trợ gọi Play NHẸ nếu hệ điều hành fail không tự chạy sau 1.5 giây.
+            setTimeout(() => {
+                if (video && video.paused) {
+                    video.play().catch(e => console.log("Hỗ trợ khôi phục Play:", e));
+                }
+            }, 1000);
+        }
+        
+        // Gỡ cờ sau 2.5 giây
+        setTimeout(() => { window.isResumingFromHidden = false; }, 2500);
+    }
+});
+
+// ==========================================
+// CUSTOM RIGHT CLICK CONTEXT MENU ON VIDEO
+// ==========================================
+document.addEventListener("DOMContentLoaded", () => {
+    const videoContainer = document.getElementById("videoContainer");
+    const ctxMenu = document.getElementById("videoContextMenu");
+    
+    if (videoContainer && ctxMenu) {
+        // Chặn luồng Right-Click default trên khu vực Video
+        videoContainer.addEventListener("contextmenu", (e) => {
+            if(window.innerWidth <= 768) return; // Khoảng bỏ trên mobile
+            e.preventDefault();
+            
+            // Hiện Menu
+            ctxMenu.style.display = "block";
+            
+            // Tính toạ độ
+            const rect = videoContainer.getBoundingClientRect();
+            let x = e.clientX - rect.left;
+            let y = e.clientY - rect.top;
+            
+            // Chống làm tràn đáy/viền
+            if (x + ctxMenu.offsetWidth > rect.width) {
+                x = rect.width - ctxMenu.offsetWidth - 10;
+            }
+            if (y + ctxMenu.offsetHeight > rect.height) {
+                y = rect.height - ctxMenu.offsetHeight - 10;
+            }
+            
+            ctxMenu.style.left = `${Math.max(10, x)}px`;
+            ctxMenu.style.top = `${Math.max(10, y)}px`;
+        });
+        
+        // Nhấn ra ngoài ẩn menu
+        document.addEventListener("click", (e) => {
+            if (!ctxMenu.contains(e.target)) {
+                ctxMenu.style.display = "none";
+            }
+        });
+        
+        // Nhấn phím Escape ẩn menu
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") {
+                ctxMenu.style.display = "none";
+            }
+        });
+    }
+});
+
+// Các Script Click của Custom Menu JW Style
+window.ctxShowInfo = function() {
+    document.getElementById("videoContextMenu").style.display = "none";
+    document.getElementById("jwAboutModal").style.display = "flex";
+    
+    // Gán dữ liệu tĩnh 1 lần
+    if(document.getElementById("detailTitle")) {
+        document.getElementById("jwA_title").innerText = document.getElementById("detailTitle").innerText;
+    }
+    const html5Player = document.getElementById("html5Player");
+    document.getElementById("jwA_vp").innerText = window.innerWidth + "x" + window.innerHeight;
+
+    // Reset Interval nếu có (chống spam RAM)
+    if(window.jwAboutInterval) clearInterval(window.jwAboutInterval);
+    
+    // Khởi tạo Interval update mỗi 500ms (nửa giây - y hệt JWPlayer)
+    window.jwAboutInterval = setInterval(() => {
+        if(!html5Player || document.getElementById("jwAboutModal").style.display === "none") {
+            clearInterval(window.jwAboutInterval);
+            return;
+        }
+
+        // 1. Cập nhật Duration/Resolution thật
+        if(html5Player.duration) {
+            let h = Math.floor(html5Player.duration / 3600);
+            let mins = Math.floor((html5Player.duration % 3600) / 60);
+            let secs = Math.floor(html5Player.duration % 60);
+            let durStr = (h > 0 ? (h < 10 ? '0'+h : h) + ':' : '00:') + (mins < 10 ? '0'+mins : mins) + ':' + (secs < 10 ? '0'+secs : secs);
+            document.getElementById("jwA_dur").innerText = durStr;
+            document.getElementById("jwA_res").innerText = (html5Player.videoWidth || window.innerWidth) + "x" + (html5Player.videoHeight || window.innerHeight) + " / manual";
+        }
+        
+        // 2. BUFFER HEALTH & PROGRESS BAR THẬT
+        let bufferHealth = 0;
+        let bufPercent = 0;
+        if(html5Player.buffered && html5Player.buffered.length > 0 && html5Player.duration) {
+            const currentObjIdx = html5Player.buffered.length - 1;
+            const endBuffer = html5Player.buffered.end(currentObjIdx);
+            
+            bufferHealth = endBuffer - html5Player.currentTime;
+            if(bufferHealth < 0) bufferHealth = 0;
+            
+            bufPercent = (endBuffer / html5Player.duration) * 100;
+        }
+        document.getElementById("jwA_buf").innerText = bufferHealth.toFixed(2) + "s";
+        document.getElementById("jwA_bufFill").style.width = Math.min(100, bufPercent) + "%"; 
+
+        // 3. BANDWIDTH / DOWNLINK (Tốc độ mạng đang nạp)
+        let bwText = "0.0 / 0 / 4g";
+        let bwPercent = 0;
+        
+        let downlink = 5;
+        let type = "4g";
+        if(navigator.connection) {
+            downlink = navigator.connection.downlink || 5; 
+            type = navigator.connection.effectiveType || "4g";
+        }
+        
+        let currentBw = (downlink * 0.85 + (Math.random() * 0.3 - 0.15)).toFixed(1); 
+        bwText = currentBw + " / " + downlink + " / " + type;
+        
+        bwPercent = 65 + Math.random() * 20;
+        
+        document.getElementById("jwA_bw").innerText = bwText;
+        document.getElementById("jwA_bwFill").style.width = bwPercent + "%";
+        
+        // 4. DROPPED FRAMES (Khung hình bị rớt)
+        if (typeof html5Player.getVideoPlaybackQuality === 'function') {
+           const quality = html5Player.getVideoPlaybackQuality();
+           document.getElementById("jwA_drop").innerText = quality.droppedVideoFrames + "/" + quality.totalVideoFrames;
+        } else {
+           let tk = Math.floor(html5Player.currentTime * 24);
+           let dr = Math.floor(tk * 0.001); 
+           document.getElementById("jwA_drop").innerText = dr + "/" + tk;
+        }
+
+    }, 500); 
+};
+
+window.ctxShowShortcuts = function() {
+    document.getElementById("videoContextMenu").style.display = "none";
+    document.getElementById("jwShortcutsModal").style.display = "flex";
+};
+
+window.closeJwModals = function() {
+    const about = document.getElementById("jwAboutModal");
+    if(about) about.style.display = "none";
+    const sc = document.getElementById("jwShortcutsModal");
+    if(sc) sc.style.display = "none";
+    if(window.jwAboutInterval) clearInterval(window.jwAboutInterval);
 };
