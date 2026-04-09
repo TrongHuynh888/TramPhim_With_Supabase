@@ -738,7 +738,7 @@ function _normalizeEpNumber(name) {
     let n = String(name).trim().replace(/^(tập|tap|episode|ep)\.?\s*/i, '').trim();
     // Nếu còn lại là số thuần → bỏ leading zeros ("01" → "1")
     if (/^\d+$/.test(n)) n = String(parseInt(n, 10));
-    return n || String(name).trim();
+    return (n || String(name).trim()).toLowerCase();
 }
 
 /**
@@ -1255,14 +1255,14 @@ async function _importEpisodesForMovie(movieId, episodesData, movieDuration = ''
 
         (server.server_data || server.items || []).forEach((ep, idx) => {
             const epName = String(ep.name || (idx + 1));
-            const epKey  = epName; // Dùng số tập làm key gộp
+            const epKey  = _normalizeEpNumber(epName); // Dùng số tập đã chuẩn hóa làm key gộp
 
             // Khởi tạo record nếu chưa có
             if (!episodeMap[epKey]) {
                 episodeMap[epKey] = {
                     movie_id:       movieId,
                     episode_index:  idx,
-                    episode_number: epName,
+                    episode_number: epKey,
                     title:          epName,
                     quality:        normQuality,
                     duration:       movieDuration || '',
@@ -1376,10 +1376,46 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             }
         }
 
+        // --- NORMALIZE movie.type: Chuyển các giá trị API lạ về chuẩn 'series'/'single' ---
+        const _rawType = (movie.type || '').toLowerCase().trim();
+        if (['tvshows', 'hoathinh', 'tv_shows', 'phim-bo', 'bộ'].includes(_rawType) || _rawType.includes('phim bộ')) {
+            movie.type = 'series';
+        } else if (['phim-le', 'lẻ'].includes(_rawType) || _rawType.includes('phim lẻ')) {
+            movie.type = 'single';
+        }
+        // Giữ nguyên nếu đã là 'series' hoặc 'single', hoặc giá trị không nhận dạng được
+
+        // --- TỰ ĐỘNG ÉP KIỂU PHIM BỘ NẾU SỐ TẬP > 1 ---
+        let actualEps = 0;
+        if (Array.isArray(episodes) && episodes.length > 0) {
+            const firstServer = episodes[0];
+            if (firstServer.server_data && Array.isArray(firstServer.server_data)) {
+                actualEps = firstServer.server_data.length; // Kiểu KKPhim/OPhim
+            } else if (firstServer.items && Array.isArray(firstServer.items)) {
+                actualEps = firstServer.items.length; // Kiểu NguonC
+            }
+        }
+        const maxEps = Math.max(cTotal, actualEps);
+
+        if (movie.type !== 'series' && maxEps > 1) {
+            _addImportLog(`⚠️ Phim khai báo là [${movie.type || 'không rõ'}] nhưng có ${maxEps} tập -> Tự động ép thành [Phim bộ]`, 'warning');
+            movie.type = 'series';
+            cTotal = maxEps;
+            movie.episode_total = maxEps.toString();
+        }
+
         // --- BIỆN PHÁP CHẶN QUỐC GIA (EXCLUDE COUNTRY) ---
         if (_importState.excludeCountryEnabled && _importState.excludeCountryText && cText) {
-            const blockedCountries = _importState.excludeCountryText.toLowerCase().split(',').map(s=>s.trim()).filter(Boolean);
-            const movieCountries = cText.toLowerCase();
+            const normalizeStr = (str) => {
+                if (!str) return '';
+                return str.normalize('NFD') // Tách dấu
+                          .replace(/[\u0300-\u036f]/g, '') // Bỏ dấu
+                          .toLowerCase()
+                          .replace(/đ/g, 'd')
+                          .replace(/[^a-z0-9]/g, ''); // Bỏ khoảng trắng và ký tự đặc biệt
+            };
+            const blockedCountries = _importState.excludeCountryText.split(',').map(s => normalizeStr(s)).filter(Boolean);
+            const movieCountries = normalizeStr(cText);
             const isBlocked = blockedCountries.some(bc => movieCountries.includes(bc));
             if (isBlocked) {
                 _addImportLog(`🚫 Thuộc quốc gia bị chặn (${cText}). Đã bỏ qua.`, 'warning');
@@ -1770,6 +1806,7 @@ async function importSingleMovieFromApi(slug, opts = {}) {
             background_url: backgroundUrl,
             description:    (movie.content || movie.description || '').replace(/<[^>]*>/g, '').trim(),
             year:           movie.year ? parseInt(movie.year) : null,
+            // movie.type đã được ép thành 'series' ở bước trên nếu maxEps > 1
             type:           movie.type === 'series' ? 'series' : 'single',
             quality:        movie.quality || 'HD',
             // Phim chỉ có Trailer → set "chờ duyệt" thay vì public
@@ -2532,8 +2569,9 @@ function _updateCardImportBadge(slug, result) {
             card.appendChild(importBtn);
 
             // Thông tin phim
-            const typeClass = item.type === 'series' ? 'type-series' : 'type-single';
-            const typeLabel = item.type === 'series' ? 'Bộ' : 'Lẻ';
+            const _isSeries = item.type === 'series' || item.type === 'tvshows' || item.type === 'hoathinh';
+            const typeClass = _isSeries ? 'type-series' : 'type-single';
+            const typeLabel = _isSeries ? 'Bộ' : 'Lẻ';
             
             let providerBadgeHtml = '';
             if (item._providerId && API_PROVIDERS[item._providerId]) {
@@ -2710,17 +2748,44 @@ async function syncEpisodesForMovie(movieId, slug, provider) {
             const existing = existingEpMap[epNum];
             if (!existing) continue; // Tập mới, đã insert ở bước 5a
 
-            const currentSources = existing.sources || [];
-            const currentUrls = new Set(currentSources.map(s => s.source));
-            const newSources = apiEp.sources.filter(s => s.source && !currentUrls.has(s.source));
+            let currentSources = [...(existing.sources || [])];
+            let sourceChanged = false;
+            let newlyMergedCount = 0;
 
-            if (newSources.length > 0) {
-                const merged = [...currentSources, ...newSources];
+            for (const newSrc of apiEp.sources) {
+                if (!newSrc.source) continue;
+                
+                // Nhận dạng nguồn trùng lặp logic
+                const matchIndex = currentSources.findIndex(s => 
+                    s.server === newSrc.server && 
+                    s.type === newSrc.type && 
+                    s.label === newSrc.label
+                );
+
+                if (matchIndex >= 0) {
+                    // Cập nhật lại URL M3U8 / Embed nếu API đổi server CDN cho cùng 1 nguồn! (Trọng yếu)
+                    if (currentSources[matchIndex].source !== newSrc.source) {
+                        currentSources[matchIndex].source = newSrc.source;
+                        sourceChanged = true;
+                        newlyMergedCount++;
+                    }
+                } else {
+                    // Nếu hoàn toàn khác nguồn API (OPhim khác KKPhim), kiểm tra chống trùng link tuyệt đối
+                    const urlExists = currentSources.some(s => s.source === newSrc.source);
+                    if (!urlExists) {
+                        currentSources.push(newSrc);
+                        sourceChanged = true;
+                        newlyMergedCount++;
+                    }
+                }
+            }
+
+            if (sourceChanged) {
                 const { error } = await supabase.from('episodes')
-                    .update({ sources: merged, updated_at: new Date().toISOString() })
+                    .update({ sources: currentSources, updated_at: new Date().toISOString() })
                     .eq('id', existing.id);
                 if (!error) {
-                    mergedCount += newSources.length;
+                    mergedCount += newlyMergedCount;
                     mergedEpNames.push(epNum);
                 }
             }
@@ -2955,48 +3020,14 @@ async function autoSyncEpisodesIfNeeded(isManual = false) {
 
             let movieTotalAdded = 0;
 
-            // [OPTIMIZE] NHẬN DIỆN PROVIDER GỐC CỦA PHIM (dựa vào api_url_backup)
-            // Thay vì quét TẤT CẢ 3 providers gây ra 404 và làm chậm x3 lần, bộ lọc chỉ lấy nguồn khớp.
+            // YÊU CẦU: Luôn quét tất cả providers để bổ sung CẢ TẬP VÀ NGUỒN (Backup Server)
+            // Thay vì bị giới hạn bởi provider gốc ban đầu, ta quét toàn bộ các nguồn.
             const targetProviders = new Set();
             const allKeys = Object.keys(API_PROVIDERS);
-            const backupUrl = (movie.api_url_backup || '').toLowerCase();
-            
-            for (const key of allKeys) {
-                const p = API_PROVIDERS[key];
-                // Phân tích domain của API provider (VD: "https://phimapi.com" -> "phimapi.com")
-                const domain = p.baseUrl.replace(/^https?:\/\//, '').toLowerCase();
-                if (backupUrl.includes(domain)) {
-                    targetProviders.add(key);
-                }
-            }
+            allKeys.forEach(k => targetProviders.add(k));
 
-            // Thu thập thêm từ các nguồn m3u8 nếu admin từng Nạp Đa Nguồn bằng tay
-            // Query riêng episodes cho đúng phim hiện tại (KHÔNG dùng biến `eps` cũ vì nó thuộc scope bước 4)
-            const { data: movieEpsForDetect } = await supabase
-                .from('episodes')
-                .select('sources')
-                .eq('movie_id', movie.id);
-            (movieEpsForDetect || []).forEach(ep => {
-                if (ep.sources && Array.isArray(ep.sources)) {
-                    ep.sources.forEach(src => {
-                        const url = (src.source || '').toLowerCase();
-                        // Nếu là KKPhim (hay dùng phimimg.com / kkphimplayer)
-                        if (url.includes('phimimg.com') || url.includes('kkphim')) targetProviders.add('kkphim');
-                        // Nếu là OPhim (hay dùng opstream / ophim)
-                        if (url.includes('ophim') || url.includes('opstream')) targetProviders.add('ophim');
-                        // Nếu là Nguồn C (hay dùng phimmoi.net / nguonc / streamc)
-                        if (url.includes('nguonc') || url.includes('phimmoi.net') || url.includes('streamc')) targetProviders.add('nguonc');
-                    });
-                }
-            });
-
-            // Nếu không xác định được gì (hiếm), backup là quét tất cả
-            if (targetProviders.size === 0) {
-                allKeys.forEach(k => targetProviders.add(k));
-            } else {
-                const names = Array.from(targetProviders).map(k => API_PROVIDERS[k]?.name).join(', ');
-                logOut(`🎯 Phim "${movie.title}" chỉ quét các nguồn: [${names}]`, 'info');
-            }
+            const names = Array.from(targetProviders).map(k => API_PROVIDERS[k]?.name).join(', ');
+            logOut(`🎯 Phim "${movie.title}" quét đa nguồn bổ sung tập/server: [${names}]`, 'info');
 
             for (const key of targetProviders) {
                 // ★ Kiểm tra tạm dừng / hủy giữa provider
@@ -3052,11 +3083,11 @@ async function autoSyncEpisodesIfNeeded(isManual = false) {
             }, true);
         }
 
-        // 7. Refresh danh sách tập — CHỈ KHI modal edit episode KHÔNG đang mở
-        // (tránh đóng modal preview khi admin đang xem/chỉnh tập)
-        const episodeModal = document.getElementById('episodeModal');
-        const isModalOpen = episodeModal && (episodeModal.style.display === 'flex' || episodeModal.classList.contains('active') || episodeModal.classList.contains('show'));
-        if (totalAdded > 0 && !isModalOpen && typeof selectedMovieForEpisodes !== 'undefined' && selectedMovieForEpisodes) {
+        // 7. Refresh danh sách tập — CHỈ KHI inline editor KHÔNG đang mở
+        // (tránh làm gián đoạn khi admin đang xem/chỉnh tập)
+        const inlineEditor = document.getElementById('inlineEpisodeEditorContainer');
+        const isEditorOpen = inlineEditor && inlineEditor.style.display !== 'none';
+        if (totalAdded > 0 && !isEditorOpen && typeof selectedMovieForEpisodes !== 'undefined' && selectedMovieForEpisodes) {
             if (typeof loadEpisodesForMovie === 'function') loadEpisodesForMovie(selectedMovieForEpisodes, false);
         }
 

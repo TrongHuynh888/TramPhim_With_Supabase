@@ -1,10 +1,10 @@
 /**
- * COMPONENTS.CSS - CÃC THÃNH PHáº¦N GIAO DIá»N
- * (PhiÃªn báº£n ÄÃ£ Fix lá»i Icon Play & Code rÃ¡c)
+ * COMPONENTS.CSS - CÃ C THÃ€NH PHáº¦N GIAO DIá»†N
+ * (PhiÃªn báº£n Ä‘Ã£ Fix lá»—i Icon Play & Code rÃ¡c)
  */
 
 /* ============================================
-   1. NAVIGATION (THANH ÄIá»U HÆ¯á»NG)
+   1. NAVIGATION (THANH Ä Iá»€U HÆ¯á»šNG)
    ============================================ */
 .navbar {
   position: fixed;
@@ -43,6 +43,7 @@
   margin-right: 20px; 
   padding: 0; /* Remove padding to allow flex center */
   height: 100%; /* Full height to align items */
+  flex-shrink: 0; /* Đảm bảo logo không bị bóp méo */
 }
 .nav-logo .logo-img {
   height: 45px; /* Reduced from 80px */
@@ -752,7 +753,30 @@
   line-height: 1.2 !important;
 }
 .wallet-btn.connected {
-  background: var(--success);
+  background: var(--accent-gradient);
+  box-shadow: 0 4px 15px rgba(0, 122, 255, 0.4);
+  border: 1px solid rgba(77, 184, 255, 0.3);
+}
+/* Dot xanh nhấp nháy - nằm trước icon ví (flex item đầu tiên) */
+.wallet-btn.connected::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7fffb2;
+  flex-shrink: 0;
+  align-self: center;
+  animation: walletDotPulse 1.8s ease-in-out infinite;
+  box-shadow: 0 0 5px rgba(127, 255, 178, 0.9);
+}
+@keyframes walletDotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.65); }
+}
+.wallet-btn.connected:hover {
+  box-shadow: 0 6px 20px rgba(0, 122, 255, 0.6);
+  transform: translateY(-1px);
 }
 
 /* --- NÃºt ÄÄng nháº­p Pro (Giao diá»n PC) --- */
@@ -1066,7 +1090,7 @@
   /* ð TINH CHá»NH Äá» CANH Äá»U: */
   width: 320px; /* Cá» Äá»nh chiá»u rá»ng giÃºp kiá»m soÃ¡t cÄn lá» tá»t hÆ¡n */
   height: auto;
-  min-height: 100%;
+  min-height: unset; /* Đã đổi từ 100% → unset để popup không chiếm toàn viewport khi fixed */
 
   background: var(--bg-secondary);
   border-radius: 8px;
@@ -4939,7 +4963,7 @@ body.modal-open .scroll-top-btn {
 .brand-icon-wrapper { position: relative; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
 .brand-train-icon { font-size: 38px; color: #a382e6; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); z-index: 1; }
 .brand-play-icon { position: absolute; top: 48%; left: 50%; transform: translate(-50%, -50%); font-size: 13px; color: #221836; z-index: 2; }
-.brand-text-column { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
+.brand-text-column { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; white-space: nowrap; flex-shrink: 0; }
 .brand-text-new { font-size: 26px; font-weight: 800; color: #e2dbf0; letter-spacing: -0.5px; line-height: 1; }
 .brand-slogan { font-size: 11.5px; color: #948da5; font-weight: 500; letter-spacing: 0.2px; margin-top: 4px; }
 [data-theme='light'] .brand-train-icon { color: #261d3f; }
@@ -4969,3 +4993,319 @@ body.modal-open .scroll-top-btn {
 .brand-icon-wrapper::before, .brand-icon-wrapper::after { display: none !important; }
 .brand-play-icon { color: #221836 !important; margin-left: 0 !important; top: 48% !important; }
 [data-theme='light'] .brand-play-icon { color: #fff !important; }
+
+/* =========================================
+   BILINGUAL SUBTITLES (SONG NGỮ)
+   ========================================= */
+video::-webkit-media-text-track-display {
+    transform: translateY(-40px) !important; /* Đẩy lên vừa phải cách xa Vietsub cứng */
+}
+
+video::cue {
+    color: #e8e8e8 !important; /* Trắng bạc tinh tế */
+    background: transparent !important; /* Bỏ nền đen */
+    text-shadow: 
+        0px 2px 5px rgba(0,0,0,0.9), 
+        0px 0px 8px rgba(0,0,0,0.9),
+        0px 0px 2px rgba(0,0,0,1) !important; /* Viền chữ cực nét */
+    font-size: 1.05rem !important; /* Thu nhỏ chữ lại cho tinh tế */
+    font-family: 'Inter', var(--font-primary, 'Quicksand'), sans-serif !important;
+    font-weight: 500 !important; /* Cân bằng lại độ dày nét mảnh hơn */
+    letter-spacing: 0.5px !important;
+}
+
+@media (max-width: 768px) {
+    video::-webkit-media-text-track-display {
+        transform: translateY(-25px) !important;
+    }
+    video::cue {
+        font-size: 0.85rem !important; /* Nét thanh hơn trên Mobile */
+    }
+}
+
+
+/* ==========================================
+   CUSTOM RIGHT CLICK CONTEXT MENU ON VIDEO
+   ========================================== */
+.video-context-menu {
+  position: absolute;
+  background: rgba(28, 28, 28, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  border-radius: 4px;
+  z-index: 999999;
+  min-width: 220px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-family: 'Roboto', Arial, sans-serif;
+  user-select: none;
+  display: none;
+}
+.context-menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 5px 0;
+}
+.context-menu-list li {
+  padding: 10px 15px;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.context-menu-list li:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.context-menu-list li.context-powered {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 5px;
+  padding-top: 8px;
+  color: #ccc;
+  font-size: 11px;
+}
+.context-menu-list li.context-powered:hover {
+  color: #fff;
+}
+
+
+
+/* ==========================================
+   CUSTOM RIGHT CLICK CONTEXT MENU ON VIDEO
+   ========================================== */
+.video-context-menu {
+  position: absolute;
+  background: rgba(28, 28, 28, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  border-radius: 4px;
+  z-index: 999999 !important; /* Đảm bảo đè lên mọi thứ */
+  min-width: 220px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-family: 'Roboto', Arial, sans-serif;
+  user-select: none;
+  display: none; /* JS handle block */
+}
+.context-menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 5px 0;
+}
+.context-menu-list li {
+  padding: 10px 15px;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.context-menu-list li:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.context-menu-list li.context-powered {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 5px;
+  padding-top: 8px;
+  color: #ccc;
+  font-size: 11px;
+}
+.context-menu-list li.context-powered:hover {
+  color: #fff;
+}
+
+
+
+/* ==========================================
+   JW PLAYER MODALS (ABOUT & SHORTCUTS)
+   ========================================== */
+.jw-modal {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 9999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.jw-modal-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); /* Ngầu mờ đen */
+}
+.jw-modal-content {
+  position: relative;
+  background: rgba(34, 34, 34, 0.98);
+  border-radius: 4px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+  font-family: Arial, Helvetica, sans-serif;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* About Modal */
+.jw-about-content {
+  display: flex;
+  gap: 30px;
+  padding: 20px 25px;
+}
+.jw-about-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.jw-info-row {
+  display: flex;
+  justify-content: flex-start;
+  gap: 5px;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+.jw-info-row strong {
+  font-weight: bold;
+  color: #fff;
+}
+.jw-info-row span {
+  color: #fff;
+  white-space: nowrap;
+}
+.jw-progress-bar {
+  background: #ddd;
+  height: 6px;
+  width: 100%;
+  margin-top: 2px;
+  margin-bottom: 5px;
+}
+.jw-progress-bar-fill.jw-blue {
+  background: #1cb5e0;
+  height: 100%;
+}
+
+/* Shortcuts Modal */
+.jw-sc-content {
+  width: 320px;
+  padding: 15px 0 15px 15px;
+  display: flex;
+  flex-direction: column;
+}
+.jw-sc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-right: 15px;
+  font-size: 14px;
+  margin-bottom: 15px;
+}
+.jw-sc-toggle {
+  display: flex;
+  align-items: center;
+  background: #5d6783;
+  border-radius: 20px;
+  padding: 2px;
+  cursor: pointer;
+  height: 24px;
+  width: 70px;
+  position: relative;
+}
+.jw-sc-toggle.off {
+  background: #444;
+}
+.jw-sc-text {
+  font-size: 12px;
+  margin-left: 8px;
+  color: #fff;
+}
+.jw-sc-toggle.off .jw-sc-text { opacity: 0; }
+.jw-sc-switch {
+  width: 20px; height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  right: 2px;
+  transition: 0.2s;
+}
+.jw-sc-toggle.off .jw-sc-switch {
+  right: 48px;
+}
+
+/* Scroll area */
+.jw-sc-list {
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 15px;
+}
+.jw-sc-list::-webkit-scrollbar {
+  width: 6px;
+}
+.jw-sc-list::-webkit-scrollbar-thumb {
+  background: #fff;
+  border-radius: 10px;
+}
+.jw-sc-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.jw-sc-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+.jw-sc-keys kbd {
+  background: #fff;
+  color: #000;
+  padding: 5px 10px;
+  border-radius: 2px;
+  font-family: inherit;
+  font-size: 12px;
+  box-shadow: 0 1px 1px rgba(0,0,0,0.2);
+}
+
+
+
+/* CSS Overrides for JW Player Context Menu exact look */
+.video-context-menu {
+  background: rgba(10, 10, 10, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  box-shadow: 0px 2px 8px rgba(0,0,0,0.5);
+  border-radius: 0; /* Vuông góc giống JW Core */
+  padding: 0 !important;
+  width: 250px;
+  z-index: 999999 !important;
+}
+.context-menu-list {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.context-menu-list li {
+  padding: 12px 18px !important;
+  color: #ffffff !important;
+  font-family: inherit;
+  font-size: 13.5px !important;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  transition: none !important;
+}
+.context-menu-list li:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+.context-menu-list li:last-child {
+  border-bottom: none !important;
+}
+.context-menu-list li.context-powered {
+  border-top: none !important;
+  margin-top: 0 !important;
+  padding-top: 12px !important;
+  color: #ffffff !important;
+  font-size: 14px !important;
+}
+

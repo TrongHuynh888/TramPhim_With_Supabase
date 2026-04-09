@@ -688,8 +688,9 @@ function renderApiMovieCards(items) {
         card.appendChild(overlay);
 
         // --- Info ---
-        const typeClass = item.type === 'series' ? 'type-series' : 'type-single';
-        const typeLabel = item.type === 'series' ? 'Bộ' : 'Lẻ';
+        const _isSeries = item.type === 'series' || item.type === 'tvshows' || item.type === 'hoathinh';
+        const typeClass = _isSeries ? 'type-series' : 'type-single';
+        const typeLabel = _isSeries ? 'Bộ' : 'Lẻ';
 
         let providerBadgeHtml = '';
         if (item._providerId && API_PROVIDERS[item._providerId]) {
@@ -914,7 +915,7 @@ function renderApiMovieDetail(raw, provider) {
                 ${movieOriginName ? `<div class="api-detail-subtitle">${movieOriginName}</div>` : ''}
                 <div class="api-detail-badges">
                     ${movie.year ? `<span class="api-badge year">${movie.year}</span>` : ''}
-                    ${movie.type === 'series' ? `<span class="api-badge type-series">Phim bộ</span>` : `<span class="api-badge type-single">Phim lẻ</span>`}
+                    ${(movie.type === 'series' || movie.type === 'tvshows' || movie.type === 'hoathinh') ? `<span class="api-badge type-series">Phim bộ</span>` : `<span class="api-badge type-single">Phim lẻ</span>`}
                     ${movieLang ? `<span class="api-badge">${movieLang}</span>` : ''}
                     ${movie.quality ? `<span class="api-badge" style="background:rgba(251,191,36,0.15);color:#fbbf24;">${movie.quality}</span>` : ''}
                     <span class="api-badge" style="background:rgba(52,211,153,0.1);color:#34d399;">${epCurrent}</span>

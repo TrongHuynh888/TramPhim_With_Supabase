@@ -580,9 +580,52 @@ document.addEventListener("mouseout", (e) => {
 });
 
 /**
- * Xử lý bật/tắt các switch trên thanh công cụ
+ * Lấy key lưu trạng thái switch theo tài khoản user
  */
-function toggleSwitch(id) {
+function getSwitchStorageKey() {
+    const uid = (typeof currentUser !== 'undefined' && currentUser && currentUser.id) ? currentUser.id : 'guest';
+    return 'switchStates_' + uid;
+}
+
+/**
+ * Lưu trạng thái tất cả switch vào localStorage theo user
+ */
+function saveSwitchStates() {
+    const switchIds = ['swNextEpisode', 'swCinemaMode', 'swAntiLe', 'swStrange', 'swReaction', 'swAutoFallback'];
+    const states = {};
+    switchIds.forEach(id => {
+        const sw = document.getElementById(id);
+        if (sw) states[id] = sw.classList.contains('on');
+    });
+    localStorage.setItem(getSwitchStorageKey(), JSON.stringify(states));
+}
+
+/**
+ * Khôi phục trạng thái switch từ localStorage theo user (gọi khi trang load)
+ */
+function restoreSwitchStates() {
+    const saved = JSON.parse(localStorage.getItem(getSwitchStorageKey()) || '{}');
+    
+    Object.keys(saved).forEach(id => {
+        const sw = document.getElementById(id);
+        if (!sw) return;
+        
+        const shouldBeOn = saved[id];
+        const currentlyOn = sw.classList.contains('on');
+        
+        // Chỉ toggle nếu trạng thái hiện tại khác trạng thái đã lưu
+        if (shouldBeOn !== currentlyOn) {
+            toggleSwitch(id, true); // silent = true để không lưu lại lần nữa
+        }
+    });
+}
+
+/**
+ * Xử lý bật/tắt các switch trên thanh công cụ
+ * @param {string} id - ID của switch
+ * @param {boolean} silent - Nếu true thì không lưu lại localStorage (dùng khi restore)
+ */
+function toggleSwitch(id, silent) {
     const sw = document.getElementById(id);
     if (!sw) return;
 
@@ -655,7 +698,16 @@ function toggleSwitch(id) {
             }
         }
     }
+    
+    // Lưu trạng thái sau khi toggle (trừ khi đang restore)
+    if (!silent) saveSwitchStates();
 }
+
+// Khôi phục trạng thái switch khi trang load xong
+document.addEventListener('DOMContentLoaded', function() {
+    // Delay nhẹ để chắc chắn DOM đã render xong
+    setTimeout(restoreSwitchStates, 300);
+});
 
 /**
  * Tự động chuyển sang server khác khi video bị lỗi (switch Auto Server = ON)
@@ -939,14 +991,7 @@ function setSpeed(rate) {
     hideSubMenu();
 }
 
-/**
- * Chỉnh màu phụ đề (Giả lập UI)
- */
-function setSubtitleColor(color) {
-    document.getElementById("currentColorVal").textContent = color.toUpperCase();
-    showNotification(`Đã đổi màu phụ đề sang ${color}`, "info");
-    hideSubMenu();
-}
+
 
 /**
  * Chỉnh chất lượng (HLS)
@@ -1583,6 +1628,87 @@ async function checkAndUpdateVideoAccess() {
       html5Player.classList.add("hidden");
       html5Player.pause();
       html5Player.src = "";
+      html5Player.innerHTML = ""; // Clear old tracks
+      
+      // ✅ BILINGUAL & MULTI-LANGUAGE SUBTITLE INJECTION
+      const availableSubs = [];
+      const subCols = [
+          { code: 'vi', prefix: 'VN', label: 'Tiếng Việt (Vietnamese)', field: 'subtitle_vi_url' },
+          { code: 'en', prefix: 'US', label: 'Tiếng Anh (English)', field: 'subtitle_en_url' },
+          { code: 'zh', prefix: 'CN', label: 'Tiếng Trung (Chinese)', field: 'subtitle_zh_url' },
+          { code: 'ko', prefix: 'KR', label: 'Tiếng Hàn (Korean)', field: 'subtitle_ko_url' },
+          { code: 'ja', prefix: 'JP', label: 'Tiếng Nhật (Japanese)', field: 'subtitle_ja_url' }
+      ];
+
+      // Đọc các track thực tế có trong Database
+      subCols.forEach(col => {
+          if (episode && episode[col.field]) {
+              availableSubs.push({ ...col, url: episode[col.field] });
+          }
+      });
+      
+      window.currentAvailableSubs = availableSubs;
+
+      const ccBtn = document.getElementById("ccBtn");
+      const ccLangList = document.getElementById("ccLangList");
+      
+      // Luôn hiện nút CC nếu có tuỳ chọn
+      if (availableSubs.length > 0) {
+          if (ccBtn) ccBtn.style.display = "flex";
+          
+          let prefState = localStorage.getItem('preferredSubtitleState') !== 'off' ? 'on' : 'off';
+          let prefLang = localStorage.getItem('preferredSubtitleLang') || 'vi';
+          
+          if (!availableSubs.find(s => s.code === prefLang)) {
+              if (availableSubs.length > 0) prefLang = availableSubs[0].code;
+          }
+
+          // RENDER 5 NGÔN NGỮ CHÍNH
+          if (ccLangList) {
+              ccLangList.innerHTML = subCols.map(s => {
+                  const hasTrack = availableSubs.find(a => a.code === s.code);
+                  const isPref = (prefState === 'on' && s.code === prefLang);
+
+                  return `
+                  <div class="smt-lang-item ${isPref ? 'active' : ''} ${!hasTrack ? 'disabled-track' : ''}" 
+                       data-lang="${s.code}" 
+                       onclick="changeSubtitleLang('${s.code}')">
+                      <span><span class="smt-lang-prefix">${s.prefix}</span> ${s.label}</span>
+                  </div>
+                  `;
+              }).join('');
+          }
+          
+          // Hack CORS Load Tracks
+          Promise.all(availableSubs.map(sub => {
+              return fetch(sub.url)
+                  .then(resp => resp.text())
+                  .then(vttText => {
+                      const vttBlob = new Blob([vttText], { type: 'text/vtt' });
+                      const vttBlobUrl = URL.createObjectURL(vttBlob);
+                      
+                      const track = document.createElement('track');
+                      track.kind = 'subtitles';
+                      track.label = sub.label;
+                      track.srclang = sub.code;
+                      track.src = vttBlobUrl; 
+                      
+                      if (prefState === 'on' && sub.code === prefLang) {
+                          track.default = true;
+                      }
+                      html5Player.appendChild(track);
+                  })
+                  .catch(err => console.error("Lỗi tải phụ đề:", sub.label, err));
+          })).then(() => {
+              // Re-apply state
+              if(window.setSubtitleMode) window.setSubtitleMode(prefState, true);
+          });
+      } else {
+          if (ccBtn) {
+              ccBtn.style.display = "none";
+              ccBtn.classList.remove("cc-btn-active");
+          }
+      }
       
       // ✅ RESET ERROR OVERLAY
       const errorOverlay = document.getElementById("videoError");
@@ -1664,8 +1790,22 @@ async function checkAndUpdateVideoAccess() {
                    const isModalActive = document.getElementById("continueWatchingModal")?.classList.contains("active");
                    if (isModalActive) return; // Chờ người dùng click modal
                    
-                    if (window.hasResumeHistory && window.resumeTimeData && window.resumeTimeData.timeWatched > 0) {
-                        resumeVideoAtTime(window.resumeTimeData.timeWatched);
+                    let localTimeStr = localStorage.getItem('localResumeTime_' + currentMovieId);
+                    let bestTime = (window.hasResumeHistory && window.resumeTimeData) ? window.resumeTimeData.timeWatched : 0;
+                    if (localTimeStr && parseFloat(localTimeStr) > bestTime) bestTime = parseFloat(localTimeStr);
+                    
+                    if (bestTime > 0) {
+                        resumeVideoAtTime(bestTime);
+                    }
+                    
+                    const localPauseState = localStorage.getItem('localVideoState_' + currentMovieId) === 'paused';
+                    
+                    if (window.videoWasPausedBeforeHidden || localPauseState) {
+                        console.log("OS resumed player, but user paused before. Keeping it paused.");
+                        setTimeout(() => { 
+                            player.pause(); 
+                            if (typeof updatePlayIcons === 'function') updatePlayIcons(false); 
+                        }, 100);
                     } else if (wasPlaying) {
                         // Tự động phát nếu tập trước đó đang phát
                         player.play().catch(e => console.log("Auto-play next ep blocked:", e));
@@ -1732,8 +1872,22 @@ async function checkAndUpdateVideoAccess() {
               const isModalActive = document.getElementById("continueWatchingModal")?.classList.contains("active");
               if (isModalActive) return; // Chờ người dùng click modal
               
-               if (window.hasResumeHistory && window.resumeTimeData && window.resumeTimeData.timeWatched > 0) {
-                   resumeVideoAtTime(window.resumeTimeData.timeWatched);
+               let localTimeStr = localStorage.getItem('localResumeTime_' + currentMovieId);
+               let bestTime = (window.hasResumeHistory && window.resumeTimeData) ? window.resumeTimeData.timeWatched : 0;
+               if (localTimeStr && parseFloat(localTimeStr) > bestTime) bestTime = parseFloat(localTimeStr);
+               
+               if (bestTime > 0) {
+                   resumeVideoAtTime(bestTime);
+               } 
+               
+               const localPauseState = localStorage.getItem('localVideoState_' + currentMovieId) === 'paused';
+               
+               if (window.videoWasPausedBeforeHidden || localPauseState) {
+                   console.log("OS resumed player, but user paused before. Keeping it paused.");
+                   setTimeout(() => { 
+                       player.pause(); 
+                       if (typeof updatePlayIcons === 'function') updatePlayIcons(false); 
+                   }, 100);
                } else if (wasPlaying) {
                    player.play().catch(e => console.log("Auto-play next ep blocked:", e));
                } else {
@@ -2058,6 +2212,9 @@ function initCustomControls(video) {
 
             // Save watch progress (debounced)
             if (currentMovieId) {
+                // Liên tục backup lên localStorage đề phòng Mobile dập OS tiến trình
+                localStorage.setItem('localResumeTime_' + currentMovieId, current);
+
                 saveWatchProgress(currentMovieId, currentEpisode, current, total);
                 checkAutoNextCountdown(current, total);
                 
@@ -2122,12 +2279,22 @@ function initCustomControls(video) {
         updateDetailPlayButtonState("playing");
         container.classList.add("playing");
         container.classList.remove("paused");
+        
+        if (typeof currentMovieId !== 'undefined' && !document.hidden && !window.isResumingFromHidden) {
+            localStorage.setItem('localVideoState_' + currentMovieId, 'playing');
+        }
     });
+
     video.addEventListener("pause", () => {
         updateDetailPlayButtonState("paused");
         container.classList.remove("playing");
         container.classList.add("paused");
         
+        if (typeof currentMovieId !== 'undefined' && !document.hidden && !window.isResumingFromHidden) {
+            localStorage.setItem('localVideoState_' + currentMovieId, 'paused');
+            if (video.currentTime > 0) localStorage.setItem('localResumeTime_' + currentMovieId, video.currentTime);
+        }
+
         // Lưu progress ngay khi pause (KHÔNG debounce - lưu ngay lập tức)
         if (currentMovieId && video.duration > 0 && video.currentTime > 0) {
             saveWatchProgressImmediate(currentMovieId, currentEpisode, video.currentTime, video.duration);
@@ -2137,10 +2304,15 @@ function initCustomControls(video) {
     // Loading State
     video.addEventListener("waiting", () => updateDetailPlayButtonState("loading"));
     video.addEventListener("playing", () => updateDetailPlayButtonState("playing"));
-    video.addEventListener("canplay", () => {
+    
+    const resolvePlayState = () => {
         if (video.paused) updateDetailPlayButtonState("paused");
         else updateDetailPlayButtonState("playing");
-    });
+    };
+    
+    video.addEventListener("canplay", resolvePlayState);
+    video.addEventListener("seeked", resolvePlayState);
+    video.addEventListener("loadeddata", resolvePlayState);
     video.addEventListener("ended", () => {
         updateDetailPlayButtonState("paused");
         // Tự động chuyển tập nếu đang bật switch
@@ -2350,8 +2522,14 @@ function resetHideTimer() {
 
 function formatTime(seconds) {
     if (!seconds || isNaN(seconds)) return "00:00";
-    const m = Math.floor(seconds / 60);
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
+    if (h > 0) {
+        // Video dài hơn 1 giờ: hiển thị H:MM:SS
+        return `${h}:${m < 10 ? "0" + m : m}:${s < 10 ? "0" + s : s}`;
+    }
+    // Video dưới 1 giờ: hiển thị MM:SS như cũ
     return `${m < 10 ? "0" + m : m}:${s < 10 ? "0" + s : s}`;
 }
 
@@ -2415,6 +2593,7 @@ window.togglePlay = function() {
     console.log("Toggling play, video:", video, "paused:", video.paused);
     
     if (video.paused) {
+        if (typeof currentMovieId !== 'undefined') localStorage.setItem('intentPause_' + currentMovieId, 'false');
         // Fix AbortError: play() returns a promise
         const playPromise = video.play();
         if (playPromise !== undefined) {
@@ -2427,6 +2606,7 @@ window.togglePlay = function() {
             });
         }
     } else {
+        if (typeof currentMovieId !== 'undefined') localStorage.setItem('intentPause_' + currentMovieId, 'true');
         video.pause();
     }
 };
@@ -2439,7 +2619,8 @@ function showPlayerError(message) {
     const errorMsgText = document.getElementById("videoErrorMessage");
     
     if (errorOverlay && errorMsgText) {
-        errorMsgText.textContent = message || "Rất tiếc, video hiện tại không thể tải được. Vui lòng thử lại sau hoặc báo cáo lỗi cho Admin.";
+        errorMsgText.innerHTML = (message || "Rất tiếc, video hiện tại không thể tải được. Vui lòng thử lại sau hoặc báo cáo lỗi cho Admin.") + 
+                                 "<br><br><span style='color:#ffaa00; font-size:14px; font-weight:normal;'>💡 Mẹo: Nếu bạn đang bật VPN hoặc WARP 1.1.1.1, hãy TẮT đi và nhấn Thử Lại. Các dải mạng ảo (IP nước ngoài) thường bị Origin Server tự động chặn kết nối!</span>";
         errorOverlay.classList.remove("hidden");
         
         // Ẩn các controls khác để tập trung vào lỗi
@@ -2850,6 +3031,12 @@ window.toggleSettingsMenu = function() {
     const menu = document.getElementById("settingsMenu");
     const speedMenu = document.getElementById("speedMenu");
     const qualityMenu = document.getElementById("qualityMenu");
+    const ccMenu = document.getElementById("ccSubtitleMenu"); // Close CC menu if open
+    
+    if (ccMenu && ccMenu.style.display === "flex") {
+        ccMenu.style.display = "none";
+    }
+
     if (menu.style.display === "flex") {
         menu.style.display = "none";
         speedMenu.style.display = "none";
@@ -2874,24 +3061,193 @@ function initSubtitleTracks(video) {
 }
 
 window.showSubMenu = function(type) {
+    // Ẩn menu chính và tất cả submenu trước
     document.getElementById("settingsMenu").style.display = "none";
-    if (type === 'speed') {
-        document.getElementById("speedMenu").style.display = "flex";
-    } else if (type === 'color') {
-        document.getElementById("colorMenu").style.display = "flex";
-    } else if (type === 'quality') {
-        document.getElementById("qualityMenu").style.display = "flex";
+    document.querySelectorAll(".settings-submenu").forEach(m => m.style.display = "none");
+    
+    const menuMap = {
+        'speed': 'speedMenu',
+        'quality': 'qualityMenu', 
+        'subtitleStyle': 'subtitleStyleMenu',
+        'subColor': 'subColorMenu',
+        'subSize': 'subSizeMenu',
+        'subFont': 'subFontMenu',
+        'subOutline': 'subOutlineMenu',
+        'subBg': 'subBgMenu',
+        'subBgOpacity': 'subBgOpacityMenu',
+        'subPosition': 'subPositionMenu'
+    };
+    const targetId = menuMap[type];
+    if (targetId) {
+        const el = document.getElementById(targetId);
+        if (el) el.style.display = "flex";
     }
 };
 
 window.hideSubMenu = function() {
-    document.getElementById("speedMenu").style.display = "none";
-    const colorMenu = document.getElementById("colorMenu");
-    if (colorMenu) colorMenu.style.display = "none";
-    const qualityMenu = document.getElementById("qualityMenu");
-    if (qualityMenu) qualityMenu.style.display = "none";
+    document.querySelectorAll(".settings-submenu").forEach(m => m.style.display = "none");
     document.getElementById("settingsMenu").style.display = "flex";
 };
+
+// --- TUỲ CHỈNH PHỤ ĐỀ (::cue CSS Injection + Per-User Storage) ---
+
+// Lấy storage key theo tài khoản user hiện tại
+function getSubStyleKey() {
+    const uid = (typeof currentUser !== 'undefined' && currentUser && currentUser.id) ? currentUser.id : 'guest';
+    return 'subStyles_' + uid;
+}
+
+// Defaults
+const SUB_STYLE_DEFAULTS = {
+    color: '#ffffff', fontSize: '16pt', fontFamily: 'inherit',
+    outline: 'shadow', bgColor: '#000000', bgOpacity: '0', position: 'bottom'
+};
+
+window._subStyles = JSON.parse(localStorage.getItem(getSubStyleKey()) || JSON.stringify(SUB_STYLE_DEFAULTS));
+// Đảm bảo có trường position nếu user cũ chưa có
+if (!window._subStyles.position) window._subStyles.position = 'bottom';
+
+// Khởi tạo lại giao diện khi trang load
+function restoreSubStyleUI() {
+    const s = window._subStyles;
+    const labels = {
+        color: { '#ffffff':'Trắng','#ffeb3b':'Vàng','#00ffff':'Cyan','#4caf50':'Xanh lá','#ff5722':'Cam' },
+        outline: { 'shadow':'Đổ bóng','outline':'Viền đậm','raised':'Nổi','none':'Không' },
+        bgColor: { '#000000':'Đen','#ffffff':'Trắng','#1a237e':'Xanh Navy','transparent':'Trong suốt' },
+        position: { 'bottom':'Dưới','middle':'Giữa','top':'Trên' }
+    };
+    const setLabel = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+    const setDot = (id, color) => { const el = document.getElementById(id); if(el) el.style.background = color; };
+    
+    setLabel('subColorLabel', labels.color[s.color] || 'Trắng');
+    setDot('subColorDot', s.color);
+    setLabel('subSizeLabel', s.fontSize);
+    setLabel('subFontLabel', s.fontFamily === 'inherit' ? 'Mặc định' : s.fontFamily);
+    setLabel('subOutlineLabel', labels.outline[s.outline] || 'Đổ bóng');
+    setLabel('subBgLabel', labels.bgColor[s.bgColor] || 'Đen');
+    setDot('subBgDot', s.bgColor);
+    const opacityPercent = Math.round(parseFloat(s.bgOpacity) * 100) + '%';
+    setLabel('subBgOpacityLabel', opacityPercent);
+    setLabel('subPositionLabel', labels.position[s.position] || 'Dưới');
+    
+    applySubStyle();
+}
+restoreSubStyleUI();
+
+// Khi user đăng nhập/đổi tài khoản → reload lại cài đặt phụ đề của họ
+window.reloadSubStyleForUser = function() {
+    window._subStyles = JSON.parse(localStorage.getItem(getSubStyleKey()) || JSON.stringify(SUB_STYLE_DEFAULTS));
+    if (!window._subStyles.position) window._subStyles.position = 'bottom';
+    restoreSubStyleUI();
+};
+
+// Áp dụng style vào video::cue bằng cách inject <style> tag
+function applySubStyle() {
+    const s = window._subStyles;
+    let styleEl = document.getElementById('custom-cue-style');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'custom-cue-style';
+        document.head.appendChild(styleEl);
+    }
+    
+    // Tính text-shadow theo kiểu viền
+    let textShadow = 'none';
+    if (s.outline === 'shadow') textShadow = '2px 2px 4px rgba(0,0,0,0.9)';
+    else if (s.outline === 'outline') textShadow = '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000';
+    else if (s.outline === 'raised') textShadow = '0px 1px 3px rgba(0,0,0,0.8), 0px 2px 6px rgba(0,0,0,0.5)';
+    
+    // Tính background cho ::cue  
+    let bgRgba = 'transparent';
+    if (s.bgColor && s.bgColor !== 'transparent') {
+        const hex = s.bgColor.replace('#','');
+        const r = parseInt(hex.substring(0,2),16);
+        const g = parseInt(hex.substring(2,4),16);
+        const b = parseInt(hex.substring(4,6),16);
+        bgRgba = `rgba(${r},${g},${b},${s.bgOpacity})`;
+    }
+    
+    styleEl.textContent = `
+        video::cue {
+            color: ${s.color} !important;
+            font-size: ${s.fontSize} !important;
+            font-family: ${s.fontFamily === 'inherit' ? 'inherit' : "'" + s.fontFamily + "'"} !important;
+            text-shadow: ${textShadow} !important;
+            background: ${bgRgba} !important;
+            outline: none !important;
+        }
+    `;
+    
+    // Áp dụng vị trí phụ đề bằng cách set cue.line cho tất cả track đang hiển thị
+    applySubPosition(s.position);
+}
+
+// Thay đổi vị trí phụ đề bằng VTT Cue API
+function applySubPosition(pos) {
+    const video = document.getElementById('html5Player');
+    if (!video || !video.textTracks) return;
+    
+    let lineVal = -1; // Mặc định: dưới cùng
+    if (pos === 'top') lineVal = 0;
+    else if (pos === 'middle') lineVal = -8;
+    // bottom = -1 (default)
+    
+    for (let i = 0; i < video.textTracks.length; i++) {
+        const track = video.textTracks[i];
+        if (track.cues) {
+            for (let j = 0; j < track.cues.length; j++) {
+                track.cues[j].line = lineVal;
+            }
+        }
+    }
+}
+
+window.setSubStyle = function(prop, value, label) {
+    window._subStyles[prop] = value;
+    localStorage.setItem(getSubStyleKey(), JSON.stringify(window._subStyles));
+    
+    // Cập nhật label hiển thị
+    const labelMap = {
+        color: ['subColorLabel', 'subColorDot'],
+        fontSize: ['subSizeLabel'],
+        fontFamily: ['subFontLabel'],
+        outline: ['subOutlineLabel'],
+        bgColor: ['subBgLabel', 'subBgDot'],
+        bgOpacity: ['subBgOpacityLabel'],
+        position: ['subPositionLabel']
+    };
+    const targets = labelMap[prop];
+    if (targets) {
+        const labelEl = document.getElementById(targets[0]);
+        if (labelEl) labelEl.textContent = label;
+        if (targets[1]) {
+            const dotEl = document.getElementById(targets[1]);
+            if (dotEl) dotEl.style.background = value;
+        }
+    }
+    
+    applySubStyle();
+    
+    // Quay về menu Tuỳ chỉnh phụ đề
+    showSubMenu('subtitleStyle');
+};
+
+// --- CLICK OUTSIDE: Tự đóng menu khi bấm ra ngoài ---
+document.addEventListener('click', function(e) {
+    // Kiểm tra xem click có nằm trong vùng settings-container hoặc cc-container không
+    const settingsContainer = e.target.closest('.settings-container');
+    const ccContainer = e.target.closest('.cc-container');
+    
+    // Nếu click NGOÀI cả 2 vùng → đóng tất cả menu
+    if (!settingsContainer && !ccContainer) {
+        const settingsMenu = document.getElementById('settingsMenu');
+        const ccMenu = document.getElementById('ccSubtitleMenu');
+        
+        if (settingsMenu) settingsMenu.style.display = 'none';
+        if (ccMenu) ccMenu.style.display = 'none';
+        document.querySelectorAll('.settings-submenu').forEach(m => m.style.display = 'none');
+    }
+});
 
 // --- HLS QUALITY LOGIC ---
 function populateQualityMenu(hls) {
@@ -2971,36 +3327,90 @@ window.setQuality = function(levelIndex) {
     window.toggleSettingsMenu();
 };
 
-window.setSubtitleColor = function(colorKey) {
-    const video = document.getElementById("html5Player");
-    const color = SUBTITLE_COLORS[colorKey];
+
+
+
+window.toggleSubtitleMenu = function() {
+    const ccMenu = document.getElementById("ccSubtitleMenu");
+    if (!ccMenu) return;
     
-    // Create or update dynamic style for cues
-    let style = document.getElementById("custom-cue-style");
-    if (!style) {
-        style = document.createElement("style");
-        style.id = "custom-cue-style";
-        document.head.appendChild(style);
+    const settingsMenu = document.getElementById("settingsMenu");
+    if (settingsMenu && settingsMenu.style.display === "flex") {
+        settingsMenu.style.display = "none";
     }
     
-    // Webkit specific for Chrome/Safari
-    style.innerHTML = `
-        video::cue {
-            color: ${color} !important;
-            background: rgba(0, 0, 0, 0.5) !important;
+    if (ccMenu.style.display === "none" || !ccMenu.style.display) {
+        ccMenu.style.display = "flex";
+    } else {
+        ccMenu.style.display = "none";
+    }
+};
+
+window.setSubtitleMode = function(mode, skipSave = false) {
+    const btnOn = document.getElementById("smtBtnOn");
+    const btnOff = document.getElementById("smtBtnOff");
+    const ccBtn = document.getElementById("ccBtn");
+    const video = document.getElementById("html5Player");
+    const prefLangFallback = window.currentAvailableSubs && window.currentAvailableSubs.length > 0 ? window.currentAvailableSubs[0].code : 'vi';
+    
+    if (mode === 'on') {
+        if(btnOn) btnOn.classList.add("active");
+        if(btnOff) btnOff.classList.remove("active");
+        if(ccBtn) ccBtn.classList.add("cc-btn-active");
+        if(!skipSave) localStorage.setItem('preferredSubtitleState', 'on');
+        
+        // Bật ngôn ngữ ưa thích (1-track duy nhất)
+        let prefLang = localStorage.getItem('preferredSubtitleLang') || prefLangFallback;
+        
+        if (video && video.textTracks) {
+            let found = false;
+            for (let i = 0; i < video.textTracks.length; i++) {
+                if (video.textTracks[i].language === prefLang) {
+                    video.textTracks[i].mode = "showing";
+                    found = true;
+                } else {
+                    video.textTracks[i].mode = "hidden";
+                }
+            }
+            if (!found && video.textTracks.length > 0) {
+                video.textTracks[0].mode = "showing";
+                prefLang = video.textTracks[0].language;
+                if(!skipSave) localStorage.setItem('preferredSubtitleLang', prefLang);
+            }
         }
-    `;
+        
+    } else {
+        if(btnOn) btnOn.classList.remove("active");
+        if(btnOff) btnOff.classList.add("active");
+        if(ccBtn) ccBtn.classList.remove("cc-btn-active");
+        if(!skipSave) localStorage.setItem('preferredSubtitleState', 'off');
+        
+        if (video && video.textTracks) {
+            for (let i = 0; i < video.textTracks.length; i++) {
+                video.textTracks[i].mode = "hidden";
+            }
+        }
+    }
     
-    // Update active UI
-    document.querySelectorAll("#colorMenu .submenu-item").forEach(item => {
-        item.classList.remove("active");
-        if(item.dataset.color === colorKey) item.classList.add("active");
+    // Cập nhật giao diện dấu tick
+    const items = document.querySelectorAll('.smt-lang-item');
+    items.forEach(el => {
+        if (mode === 'on' && el.dataset.lang === localStorage.getItem('preferredSubtitleLang')) {
+            el.classList.add('active');
+        } else {
+            el.classList.remove('active');
+        }
     });
+};
+
+window.changeSubtitleLang = function(langCode) {
+    localStorage.setItem('preferredSubtitleLang', langCode);
+    setSubtitleMode('on', false);
     
-    document.getElementById("currentColorVal").textContent = colorKey.charAt(0).toUpperCase() + colorKey.slice(1);
-    
-    window.hideSubMenu();
-    window.toggleSettingsMenu();
+    setTimeout(() => {
+        const ccMenu = document.getElementById("ccSubtitleMenu");
+        if (ccMenu) ccMenu.style.display = "none";
+    }, 200); // Ẩn mượt menu
 };
 
 window.setSpeed = function(speed) {
@@ -4340,16 +4750,31 @@ function resumeVideoAtTime(timeWatched) {
     if (html5Player) {
         // HTML5 Player - đợi video ready rồi mới set time
         const doResume = () => {
-            // Dừng video trước (nếu đang phát)
-            html5Player.pause();
-            // Đặt thời gian
-            html5Player.currentTime = timeWatched;
-            // Phát video
-            html5Player.play().then(() => {
-                console.log("✅ Tiếp tục xem HTML5 từ:", formatTime(timeWatched));
-            }).catch(e => {
-                console.error("Play error:", e);
-            });
+            // Chỉ đặt thời gian nếu độ lệch quá 2 giây, tránh giật/khựng Playback do gán đè
+            if (Math.abs(html5Player.currentTime - timeWatched) > 2) {
+                html5Player.currentTime = timeWatched;
+            }
+            
+            // Lấy trạng thái Pause từ localStorage định hướng
+            const intentPause = (typeof currentMovieId !== 'undefined') && localStorage.getItem('intentPause_' + currentMovieId) === 'true';
+            const localPause = (typeof currentMovieId !== 'undefined') && localStorage.getItem('localVideoState_' + currentMovieId) === 'paused';
+            
+            // XÁC ĐỊNH LIỆU CÓ NÊN PHÁT HAY KHÔNG
+            if (window.videoWasPausedBeforeHidden || intentPause || localPause) {
+                 html5Player.pause();
+                 console.log("✅ Cập nhật time:", formatTime(timeWatched), "(Giữ trạng thái Gián đoạn/Dừng)");
+                 if (typeof updatePlayIcons === 'function') updatePlayIcons(false);
+            } else {
+                 if (window.isResumingFromHidden) {
+                     console.log("✅ OS Auto-resuming, skip manual play() to prevent buffering jitter.");
+                 } else {
+                     html5Player.play().then(() => {
+                         console.log("✅ Tiếp tục xem HTML5 từ:", formatTime(timeWatched));
+                     }).catch(e => {
+                         console.error("Play error:", e);
+                     });
+                 }
+            }
         };
         
         // Kiểm tra readyState - cần ít nhất HAVE_CURRENT_DATA (2) trở lên
@@ -4614,6 +5039,16 @@ function updatePlayerTopBar() {
             episodeEl.textContent = 'Phim lẻ';
             if (episodeBtn) episodeBtn.style.display = 'none';
         }
+
+        // Cập nhật nút Next Tập trên thanh bar
+        const ctrlNextEpBtn = document.getElementById('ctrlNextEpBtn');
+        if (ctrlNextEpBtn) {
+            if (movieData && movieData.episodes && epIndex + 1 < movieData.episodes.length) {
+                ctrlNextEpBtn.style.display = "inline-block";
+            } else {
+                ctrlNextEpBtn.style.display = "none";
+            }
+        }
     }
 }
 
@@ -4628,6 +5063,7 @@ function renderEpisodePanel() {
     
     // Lấy danh sách tập từ dữ liệu phim hiện tại
     const movieData = (typeof allMovies !== 'undefined') ? allMovies.find(m => m.id === currentMovieId) : null;
+    
     if (!movieData || !movieData.episodes || movieData.episodes.length === 0) {
         panelList.innerHTML = '<div style="color: rgba(255,255,255,0.5); padding: 16px; text-align: center;">Không có tập nào</div>';
         return;
@@ -4640,19 +5076,23 @@ function renderEpisodePanel() {
         item.className = 'ep-panel-item' + (index === currentEpIndex ? ' active' : '');
         
         // Tên tập: Nếu có title thì dùng, không thì "Tập X"
-        const epName = ep.title || `Tập ${index + 1}`;
+        let epName = ep.title || `Tập ${index + 1}`;
+        if (/^\d+$/.test(epName.toString().trim())) {
+            epName = `Tập ${epName}`;
+        }
+        const epBg = ep.thumbnail || movieData.backgroundUrl || movieData.posterUrl || 'https://placehold.co/160x90/1a1a2e/FFF?text=No+Image';
         
         item.innerHTML = `
-            <span class="ep-panel-num">${index + 1}</span>
-            <span>${epName}</span>
+            <div class="ep-panel-img-wrapper">
+                <img src="${epBg}" alt="${epName}" class="ep-panel-img" onerror="this.src='https://placehold.co/160x90/1a1a2e/FFF?text=No+Image'">
+            </div>
+            <div class="ep-panel-info">
+                <span class="ep-panel-name">${epName}</span>
+            </div>
         `;
         
         const changeEpHandler = (e) => {
             e.stopPropagation();
-            if (e.type === 'touchstart') {
-                // Ngăn click event sinh ra kép
-                e.preventDefault();
-            }
             // Đóng panel
             toggleEpisodePanel();
             // Chuyển tập
@@ -4664,7 +5104,6 @@ function renderEpisodePanel() {
         };
         
         item.addEventListener('click', changeEpHandler);
-        item.addEventListener('touchstart', changeEpHandler, {passive: false});
         
         panelList.appendChild(item);
     });
@@ -5657,3 +6096,234 @@ function initMiniPlayerInteraction() {
 
 // Khởi chạy
 initMiniPlayerInteraction();
+
+// Tự động load tuỳ chọn
+document.addEventListener("DOMContentLoaded", () => {
+    // ...
+});
+
+// Load danh sách phim bộ từ localStorage (Trạm Phim API extension)
+window.loadSeriesMoviesLocal = function() {
+    try {
+        const customSeries = JSON.parse(localStorage.getItem('customSeriesMovies')) || [];
+        return customSeries.sort((a,b) => b.addDate - a.addDate).slice(0, 4);
+    } catch(e) {
+        return [];
+    }
+};
+
+window.forceNextEpisode = function() {
+    if (!currentMovieId) return;
+    const movie = (typeof allMovies !== 'undefined') ? allMovies.find(m => m.id === currentMovieId) : null;
+    if (!movie || !movie.episodes) return;
+    
+    const totalEpisodes = movie.episodes.length;
+    const nextEpisodeIndex = parseInt(currentEpisode) + 1;
+    
+    if (nextEpisodeIndex < totalEpisodes) {
+        if (typeof showNotification === 'function') {
+            showNotification(`Đang chuyển sang tập ${nextEpisodeIndex + 1}...`, "info");
+        }
+        if (typeof selectEpisode === 'function') {
+            selectEpisode(nextEpisodeIndex);
+        } else if (typeof window.selectEpisode === 'function') {
+            window.selectEpisode(nextEpisodeIndex);
+        }
+    } else {
+        if (typeof showNotification === 'function') {
+            showNotification("Bạn đang ở tập cuối cùng của bộ phim này.", "info");
+        }
+    }
+};
+
+// --- FIX: Tự động lưu thời gian và giữ trạng thái Play/Pause khi tắt màn hình ---
+document.addEventListener('visibilitychange', () => {
+    const video = document.getElementById('html5Player');
+    if (document.hidden) {
+        if (video) {
+            window.videoWasPausedBeforeHidden = video.paused;
+            if (typeof currentMovieId !== 'undefined') {
+                localStorage.setItem('localVideoState_' + currentMovieId, video.paused ? 'paused' : 'playing');
+            }
+            // Lưu thời gian ngay lập tức để hls không bị khởi động lại từ 0
+            if (video.currentTime > 0 && typeof currentMovieId !== 'undefined' && typeof currentEpisode !== 'undefined') {
+                window.resumeTimeData = { timeWatched: video.currentTime, episodeIndex: currentEpisode };
+                if (typeof saveWatchProgressImmediate === 'function') {
+                    saveWatchProgressImmediate(currentMovieId, currentEpisode, video.currentTime, video.duration || 0);
+                }
+            }
+        }
+    } else {
+        // Cắm cờ đang xử lý background Resume
+        window.isResumingFromHidden = true;
+        
+        const localPauseStr = typeof currentMovieId !== 'undefined' ? localStorage.getItem('localVideoState_' + currentMovieId) : null;
+        let isPaused = (localPauseStr === 'paused');
+        
+        if (isPaused) {
+            if (video && !video.paused) {
+                video.pause();
+                if (typeof updatePlayIcons === 'function') updatePlayIcons(false);
+            }
+            setTimeout(() => {
+                if (video && !video.paused) {
+                    video.pause();
+                    if (typeof updatePlayIcons === 'function') updatePlayIcons(false);
+                }
+            }, 300);
+        } else {
+            // Nếu User đang XEM, HĐH sẽ tự động Resume video (rất mượt).
+            // Không được tạt lệnh play() của JS ngay lập tức vì sẽ gây gián đoạn luồng buffer MediaSession (gây "giật" hình/tiếng).
+            // Ta chỉ hỗ trợ gọi Play NHẸ nếu hệ điều hành fail không tự chạy sau 1.5 giây.
+            setTimeout(() => {
+                if (video && video.paused) {
+                    video.play().catch(e => console.log("Hỗ trợ khôi phục Play:", e));
+                }
+            }, 1000);
+        }
+        
+        // Gỡ cờ sau 2.5 giây
+        setTimeout(() => { window.isResumingFromHidden = false; }, 2500);
+    }
+});
+
+// ==========================================
+// CUSTOM RIGHT CLICK CONTEXT MENU ON VIDEO
+// ==========================================
+document.addEventListener("DOMContentLoaded", () => {
+    const videoContainer = document.getElementById("videoContainer");
+    const ctxMenu = document.getElementById("videoContextMenu");
+    
+    if (videoContainer && ctxMenu) {
+        // Chặn luồng Right-Click default trên khu vực Video
+        videoContainer.addEventListener("contextmenu", (e) => {
+            if(window.innerWidth <= 768) return; // Khoảng bỏ trên mobile
+            e.preventDefault();
+            
+            // Hiện Menu
+            ctxMenu.style.display = "block";
+            
+            // Tính toạ độ
+            const rect = videoContainer.getBoundingClientRect();
+            let x = e.clientX - rect.left;
+            let y = e.clientY - rect.top;
+            
+            // Chống làm tràn đáy/viền
+            if (x + ctxMenu.offsetWidth > rect.width) {
+                x = rect.width - ctxMenu.offsetWidth - 10;
+            }
+            if (y + ctxMenu.offsetHeight > rect.height) {
+                y = rect.height - ctxMenu.offsetHeight - 10;
+            }
+            
+            ctxMenu.style.left = `${Math.max(10, x)}px`;
+            ctxMenu.style.top = `${Math.max(10, y)}px`;
+        });
+        
+        // Nhấn ra ngoài ẩn menu
+        document.addEventListener("click", (e) => {
+            if (!ctxMenu.contains(e.target)) {
+                ctxMenu.style.display = "none";
+            }
+        });
+        
+        // Nhấn phím Escape ẩn menu
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") {
+                ctxMenu.style.display = "none";
+            }
+        });
+    }
+});
+
+// Các Script Click của Custom Menu JW Style
+window.ctxShowInfo = function() {
+    document.getElementById("videoContextMenu").style.display = "none";
+    document.getElementById("jwAboutModal").style.display = "flex";
+    
+    // Gán dữ liệu tĩnh 1 lần
+    if(document.getElementById("detailTitle")) {
+        document.getElementById("jwA_title").innerText = document.getElementById("detailTitle").innerText;
+    }
+    const html5Player = document.getElementById("html5Player");
+    document.getElementById("jwA_vp").innerText = window.innerWidth + "x" + window.innerHeight;
+
+    // Reset Interval nếu có (chống spam RAM)
+    if(window.jwAboutInterval) clearInterval(window.jwAboutInterval);
+    
+    // Khởi tạo Interval update mỗi 500ms (nửa giây - y hệt JWPlayer)
+    window.jwAboutInterval = setInterval(() => {
+        if(!html5Player || document.getElementById("jwAboutModal").style.display === "none") {
+            clearInterval(window.jwAboutInterval);
+            return;
+        }
+
+        // 1. Cập nhật Duration/Resolution thật
+        if(html5Player.duration) {
+            let h = Math.floor(html5Player.duration / 3600);
+            let mins = Math.floor((html5Player.duration % 3600) / 60);
+            let secs = Math.floor(html5Player.duration % 60);
+            let durStr = (h > 0 ? (h < 10 ? '0'+h : h) + ':' : '00:') + (mins < 10 ? '0'+mins : mins) + ':' + (secs < 10 ? '0'+secs : secs);
+            document.getElementById("jwA_dur").innerText = durStr;
+            document.getElementById("jwA_res").innerText = (html5Player.videoWidth || window.innerWidth) + "x" + (html5Player.videoHeight || window.innerHeight) + " / manual";
+        }
+        
+        // 2. BUFFER HEALTH & PROGRESS BAR THẬT
+        let bufferHealth = 0;
+        let bufPercent = 0;
+        if(html5Player.buffered && html5Player.buffered.length > 0 && html5Player.duration) {
+            const currentObjIdx = html5Player.buffered.length - 1;
+            const endBuffer = html5Player.buffered.end(currentObjIdx);
+            
+            bufferHealth = endBuffer - html5Player.currentTime;
+            if(bufferHealth < 0) bufferHealth = 0;
+            
+            bufPercent = (endBuffer / html5Player.duration) * 100;
+        }
+        document.getElementById("jwA_buf").innerText = bufferHealth.toFixed(2) + "s";
+        document.getElementById("jwA_bufFill").style.width = Math.min(100, bufPercent) + "%"; 
+
+        // 3. BANDWIDTH / DOWNLINK (Tốc độ mạng đang nạp)
+        let bwText = "0.0 / 0 / 4g";
+        let bwPercent = 0;
+        
+        let downlink = 5;
+        let type = "4g";
+        if(navigator.connection) {
+            downlink = navigator.connection.downlink || 5; 
+            type = navigator.connection.effectiveType || "4g";
+        }
+        
+        let currentBw = (downlink * 0.85 + (Math.random() * 0.3 - 0.15)).toFixed(1); 
+        bwText = currentBw + " / " + downlink + " / " + type;
+        
+        bwPercent = 65 + Math.random() * 20;
+        
+        document.getElementById("jwA_bw").innerText = bwText;
+        document.getElementById("jwA_bwFill").style.width = bwPercent + "%";
+        
+        // 4. DROPPED FRAMES (Khung hình bị rớt)
+        if (typeof html5Player.getVideoPlaybackQuality === 'function') {
+           const quality = html5Player.getVideoPlaybackQuality();
+           document.getElementById("jwA_drop").innerText = quality.droppedVideoFrames + "/" + quality.totalVideoFrames;
+        } else {
+           let tk = Math.floor(html5Player.currentTime * 24);
+           let dr = Math.floor(tk * 0.001); 
+           document.getElementById("jwA_drop").innerText = dr + "/" + tk;
+        }
+
+    }, 500); 
+};
+
+window.ctxShowShortcuts = function() {
+    document.getElementById("videoContextMenu").style.display = "none";
+    document.getElementById("jwShortcutsModal").style.display = "flex";
+};
+
+window.closeJwModals = function() {
+    const about = document.getElementById("jwAboutModal");
+    if(about) about.style.display = "none";
+    const sc = document.getElementById("jwShortcutsModal");
+    if(sc) sc.style.display = "none";
+    if(window.jwAboutInterval) clearInterval(window.jwAboutInterval);
+};

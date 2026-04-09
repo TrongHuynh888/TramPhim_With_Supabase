@@ -29,14 +29,14 @@ async function renderFeaturedMovies() {
           viewCounts[log.movie_id] = (viewCounts[log.movie_id] || 0) + 1;
         });
 
-        // Sort và lấy top 10 movie_id
-        const top10Ids = Object.entries(viewCounts)
+        // Sort và lấy top 20 movie_id
+        const top20Ids = Object.entries(viewCounts)
           .sort((a, b) => b[1] - a[1])
-          .slice(0, 10)
+          .slice(0, 20)
           .map(([movieId]) => movieId);
 
         // Map về object phim từ allMovies
-        featured = top10Ids
+        featured = top20Ids
           .map(id => allMovies.find(m => m.id === id))
           .filter(Boolean);
       }
@@ -49,7 +49,7 @@ async function renderFeaturedMovies() {
   if (featured.length === 0) {
     featured = [...allMovies]
       .sort((a, b) => (b.views || 0) - (a.views || 0))
-      .slice(0, 10);
+      .slice(0, 20);
   }
 
   container.innerHTML = featured
@@ -179,23 +179,29 @@ function renderNewMovies() {
         : new Date(b.createdAt);
       return dateB - dateA;
     })
-    .slice(0, 24);
+    .slice(0, 30);
 
   container.innerHTML = sortedMovies
     .map((movie) => createMovieCard(movie))
     .join("");
 
-  // Đọc số cột thực tế từ computed grid rồi cắt bớt thẻ dư (chỉ giữ đúng 2 hàng)
+  // Cắt thẻ thừa để grid PC chỉ hiện đúng 2 hàng
+  // Double requestAnimationFrame đảm bảo grid đã layout xong
   requestAnimationFrame(() => {
-    const cols = window.getComputedStyle(container).gridTemplateColumns;
-    if (cols && cols !== 'none') {
-      const numCols = cols.split(' ').length;
-      const maxCards = numCols * 2;
-      const cards = container.querySelectorAll(':scope > .movie-card-wrapper');
-      cards.forEach((card, i) => {
-        if (i >= maxCards) card.remove();
-      });
-    }
+    requestAnimationFrame(() => {
+      const display = window.getComputedStyle(container).display;
+      if (display === 'grid') {
+        const cols = window.getComputedStyle(container).gridTemplateColumns;
+        if (cols && cols !== 'none') {
+          const numCols = cols.split(' ').length;
+          const maxCards = numCols * 2;
+          const cards = container.querySelectorAll(':scope > .movie-card-wrapper');
+          cards.forEach((card, i) => {
+            if (i >= maxCards) card.remove();
+          });
+        }
+      }
+    });
   });
 }
 
@@ -446,78 +452,116 @@ function handleMovieClick(event, movieId) {
     // Reset các class định vị cũ
     currentWrapper.classList.remove("popup-align-left", "popup-align-right");
 
-    // CHỈ áp dụng Smart Positioning (thụt lề) cho các hàng phim cuộn ngang (landscape row) 
-    // và KHÔNG áp dụng khi đang ở giao diện dọc (Portrait) hoặc trong lưới movie-grid thông thường
-    const isHorizontalRow = currentWrapper.closest(".country-movies-row");
+    // Phân biệt tablet để tính popup width
+    const isTabletCheck = screenWidth > 768 && screenWidth <= 1366;
+    const isLandscapeCard = currentWrapper.classList.contains('movie-card-landscape');
     
-    if (isHorizontalRow && !isPortrait) {
-        // Nếu mép trái thẻ < 10% màn hình -> Đang ở lề TRÁI -> Mở sang phải
-        if (rect.left < screenWidth * 0.1) {
-            currentWrapper.classList.add("popup-align-left");
+    // Ước tính popup width theo thiết bị
+    const estPopupW = isTabletCheck
+        ? (isLandscapeCard ? 340 : 330)
+        : (isLandscapeCard ? 250 : 220);
+
+    // Tính tâm thẻ phim
+    const cardCenterX = rect.left + rect.width / 2;
+    const safeMargin = 10; // Margin an toàn cách lề viewport
+
+    // Smart Positioning: kiểm tra popup có bị tràn viewport không
+    // Áp dụng cho: tablet (tất cả), mobile landscape row
+    const isHorizontalRow = currentWrapper.closest(".country-movies-row");
+    const shouldSmartPosition = isTabletCheck || (isHorizontalRow && !isPortrait);
+
+    if (shouldSmartPosition) {
+        // Popup sẽ tràn trái nếu: tâm card - nửa popup < margin
+        if (cardCenterX - estPopupW / 2 < safeMargin) {
+            currentWrapper.classList.add("popup-align-left"); // Mở sang phải
         } 
-        // Nếu mép phải thẻ > 90% màn hình -> Đang ở lề PHẢI -> Mở sang trái
-        else if (rect.right > screenWidth * 0.9) {
-            currentWrapper.classList.add("popup-align-right");
+        // Popup sẽ tràn phải nếu: tâm card + nửa popup > viewport - margin
+        else if (cardCenterX + estPopupW / 2 > screenWidth - safeMargin) {
+            currentWrapper.classList.add("popup-align-right"); // Mở sang trái
         }
     }
-    // Mặc định: CENTER cho Portrait hoặc movie-grid thông thường (Không cần add class gì)
+    // Mặc định: CENTER (Không cần add class gì)
 
     currentWrapper.classList.add("active-mobile");
 
-    // FIX iOS: Di chuyển popup ra <body> để thoát hoàn toàn overflow container
-    const popup = currentWrapper.querySelector('.movie-popup-nfx');
-    if (popup) {
-        const cardRect = currentWrapper.getBoundingClientRect();
+    // Phân biệt tablet vs mobile
+    // Mobile xoay ngang: innerWidth > 768 nhưng innerHeight <= 500 → phải xử lý như mobile
+    const isMobileLandscape = window.innerWidth > 768 && window.innerHeight <= 500
+                           && window.matchMedia('(orientation: landscape)').matches;
+    const isTabletDevice = !isMobileLandscape
+                        && (window.matchMedia('(min-width: 769px) and (max-width: 1366px)').matches
+                         || (window.innerWidth > 768 && window.innerWidth <= 1366));
 
-        // Lấy kích thước popup
-        const isLandscape = currentWrapper.classList.contains('movie-card-landscape');
-        const popupW = isLandscape ? 250 : 220;
-        const margin = 8;
-        const navbarH = 70;
+    // TABLET: Popup giữ trong wrapper gốc, CSS tablet (position: absolute) xử lý — giống PC
+    // MOBILE + MOBILE LANDSCAPE: Di chuyển popup ra <body> với position: fixed để thoát overflow container
+    if (!isTabletDevice) {
+        // === MOBILE & MOBILE LANDSCAPE ===
+        const popup = currentWrapper.querySelector('.movie-popup-nfx');
+        if (popup) {
+            const cardRect = currentWrapper.getBoundingClientRect();
+            const isLandscapeCard = currentWrapper.classList.contains('movie-card-landscape');
+            const viewW = window.innerWidth;
+            const viewH = window.innerHeight;
+            const margin = 8;
 
-        // Tính vị trí trung tâm mong muốn
-        let centerX = cardRect.left + cardRect.width / 2;
-        let centerY = cardRect.top + cardRect.height / 2;
+            // Mobile landscape: màn hình thấp → popup vừa phải
+            const isSmallHeight = viewH <= 500; // Nhận diện landscape mobile
+            const popupW = isSmallHeight
+                ? (isLandscapeCard ? 250 : 230)   // Landscape: tăng size
+                : (isLandscapeCard ? 250 : 220);  // Portrait mobile: size bình thường
+            const navbarH = isSmallHeight ? 55 : 70;
+            const maxH = isSmallHeight
+                ? Math.floor(viewH * 0.85)  // Landscape: chiếm 85% chiều cao
+                : Math.floor(viewH * 0.65); // Portrait: chiếm 65%
+            // Ước tính chiều cao popup để tính vị trí top
+            const estPopupH = isSmallHeight ? 230 : 260;
 
-        // CLAMP NGANG: Không cho popup tràn trái/phải viewport
-        const minLeft = margin + popupW / 2;
-        const maxLeft = window.innerWidth - margin - popupW / 2;
-        centerX = Math.max(minLeft, Math.min(maxLeft, centerX));
+            let centerX = cardRect.left + cardRect.width / 2;
 
-        // CLAMP DỌC: Không cho popup tràn trên (dưới navbar)
-        centerY = Math.max(navbarH + margin + 100, centerY);
+            // CLAMP NGANG
+            centerX = Math.max(margin + popupW / 2, Math.min(viewW - margin - popupW / 2, centerX));
 
-        // Lưu vị trí gốc để khi đóng popup sẽ trả về đúng chỗ
-        popup._originalParent = currentWrapper;
-        popup._originalNextSibling = popup.nextSibling;
+            // TÍNH TOP trực tiếp (KHÔNG dùng translateY nữa - tránh nhảy lên)
+            // Canh giữa popup theo tâm thẻ phim
+            let topPos = cardRect.top + cardRect.height / 2 - estPopupH / 2;
+            // Clamp: không vượt quá navbar trên, không tràn dưới viewport
+            topPos = Math.max(navbarH + margin, topPos);
+            topPos = Math.min(viewH - estPopupH - margin, topPos);
 
-        // Di chuyển popup ra body — thoát hoàn toàn mọi overflow container
-        document.body.appendChild(popup);
+            popup._originalParent = currentWrapper;
+            popup._originalNextSibling = popup.nextSibling;
+            document.body.appendChild(popup);
 
-        // Áp dụng style fixed trực tiếp
-        popup.classList.add('popup-body-level');
-        if (isLandscape) popup.classList.add('popup-body-landscape');
-        popup.style.cssText = `
-          position: fixed !important;
-          top: ${centerY}px !important;
-          left: ${centerX}px !important;
-          transform: translate(-50%, -50%) !important;
-          z-index: 2500 !important;
-          width: ${popupW}px !important;
-          max-height: 70vh !important;
-          overflow-y: auto !important;
-          overflow-x: hidden !important;
-          display: block !important;
-          visibility: visible !important;
-          opacity: 1 !important;
-          pointer-events: auto !important;
-          border-radius: 12px !important;
-          background: #1f1f2e !important;
-          color: #fff !important;
-          box-shadow: 0 10px 50px rgba(0, 0, 0, 0.95) !important;
-          border: 1px solid var(--accent-primary) !important;
-        `;
+            popup.classList.add('popup-body-level');
+            if (isLandscapeCard) popup.classList.add('popup-body-landscape');
+            if (isSmallHeight) popup.classList.add('popup-landscape-mobile'); // Class nhận diện landscape
+
+            popup.style.cssText = `
+              position: fixed !important;
+              top: ${topPos}px !important;
+              left: ${centerX}px !important;
+              transform: translateX(-50%) !important;
+              z-index: 2500 !important;
+              width: ${popupW}px !important;
+              height: auto !important;
+              min-height: unset !important;
+              max-height: ${maxH}px !important;
+              overflow-y: auto !important;
+              overflow-x: hidden !important;
+              display: flex !important;
+              flex-direction: column !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+              pointer-events: auto !important;
+              border-radius: 10px !important;
+              background: #1f1f2e !important;
+              color: #fff !important;
+              box-shadow: 0 8px 40px rgba(0, 0, 0, 0.95) !important;
+              border: 1px solid var(--accent-primary) !important;
+            `;
+        }
     }
+    // TABLET: CSS responsive.css tablet rules xử lý (popup giữ trong wrapper, position: absolute)
 
     // Thêm section-active-popup cho trường hợp không phải scroll container
     if (!currentWrapper.closest('.featured-scroll-wrapper') && !currentWrapper.closest('#newMovies') && !currentWrapper.closest('.country-movies-row')) {
@@ -535,7 +579,7 @@ function handleMovieClick(event, movieId) {
 function closeAllPopups() {
   // Trả popup đã di chuyển ra body về vị trí gốc trong wrapper
   document.querySelectorAll('.popup-body-level').forEach(p => {
-    p.classList.remove('popup-body-level', 'popup-body-landscape');
+    p.classList.remove('popup-body-level', 'popup-body-landscape', 'popup-landscape-mobile');
     p.style.cssText = ''; // Xóa inline styles
     // Trả popup về wrapper gốc
     if (p._originalParent) {

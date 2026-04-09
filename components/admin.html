@@ -735,6 +735,299 @@
         </div>
       </div>
 
+      <!-- ═══════════════ INLINE EPISODE EDITOR (thay thế popup cũ) ═══════════════ -->
+      <div id="inlineEpisodeEditorContainer" class="hidden" style="display: none;">
+        <div class="admin-panel-header" style="border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; padding-bottom: 15px;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <button type="button" class="btn btn-secondary" onclick="closeEpisodeModal()" style="padding: 8px 18px;">
+                    <i class="fas fa-arrow-left"></i> Quay lại
+                </button>
+                <h3 id="episodeModalTitle" style="margin: 0; font-size: 1.4rem;"><i class="fas fa-edit" style="color: var(--accent-primary); margin-right: 6px;"></i> Thêm Tập Mới</h3>
+            </div>
+        </div>
+
+        <div class="inline-editor-body" style="padding-bottom: 90px;">
+          <form id="episodeForm" onsubmit="handleEpisodeSubmit(event)">
+            <input type="hidden" id="episodeIndex" />
+            <div class="form-group" id="episodeNumberGroup">
+              <label class="form-label">Số tập *</label>
+              <input type="text" class="form-input" id="episodeNumber" placeholder="Ví dụ: 1 hoặc Tập Đặc Biệt" required />
+            </div>
+            <!-- Multi-Version Sources -->
+            <div class="form-group">
+                <label class="form-label">Danh sách phiên bản (Sources)</label>
+                <div id="sourceListContainer" style="display: flex; flex-direction: column; gap: 10px;">
+                    <!-- Source items will be added here by JS -->
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" style="margin-top: 10px;" onclick="addSourceInput()">
+                    <i class="fas fa-plus"></i> Thêm phiên bản
+                </button>
+            </div>
+            
+            <!-- Trường ẩn để tương thích ngược với code cũ -->
+            <input type="hidden" id="episodeYoutubeId" />
+            <!-- BỔ SUNG: KHUNG PREVIEW VIDEO ĐỂ LẤY THỜI GIAN INTRO -->
+            <div class="intro-preview-container" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                <label class="form-label" style="color: var(--accent-primary); display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                    <i class="fas fa-play-circle"></i> Xem trước để đánh dấu Bỏ qua intro
+                </label>
+
+                <!-- Vùng chứa các nút chuyển đổi phiên bản video -->
+                <div id="adminPreviewSourceSwitch" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                    <!-- Nút sẽ được chèn tự động bằng JS -->
+                </div>
+                
+                <div id="adminIntroPlayerWrapper" style="width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 4px; overflow: hidden; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; position: relative;">
+                    <!-- Video hoặc Iframe sẽ được chèn vào đây bằng JS -->
+                    <div id="adminIntroPlayerPlaceholder" style="text-align: center; color: #666;">
+                        <i class="fas fa-video-slash fa-2x mb-2"></i>
+                        <p style="font-size: 0.9rem;">Chưa có video. Hãy nhập link video bên trên.</p>
+                    </div>
+
+                    <!-- Overlay nút tua ±10s ở giữa video -->
+                    <div id="adminPreviewOverlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 44px); z-index: 5; pointer-events: none;">
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 40px; pointer-events: auto;">
+                            <button type="button" onclick="adminPreviewSkip(-10)" title="Tua lùi 10 giây" style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.5); color: #fff; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                                <i class="fas fa-undo-alt"></i>
+                            </button>
+                            <button type="button" onclick="adminPreviewTogglePlay()" id="adminPreviewPlayBtn" title="Play/Pause" style="width: 56px; height: 56px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.8); background: rgba(0,0,0,0.5); color: #fff; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            <button type="button" onclick="adminPreviewSkip(10)" title="Tua tới 10 giây" style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.5); color: #fff; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                                <i class="fas fa-redo-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Custom controls bar phía dưới -->
+                    <div id="adminPreviewControls" style="display: none; position: absolute; bottom: 0; left: 0; width: 100%; background: linear-gradient(transparent, rgba(0,0,0,0.85)); padding: 8px 12px 6px; z-index: 6;">
+                        <input type="range" id="adminPreviewSeekbar" min="0" max="100" value="0" step="1" style="width: 100%; height: 6px; cursor: pointer; accent-color: var(--accent-primary); margin-bottom: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: #ccc; font-family: monospace;">
+                            <span id="adminPreviewTimeDisplay">00:00 / 00:00</span>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span id="adminPreviewSecondDisplay" style="color: var(--accent-primary); font-weight: 600;"></span>
+                                <button type="button" onclick="adminPreviewFullscreen()" title="Toàn màn hình" style="background: none; border: none; color: #ccc; font-size: 1rem; cursor: pointer; padding: 2px 4px; transition: color 0.2s;">
+                                    <i class="fas fa-expand"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nút action ngay dưới video -->
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="getCurrentTimeFromPreview()" style="height: 34px; white-space: nowrap; font-size: 0.82rem;">
+                        <i class="fas fa-clock"></i> Lấy thời gian hiện tại
+                    </button>
+                    <button type="button" class="btn btn-warning btn-sm" onclick="previewSkipIntro()" style="height: 34px; white-space: nowrap; font-size: 0.82rem;">
+                        <i class="fas fa-fast-forward"></i> Thử nhảy đoạn này
+                    </button>
+                    <div style="display: flex; align-items: center; gap: 6px; margin-left: auto; height: 34px;">
+                        <input type="checkbox" id="applyIntroToAll" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent-primary);">
+                        <label for="applyIntroToAll" style="margin-bottom: 0; font-size: 0.82rem; font-weight: 600; color: #ffc107; cursor: pointer;">
+                            Áp dụng tất cả tập
+                        </label>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <!-- Intro bắt đầu -->
+                    <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                        <label class="form-label" style="font-size: 0.82rem; color: #f39c12; display: flex; align-items: center; gap: 6px; cursor: pointer; margin-bottom: 6px;">
+                            <input type="radio" name="timeCaptureTarget" value="introStart" style="width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: #f39c12;">
+                            <span>Intro bắt đầu:</span>
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <input type="number" id="introBeginMinute" class="form-input" placeholder="0" min="0" style="width: 58px; text-align: center; border-color: #f39c12; padding: 5px;">
+                            <span class="text-muted" style="font-size: 0.8rem;">p</span>
+                            <input type="number" id="introBeginSecond" class="form-input" placeholder="0" min="0" max="59" style="width: 58px; text-align: center; border-color: #f39c12; padding: 5px;">
+                            <span class="text-muted" style="font-size: 0.8rem;">s</span>
+                        </div>
+                    </div>
+
+                    <!-- Intro kết thúc -->
+                    <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                        <label class="form-label" style="font-size: 0.82rem; display: flex; align-items: center; gap: 6px; cursor: pointer; margin-bottom: 6px;">
+                            <input type="radio" name="timeCaptureTarget" value="intro" checked style="width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: var(--accent-primary);">
+                            <span>Intro kết thúc:</span>
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <input type="number" id="introEndMinute" class="form-input" placeholder="0" min="0" style="width: 58px; text-align: center; padding: 5px;">
+                            <span class="text-muted" style="font-size: 0.8rem;">p</span>
+                            <input type="number" id="introEndSecond" class="form-input" placeholder="0" min="0" max="59" style="width: 58px; text-align: center; padding: 5px;">
+                            <span class="text-muted" style="font-size: 0.8rem;">s</span>
+                        </div>
+                    </div>
+
+                    <!-- Outro -->
+                    <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                        <label class="form-label" style="font-size: 0.82rem; color: #4ecdc4; display: flex; align-items: center; gap: 6px; cursor: pointer; margin-bottom: 6px;">
+                            <input type="radio" name="timeCaptureTarget" value="outro" style="width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: #4ecdc4;">
+                            <span>Outro (chuyển tập):</span>
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <input type="number" id="outroStartMinute" class="form-input" placeholder="0" min="0" style="width: 58px; text-align: center; border-color: #4ecdc4; padding: 5px;">
+                            <span class="text-muted" style="font-size: 0.8rem;">p</span>
+                            <input type="number" id="outroStartSecond" class="form-input" placeholder="0" min="0" max="59" style="width: 58px; text-align: center; border-color: #4ecdc4; padding: 5px;">
+                            <span class="text-muted" style="font-size: 0.8rem;">s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <small class="text-muted" style="display: block; margin-top: 8px; font-size: 0.8rem;">
+                    * Lưu ý: "Intro bắt đầu" (mốc intro xuất hiện, mặc định 0s). "Intro kết thúc" (nhảy tới đây khi bỏ qua). "Chuyển tập" (hiện thông báo từ lúc đánh dấu Outro).
+                </small>
+            </div>
+            <!-- END BỔ SUNG -->
+
+            <!-- BỔ SUNG: PHỤ ĐỀ SONG NGỮ -->
+            <div class="form-group" style="background: rgba(255, 193, 7, 0.05); border: 1px dashed rgba(255, 193, 7, 0.3); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                <label class="form-label" style="color: #ffc107; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                    <span style="display: flex; align-items: center; gap: 8px;"><i class="fas fa-closed-captioning"></i> Phụ Đề Song Ngữ (AI)</span>
+                    <div style="display: flex; align-items: center; gap: 10px">
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
+                            <input type="checkbox" id="aiBilingualMode" style="accent-color: #6f42c1;"> Gộp sub Song Ngữ
+                        </label>
+                        <select id="aiTargetLang" class="form-select" style="width: auto; height: 32px; padding: 0 10px; font-size: 0.85rem; border-color: rgba(255,193,7,0.4); background: rgba(0,0,0,0.5);">
+                            <option value="vi">🇻🇳 Tiếng Việt (Vietnamese)</option>
+                            <option value="en" selected>🇺🇸 Tiếng Anh (English)</option>
+                            <option value="zh-CN">🇨🇳 Tiếng Trung (Chinese)</option>
+                            <option value="ko">🇰🇷 Tiếng Hàn (Korean)</option>
+                            <option value="ja">🇯🇵 Tiếng Nhật (Japanese)</option>
+                        </select>
+                    </div>
+                </label>
+                
+                <!-- Chọn AI Engine dịch + Model -->
+                <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="color: #bbb; font-size: 0.85rem; white-space: nowrap; cursor: pointer;" onclick="const b = document.getElementById('aiModelInfoBox'); b.style.display = b.style.display === 'none' ? 'block' : 'none';" title="Bấm để xem giải thích các Model">
+                        🧠 AI Dịch <i class="fas fa-question-circle" style="color: #d4a5ff;"></i> :
+                    </span>
+                    <select id="aiTranslateEngine" class="form-select" style="width: auto; height: 32px; padding: 0 10px; font-size: 0.85rem; border-color: rgba(111,66,193,0.5); background: rgba(111,66,193,0.15); color: #d4a5ff;" onchange="toggleGroqKeyInput()">
+                        <option value="gemini" selected>✨ Gemini 2.0 Flash</option>
+                        <option value="groq">⚡ Groq (Cloud AI)</option>
+                        <option value="google">🔤 Google Translate (Miễn phí)</option>
+                    </select>
+                    <select id="groqModelSelect" class="form-select" style="display: none; width: auto; height: 32px; padding: 0 10px; font-size: 0.85rem; border-color: rgba(255,165,0,0.5); background: rgba(255,165,0,0.1); color: #ffb347;">
+                        <option value="llama-3.3-70b-versatile">🦙 Llama 3.3 70B (Đa ngôn ngữ)</option>
+                        <option value="meta-llama/llama-4-scout-17b-16e-instruct">🦙 Llama 4 Scout (Mới nhất)</option>
+                        <option value="qwen/qwen3-32b">🐉 Qwen 3 32B (Giỏi tiếng Á)</option>
+                    </select>
+                    <span id="groqKeyHint" style="display: none; font-size: 0.75rem; color: #d4a5ff;">
+                        (Key tại <b>Cấu hình API Key</b>)
+                    </span>
+                    <div id="aiRecommendHint" style="width: 100%; margin-top: 4px; font-size: 0.8rem; display: none;"></div>
+                    
+                    <div id="aiModelInfoBox" style="width: 100%; margin-top: 6px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px; font-size: 0.8rem; color: #ccc; border-left: 3px solid #6f42c1; display: none;">
+                        <div style="margin-bottom: 6px; color: #d4a5ff;"><i class="fas fa-book"></i> <b>Sách Lược Chọn Model AI:</b></div>
+                        <ul style="margin: 0; padding-left: 20px; line-height: 1.5;">
+                            <li style="margin-bottom: 6px;"><b style="color:#ffd700;">✨ Gemini 2.0 Flash:</b> Tư duy ngữ cảnh sâu, dịch tự nhiên các đoạn hội thoại phức tạp. Phù hợp mọi thể loại phim.</li>
+                            <li style="margin-bottom: 6px;"><b style="color:#4ade80;">🦙 Llama 3.3 70B:</b> Tốc độ cực nhanh. Xử lý xuất sắc thành ngữ, tiếng lóng Âu Mỹ. Tối ưu cho phim Hollywood.</li>
+                            <li style="margin-bottom: 6px;"><b style="color:#f87171;">🐉 Qwen 3 32B:</b> Am hiểu ngôn ngữ phương Đông. Dịch chuẩn xác Hán Việt, kiếm hiệp, cách xưng hô phim Châu Á (Trung, Hàn, Nhật).</li>
+                            <li><b style="color:#60a5fa;">🦙 Llama 4 Scout:</b> Model thể thức mới, nhạy bén bắt nhịp các câu thoại ngắn, tình huống nhanh.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="color: #bbb; font-size: 0.85rem; white-space: nowrap;">🎧 Engine Nghe:</span>
+                    <select id="aiTranscribeEngine" class="form-select" style="width: auto; height: 32px; padding: 0 10px; font-size: 0.85rem; border-color: rgba(0,200,150,0.5); background: rgba(0,200,150,0.12); color: #4aedc4;">
+                        <option value="groq_cloud" selected>☁️ Groq Cloud (Siêu Tốc — Miễn phí)</option>
+                        <option value="local">🖥️ Local GPU/CPU (Whisper cục bộ)</option>
+                    </select>
+                    <span style="color: #bbb; font-size: 0.85rem; white-space: nowrap; margin-left: 8px;">Nguồn phân tích:</span>
+                    <select id="aiSourceSelect" class="form-select" style="flex: 1; min-width: 160px; height: 32px; padding: 0 10px; font-size: 0.85rem; border-color: rgba(255,193,7,0.4); background: rgba(0,0,0,0.5); color: #fff;">
+                        <option value="">-- Tự động chọn (Ưu tiên Vietsub) --</option>
+                    </select>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                    <button type="button" class="btn btn-primary" onclick="event.stopPropagation(); event.preventDefault(); triggerAITranslation(event);" id="btnTriggerAI" style="flex: 1; white-space: nowrap; background: #6f42c1; border-color: #6f42c1; font-weight: bold;">
+                        <i class="fas fa-brain"></i> Chạy AI Dịch (Vào ngôn ngữ đang chọn phía trên)
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="stopAIStream()" id="btnStopAI" style="display: none; flex: 1; white-space: nowrap;">
+                        <i class="fas fa-pause-circle"></i> Dừng
+                    </button>
+                    <button type="button" class="btn" onclick="resumeAIStream()" id="btnResumeAI" style="display: none; flex: 1; white-space: nowrap; background: #198754; border-color: #198754; color: #fff; font-weight: bold;">
+                        <i class="fas fa-play-circle"></i> Tiếp tục
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="cancelAIStream()" id="btnCancelAI" style="display: none; flex: 1; white-space: nowrap; background: #6c2022; border-color: #6c2022;">
+                        <i class="fas fa-times-circle"></i> Hủy
+                    </button>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                    <input type="file" id="subtitleInputSupabase" accept=".vtt,.srt" style="display: none;" onchange="uploadSubtitleToSupabase(this)">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('subtitleInputSupabase').click()" style="white-space: nowrap; border-color: #6c757d;">
+                        <i class="fas fa-file-upload"></i> Hoặc upload VTT thủ công (Vào ngôn ngữ đang chọn phía trên)
+                    </button>
+                    <small class="text-muted" style="font-size: 0.8rem; flex: 1;">(Tự động lưu Storage)</small>
+                </div>
+
+                <!-- Nơi hiển thị các ô link phụ đề đã có (Dynamic Boxes) -->
+                <div id="dynamicSubtitlesContainer" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; border-top: 1px dashed rgba(255,193,7,0.3); padding-top: 12px;">
+                    <!-- JS sẽ inject các dòng input vào đây -->
+                </div>
+
+                <!-- Màn hình Terminal thời gian thực -->
+                <div id="aiLiveLogBox" style="display: none; height: 180px; background: #000; border: 1px solid #444; border-radius: 6px; padding: 10px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; margin-bottom: 12px; box-shadow: inset 0 0 10px rgba(0,0,0,0.8);">
+                    <div style="color: #28a745; margin-bottom: 5px;">root@ai-server:~$ Tiến trình phân tích âm thanh bắt đầu...</div>
+                    <div id="aiLiveLogContent" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="file" id="subtitleInputSupabase" accept=".vtt,.srt" style="display: none;" onchange="uploadSubtitleToSupabase(this)">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('subtitleInputSupabase').click()" style="white-space: nowrap;">
+                        <i class="fas fa-file-upload"></i> Hoặc upload file thủ công (.vtt)
+                    </button>
+                    <small class="text-muted" style="font-size: 0.8rem; flex: 1;">(Tự động lưu vào Supabase Storage)</small>
+                </div>
+            </div>
+            <!-- END PHỤ ĐỀ SONG NGỮ -->
+
+            <div style="display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 16px">
+              <div class="form-group">
+                <label class="form-label">Thời lượng</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div class="input-with-label" style="position: relative;">
+                    <input type="number" id="episodeDurationHour" class="form-input" placeholder="0" min="0" style="padding-right: 35px;">
+                    <span style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #888; pointer-events: none;">giờ</span>
+                  </div>
+                  <div class="input-with-label" style="position: relative;">
+                    <input type="number" id="episodeDurationMinute" class="form-input" placeholder="0" min="0" style="padding-right: 45px;">
+                    <span style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #888; pointer-events: none;">phút</span>
+                  </div>
+                </div>
+                <input type="hidden" id="episodeDuration" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Chất lượng</label>
+                <select class="form-select" id="episodeQuality">
+                    <option value="360p">360p</option>
+                    <option value="480p">480p</option>
+                    <option value="720p">720p</option>
+                    <option value="720p60">720p60</option>
+                    <option value="1080p">1080p</option>
+                    <option value="1080p60" selected>1080p60</option>
+                    <option value="2K">2K (1440p)</option>
+                    <option value="4K">4K (2160p)</option>
+                </select>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Sticky Bottom Bar (nút Lưu/Hủy cố định cuối màn hình) -->
+        <div class="inline-episode-sticky-bar" id="inlineEpisodeStickyBar">
+            <button type="button" class="btn btn-secondary" onclick="closeEpisodeModal()" style="padding: 10px 24px; font-weight: 600;">
+                <i class="fas fa-times"></i> Hủy
+            </button>
+            <button type="button" class="btn btn-primary" onclick="document.getElementById('episodeForm').requestSubmit()" style="padding: 10px 30px; font-weight: 700; font-size: 1.05rem; box-shadow: 0 4px 15px rgba(229, 9, 20, 0.4);">
+                <i class="fas fa-save"></i> Lưu Tập Phim
+            </button>
+        </div>
+      </div>
+
       <!-- Trailers Panel -->
       <div class="admin-panel" id="trailersPanel">
         <div class="admin-panel-header">
@@ -2935,6 +3228,67 @@
     </div>
     <div class="modal-body bill-viewport-body">
       <img id="billViewportImage" src="" alt="Bill Image" />
+    </div>
+  </div>
+</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Bulk OpenSubtitles Auto-Sync -->
+<div class="modal-overlay" id="bulkOpenSubtitlesModal" onclick="closeModal('bulkOpenSubtitlesModal')">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width: 650px; width: 95%;">
+    <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;">
+      <h3><i class="fas fa-cogs" style="color: #17a2b8; margin-right: 8px;"></i> Tải Phụ Đề Hàng Loạt (Auto-Sync)</h3>
+      <button type="button" class="modal-close" onclick="closeModal('bulkOpenSubtitlesModal')">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="modal-body" style="padding-bottom: 20px;">
+      <div style="background: rgba(23, 162, 184, 0.08); border: 1px dashed rgba(23, 162, 184, 0.4); padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.85rem; color: #a1dffb; line-height: 1.5;">
+        <i class="fas fa-info-circle"></i> Công cụ Auto-Sync sẽ duyệt qua các tập đang hiển thị, tự động lấy số theo <strong>Mùa (Season)</strong> và <strong>Ngôn ngữ</strong> để tải phụ đề Top 1 về, chuyển VTT, và Up đè vào SQL.
+      </div>
+
+      <div class="form-group" style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <div style="flex: 2; min-width: 200px;">
+            <label class="form-label">Tên Phim (Keywords):</label>
+            <input type="text" class="form-input" id="bulkOsSearchQuery" placeholder="Tên phim..." readonly style="opacity: 0.8;">
+        </div>
+        <div style="flex: 1; min-width: 100px;">
+            <label class="form-label" style="color: #ffc107;">Mùa (Season):</label>
+            <input type="number" class="form-input" id="bulkOsSeasonNum" value="1" min="1" placeholder="VD: 1">
+        </div>
+        <div style="flex: 1; min-width: 120px;">
+            <label class="form-label">Ngôn ngữ:</label>
+            <select id="bulkOsLang" class="form-select">
+                <option value="vi">🇻🇳 Tiếng Việt</option>
+                <option value="en">🇺🇸 Tiếng Anh</option>
+                <option value="zh-CN">🇨🇳 Tiếng Trung</option>
+                <option value="ko">🇰🇷 Tiếng Hàn</option>
+                <option value="ja">🇯🇵 Tiếng Nhật</option>
+            </select>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 20px;">
+          <button type="button" class="btn btn-primary btn-lg" id="btnStartBulkOsSync" style="font-size: 1.1rem; padding: 10px 24px; border-radius: 8px;" onclick="startBulkOpenSubtitlesSync()">
+              <i class="fas fa-play"></i> BẮT ĐẦU CHẠY AUTO MAPPING
+          </button>
+      </div>
+
+      <!-- Logs UI -->
+      <div id="bulkOsProgressContainer" style="display: none;">
+          <h4 style="font-size: 0.95rem; margin-bottom: 8px; color: #fff;">Tiến độ quét: (<span id="bulkOsProgressText">0/0</span>)</h4>
+          <div style="width: 100%; background: rgba(255,255,255,0.1); border-radius: 6px; height: 16px; margin-bottom: 15px; overflow: hidden;">
+              <div id="bulkOsProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #17a2b8, #4ecdc4); transition: width 0.3s ease;"></div>
+          </div>
+
+          <div id="bulkOsLogsTerminal" style="background: rgba(0,0,0,0.4); border: 1px inset rgba(255,255,255,0.05); border-radius: 6px; padding: 12px; font-family: monospace; font-size: 0.8rem; color: #aaa; max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;">
+              <!-- Logs will be appended here -->
+              <div><span>></span> Sẵn sàng kích hoạt lệnh API...</div>
+          </div>
+      </div>
+      
     </div>
   </div>
 </div>

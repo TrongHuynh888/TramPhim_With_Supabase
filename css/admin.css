@@ -93,16 +93,20 @@
 /* --- CONTENT AREA (NỘI DUNG PHẢI) --- */
 .admin-content {
   flex: 1;
+  min-width: 0; /* Ngăn flex item nở ra quá mức gây tràn */
+  max-width: calc(100vw - 260px); /* Đảm bảo bề rộng không vượt quá màn hình sau khi trừ sidebar */
   margin-left: 260px;
   padding: 30px;
   transition: margin-left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), 
-              width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  will-change: margin-left, width;
+              width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
+              max-width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  will-change: margin-left, width, max-width;
 }
 
 .admin-content.expanded {
   margin-left: 80px;
   width: calc(100% - 80px);
+  max-width: calc(100vw - 80px);
 }
 
 /* Tabs Logic */
@@ -380,6 +384,24 @@
 }
 
 /* ============================================
+   ADMIN TABLET RESPONSIVE (Đảm bảo bảng phim không bị tràn)
+   ============================================ */
+@media (max-width: 1366px) {
+  /* Cho phép cuộn ngang bảng trên Tablet */
+  .admin-panel {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 20px;
+  }
+
+  .admin-table {
+    min-width: 1000px; /* Tăng min-width để bảng đủ không gian cho 10+ cột */
+    overflow: visible !important;
+  }
+}
+
+
+/* ============================================
    ADMIN MOBILE RESPONSIVE
    ============================================ */
 @media (max-width: 768px) {
@@ -417,7 +439,7 @@
     width: 100%;
   }
 
-  /* BẢNG DỮ LIỆU: Cho phép cuộn ngang */
+  /* BẢNG DỮ LIỆU: Cho phép cuộn ngang (Giữ nguyên cho mobile) */
   .admin-panel {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
@@ -2033,7 +2055,7 @@
 }
 
 /* Responsive */
-@media (max-width: 1200px) {
+@media (max-width: 1366px) {
   .country-panel-grid {
     grid-template-columns: 1fr;
   }
@@ -2766,3 +2788,43 @@
 }
 
 /* API Explorer styles: xem css/admin-api-explorer.css */
+
+/* ═══════════════ INLINE EPISODE EDITOR ═══════════════ */
+#inlineEpisodeEditorContainer {
+  animation: slideUpFade 0.3s ease forwards;
+}
+
+/* Sticky Bottom Bar - Nút Lưu/Hủy bám dính cuối trang */
+.inline-episode-sticky-bar {
+  position: fixed;
+  bottom: 0;
+  left: 260px; /* Tính theo sidebar width */
+  right: 0;
+  background: var(--bg-secondary);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding: 12px 30px;
+  z-index: 200;
+  box-shadow: 0 -5px 30px rgba(0,0,0,0.6);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  transition: left 0.3s ease;
+}
+
+/* Khi sidebar collapsed */
+.admin-sidebar.collapsed ~ .admin-content .inline-episode-sticky-bar {
+  left: 80px;
+}
+
+/* Mobile: Sticky bar full width */
+@media (max-width: 768px) {
+  .inline-episode-sticky-bar {
+    left: 0 !important;
+    padding: 10px 15px;
+  }
+  
+  #inlineEpisodeEditorContainer .admin-panel-header {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+}
