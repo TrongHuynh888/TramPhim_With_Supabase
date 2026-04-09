@@ -2263,10 +2263,15 @@ function initCustomControls(video) {
     // Loading State
     video.addEventListener("waiting", () => updateDetailPlayButtonState("loading"));
     video.addEventListener("playing", () => updateDetailPlayButtonState("playing"));
-    video.addEventListener("canplay", () => {
+    
+    const resolvePlayState = () => {
         if (video.paused) updateDetailPlayButtonState("paused");
         else updateDetailPlayButtonState("playing");
-    });
+    };
+    
+    video.addEventListener("canplay", resolvePlayState);
+    video.addEventListener("seeked", resolvePlayState);
+    video.addEventListener("loadeddata", resolvePlayState);
     video.addEventListener("ended", () => {
         updateDetailPlayButtonState("paused");
         // Tự động chuyển tập nếu đang bật switch
@@ -4969,6 +4974,16 @@ function updatePlayerTopBar() {
             episodeEl.textContent = 'Phim lẻ';
             if (episodeBtn) episodeBtn.style.display = 'none';
         }
+
+        // Cập nhật nút Next Tập trên thanh bar
+        const ctrlNextEpBtn = document.getElementById('ctrlNextEpBtn');
+        if (ctrlNextEpBtn) {
+            if (movieData && movieData.episodes && epIndex + 1 < movieData.episodes.length) {
+                ctrlNextEpBtn.style.display = "inline-block";
+            } else {
+                ctrlNextEpBtn.style.display = "none";
+            }
+        }
     }
 }
 
@@ -4983,6 +4998,7 @@ function renderEpisodePanel() {
     
     // Lấy danh sách tập từ dữ liệu phim hiện tại
     const movieData = (typeof allMovies !== 'undefined') ? allMovies.find(m => m.id === currentMovieId) : null;
+    
     if (!movieData || !movieData.episodes || movieData.episodes.length === 0) {
         panelList.innerHTML = '<div style="color: rgba(255,255,255,0.5); padding: 16px; text-align: center;">Không có tập nào</div>';
         return;
@@ -4996,18 +5012,19 @@ function renderEpisodePanel() {
         
         // Tên tập: Nếu có title thì dùng, không thì "Tập X"
         const epName = ep.title || `Tập ${index + 1}`;
+        const epBg = ep.thumbnail || movieData.backgroundUrl || movieData.posterUrl || 'https://placehold.co/160x90/1a1a2e/FFF?text=No+Image';
         
         item.innerHTML = `
-            <span class="ep-panel-num">${index + 1}</span>
-            <span>${epName}</span>
+            <div class="ep-panel-img-wrapper">
+                <img src="${epBg}" alt="${epName}" class="ep-panel-img" onerror="this.src='https://placehold.co/160x90/1a1a2e/FFF?text=No+Image'">
+            </div>
+            <div class="ep-panel-info">
+                <span class="ep-panel-name">${epName}</span>
+            </div>
         `;
         
         const changeEpHandler = (e) => {
             e.stopPropagation();
-            if (e.type === 'touchstart') {
-                // Ngăn click event sinh ra kép
-                e.preventDefault();
-            }
             // Đóng panel
             toggleEpisodePanel();
             // Chuyển tập
@@ -5019,7 +5036,6 @@ function renderEpisodePanel() {
         };
         
         item.addEventListener('click', changeEpHandler);
-        item.addEventListener('touchstart', changeEpHandler, {passive: false});
         
         panelList.appendChild(item);
     });
@@ -6017,3 +6033,37 @@ initMiniPlayerInteraction();
 document.addEventListener("DOMContentLoaded", () => {
     // ...
 });
+
+// Load danh sách phim bộ từ localStorage (Trạm Phim API extension)
+window.loadSeriesMoviesLocal = function() {
+    try {
+        const customSeries = JSON.parse(localStorage.getItem('customSeriesMovies')) || [];
+        return customSeries.sort((a,b) => b.addDate - a.addDate).slice(0, 4);
+    } catch(e) {
+        return [];
+    }
+};
+
+window.forceNextEpisode = function() {
+    if (!currentMovieId) return;
+    const movie = (typeof allMovies !== 'undefined') ? allMovies.find(m => m.id === currentMovieId) : null;
+    if (!movie || !movie.episodes) return;
+    
+    const totalEpisodes = movie.episodes.length;
+    const nextEpisodeIndex = parseInt(currentEpisode) + 1;
+    
+    if (nextEpisodeIndex < totalEpisodes) {
+        if (typeof showNotification === 'function') {
+            showNotification(`Đang chuyển sang tập ${nextEpisodeIndex + 1}...`, "info");
+        }
+        if (typeof selectEpisode === 'function') {
+            selectEpisode(nextEpisodeIndex);
+        } else if (typeof window.selectEpisode === 'function') {
+            window.selectEpisode(nextEpisodeIndex);
+        }
+    } else {
+        if (typeof showNotification === 'function') {
+            showNotification("Bạn đang ở tập cuối cùng của bộ phim này.", "info");
+        }
+    }
+};

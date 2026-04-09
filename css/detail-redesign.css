@@ -823,6 +823,8 @@ body.cinema-mode.controls-visible .detail-toolbar {
     padding: 6px 10px;
     border-radius: 6px;
     transition: background 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .part-selector-trigger i.fa-bars {
@@ -975,7 +977,8 @@ body.cinema-mode.controls-visible .detail-toolbar {
     box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.02);
     grid-column: 3;
     grid-row: 1 / span 2; /* Chỉ kéo dài qua khu vực info và controls */
-    align-self: stretch; /* Tự động giãn chiều cao bằng với bên trái */
+    align-self: start; /* Không giãn đều với cột trái để tránh lộ khoảng trống đen dưới đáy */
+    height: fit-content;
     display: flex;
     flex-direction: column;
 }

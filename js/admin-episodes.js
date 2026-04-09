@@ -611,7 +611,11 @@ async function saveBatchImportedEpisodes() {
              movie_id: movieId,
              title: labelName, // ổi từ episode_name -> title theo schema thực tế
              episode_index: existingCount + idx, // Cột integer
-             episode_number: labelName.replace(/\D/g, '') || (existingCount + idx).toString(), 
+             episode_number: (() => {
+                 let n = labelName.replace(/^(tập|tap|episode|ep)\.?\s*/i, '').trim();
+                 if (/^\d+$/.test(n)) n = String(parseInt(n, 10));
+                 return (n || (existingCount + idx).toString()).toLowerCase();
+             })(),
              duration: "0 giờ 45 phút", 
              quality: "1080p",
              sources: sources,
@@ -1403,7 +1407,11 @@ async function handleEpisodeSubmit(event) {
       episodeData.movie_id = selectedMovieForEpisodes;
       // Gán cả 2 cột để chắc chắn
       episodeData.episode_index = episodes.length; 
-      episodeData.episode_number = (episodes.length + 1).toString(); 
+      episodeData.episode_number = (() => {
+          let n = episodeData.title.replace(/^(tập|tap|episode|ep)\.?\s*/i, '').trim();
+          if (/^\d+$/.test(n)) n = String(parseInt(n, 10));
+          return (n || (episodes.length + 1).toString()).toLowerCase();
+      })();
       
       const { error } = await supabase.from('episodes').insert(episodeData);
       if (error) throw error;

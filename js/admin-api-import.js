@@ -738,7 +738,7 @@ function _normalizeEpNumber(name) {
     let n = String(name).trim().replace(/^(tập|tap|episode|ep)\.?\s*/i, '').trim();
     // Nếu còn lại là số thuần → bỏ leading zeros ("01" → "1")
     if (/^\d+$/.test(n)) n = String(parseInt(n, 10));
-    return n || String(name).trim();
+    return (n || String(name).trim()).toLowerCase();
 }
 
 /**
@@ -1255,14 +1255,14 @@ async function _importEpisodesForMovie(movieId, episodesData, movieDuration = ''
 
         (server.server_data || server.items || []).forEach((ep, idx) => {
             const epName = String(ep.name || (idx + 1));
-            const epKey  = epName; // Dùng số tập làm key gộp
+            const epKey  = _normalizeEpNumber(epName); // Dùng số tập đã chuẩn hóa làm key gộp
 
             // Khởi tạo record nếu chưa có
             if (!episodeMap[epKey]) {
                 episodeMap[epKey] = {
                     movie_id:       movieId,
                     episode_index:  idx,
-                    episode_number: epName,
+                    episode_number: epKey,
                     title:          epName,
                     quality:        normQuality,
                     duration:       movieDuration || '',
@@ -2737,17 +2737,44 @@ async function syncEpisodesForMovie(movieId, slug, provider) {
             const existing = existingEpMap[epNum];
             if (!existing) continue; // Tập mới, đã insert ở bước 5a
 
-            const currentSources = existing.sources || [];
-            const currentUrls = new Set(currentSources.map(s => s.source));
-            const newSources = apiEp.sources.filter(s => s.source && !currentUrls.has(s.source));
+            let currentSources = [...(existing.sources || [])];
+            let sourceChanged = false;
+            let newlyMergedCount = 0;
 
-            if (newSources.length > 0) {
-                const merged = [...currentSources, ...newSources];
+            for (const newSrc of apiEp.sources) {
+                if (!newSrc.source) continue;
+                
+                // Nhận dạng nguồn trùng lặp logic
+                const matchIndex = currentSources.findIndex(s => 
+                    s.server === newSrc.server && 
+                    s.type === newSrc.type && 
+                    s.label === newSrc.label
+                );
+
+                if (matchIndex >= 0) {
+                    // Cập nhật lại URL M3U8 / Embed nếu API đổi server CDN cho cùng 1 nguồn! (Trọng yếu)
+                    if (currentSources[matchIndex].source !== newSrc.source) {
+                        currentSources[matchIndex].source = newSrc.source;
+                        sourceChanged = true;
+                        newlyMergedCount++;
+                    }
+                } else {
+                    // Nếu hoàn toàn khác nguồn API (OPhim khác KKPhim), kiểm tra chống trùng link tuyệt đối
+                    const urlExists = currentSources.some(s => s.source === newSrc.source);
+                    if (!urlExists) {
+                        currentSources.push(newSrc);
+                        sourceChanged = true;
+                        newlyMergedCount++;
+                    }
+                }
+            }
+
+            if (sourceChanged) {
                 const { error } = await supabase.from('episodes')
-                    .update({ sources: merged, updated_at: new Date().toISOString() })
+                    .update({ sources: currentSources, updated_at: new Date().toISOString() })
                     .eq('id', existing.id);
                 if (!error) {
-                    mergedCount += newSources.length;
+                    mergedCount += newlyMergedCount;
                     mergedEpNames.push(epNum);
                 }
             }

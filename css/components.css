@@ -43,6 +43,7 @@
   margin-right: 20px; 
   padding: 0; /* Remove padding to allow flex center */
   height: 100%; /* Full height to align items */
+  flex-shrink: 0; /* Đảm bảo logo không bị bóp méo */
 }
 .nav-logo .logo-img {
   height: 45px; /* Reduced from 80px */
@@ -1066,7 +1067,7 @@
   /* ð TINH CHá»NH Äá» CANH Äá»U: */
   width: 320px; /* Cá» Äá»nh chiá»u rá»ng giÃºp kiá»m soÃ¡t cÄn lá» tá»t hÆ¡n */
   height: auto;
-  min-height: 100%;
+  min-height: unset; /* Đã đổi từ 100% → unset để popup không chiếm toàn viewport khi fixed */
 
   background: var(--bg-secondary);
   border-radius: 8px;
@@ -4939,7 +4940,7 @@ body.modal-open .scroll-top-btn {
 .brand-icon-wrapper { position: relative; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
 .brand-train-icon { font-size: 38px; color: #a382e6; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); z-index: 1; }
 .brand-play-icon { position: absolute; top: 48%; left: 50%; transform: translate(-50%, -50%); font-size: 13px; color: #221836; z-index: 2; }
-.brand-text-column { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
+.brand-text-column { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; white-space: nowrap; flex-shrink: 0; }
 .brand-text-new { font-size: 26px; font-weight: 800; color: #e2dbf0; letter-spacing: -0.5px; line-height: 1; }
 .brand-slogan { font-size: 11.5px; color: #948da5; font-weight: 500; letter-spacing: 0.2px; margin-top: 4px; }
 [data-theme='light'] .brand-train-icon { color: #261d3f; }

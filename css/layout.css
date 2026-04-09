@@ -407,10 +407,10 @@
 #newMovies {
   display: grid !important;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)) !important;
-  grid-template-rows: auto auto !important; /* Đúng 2 hàng */
+  grid-template-rows: auto auto !important; /* Đúng 2 hàng explicit */
   grid-auto-flow: row !important;
   gap: var(--spacing-lg) !important;
-  overflow: visible !important; /* Không cuộn — hiển thị hết */
+  overflow: visible !important; /* Cho phép popups nhô ra, JS sẽ xóa hàng thừa */
   max-height: none !important;
   padding-bottom: 10px !important;
 }
@@ -2326,9 +2326,40 @@
   font-weight: 600;
 }
 
-.ep-panel-item .ep-panel-num {
-  font-weight: 700;
-  min-width: 32px;
+.ep-panel-item .ep-panel-img-wrapper {
+  position: relative;
+  width: 90px;
+  height: 50px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--bg-tertiary, #1f1f2e);
+}
+
+.ep-panel-item .ep-panel-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.ep-panel-item:hover .ep-panel-img {
+  transform: scale(1.05);
+}
+
+.ep-panel-item .ep-panel-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ep-panel-item .ep-panel-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ============================================================
@@ -2788,10 +2819,20 @@ body.has-pseudo-fullscreen::-webkit-scrollbar {
   }
   .player-episode-panel {
     width: 260px;
+    bottom: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0;
+  }
+  .video-container.pseudo-fullscreen .player-episode-panel {
+    bottom: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
   }
   .ep-panel-item {
-    font-size: 13px;
-    padding: 8px 10px;
+    font-size: 14px;
+    padding: 12px 10px;
   }
 }
 
