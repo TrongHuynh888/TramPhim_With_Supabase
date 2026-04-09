@@ -753,7 +753,30 @@
   line-height: 1.2 !important;
 }
 .wallet-btn.connected {
-  background: var(--success);
+  background: var(--accent-gradient);
+  box-shadow: 0 4px 15px rgba(0, 122, 255, 0.4);
+  border: 1px solid rgba(77, 184, 255, 0.3);
+}
+/* Dot xanh nhấp nháy - nằm trước icon ví (flex item đầu tiên) */
+.wallet-btn.connected::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7fffb2;
+  flex-shrink: 0;
+  align-self: center;
+  animation: walletDotPulse 1.8s ease-in-out infinite;
+  box-shadow: 0 0 5px rgba(127, 255, 178, 0.9);
+}
+@keyframes walletDotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.65); }
+}
+.wallet-btn.connected:hover {
+  box-shadow: 0 6px 20px rgba(0, 122, 255, 0.6);
+  transform: translateY(-1px);
 }
 
 /* --- NÃºt ÄÄng nháº­p Pro (Giao diá»n PC) --- */

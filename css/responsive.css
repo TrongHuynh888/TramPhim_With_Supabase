@@ -608,6 +608,7 @@ body.watch-party-active #watchPartyPage {
     margin: 0 !important;
   }
 
+  /* Wallet button chưa kết nối: icon tròn nhỏ như cũ */
   .wallet-btn,
   #connectWalletBtn,
   .theme-toggle,
@@ -642,6 +643,41 @@ body.watch-party-active #watchPartyPage {
   #connectWalletBtn span {
     display: none !important;
   }
+
+  /* === WALLET ĐÃ KẾT NỐI: Pill badge trực quan === */
+  .wallet-btn.connected {
+    width: auto !important;
+    height: 30px !important;
+    padding: 0 10px 0 8px !important;
+    border-radius: 20px !important;
+    background: var(--accent-gradient) !important;
+    border: 1px solid rgba(77, 184, 255, 0.4) !important;
+    box-shadow: 0 2px 10px rgba(0, 122, 255, 0.35) !important;
+    gap: 5px !important;
+    font-size: 11px !important;
+    color: #fff !important;
+    max-width: 110px !important;
+    overflow: hidden !important;
+  }
+  .wallet-btn.connected i {
+    font-size: 11px !important;
+    color: #fff !important;
+    flex-shrink: 0 !important;
+  }
+  /* Hiện lại span địa chỉ ví khi connected */
+  .wallet-btn.connected span,
+  .wallet-btn.connected .wallet-btn-text {
+    display: inline-block !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    color: #fff !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 75px !important;
+    letter-spacing: 0.2px !important;
+  }
+
 
   /* Notification wrapper mobile */
   .notification-wrapper {
@@ -3302,6 +3338,13 @@ body[data-theme="light"] .chat-msg .author {
     border-color: rgba(0, 0, 0, 0.1) !important;
     color: var(--text-primary) !important;
   }
+  /* Khi đã kết nối ví: giữ màu gradient web, không bị override xám */
+  [data-theme="light"] .wallet-btn.connected {
+    background: var(--accent-gradient) !important;
+    border-color: rgba(77, 184, 255, 0.4) !important;
+    color: #fff !important;
+    box-shadow: 0 4px 15px rgba(0, 122, 255, 0.3) !important;
+  }
   [data-theme="light"] .wallet-btn i,
   [data-theme="light"] #connectWalletBtn i,
   [data-theme="light"] .theme-toggle i,
@@ -3309,6 +3352,11 @@ body[data-theme="light"] .chat-msg .author {
   [data-theme="light"] .mobile-menu-toggle i,
   [data-theme="light"] #sidebarToggleBtn i {
     color: var(--text-primary) !important;
+  }
+  /* Icon trong nút ví đã kết nối: giữ trắng */
+  [data-theme="light"] .wallet-btn.connected i,
+  [data-theme="light"] .wallet-btn.connected span {
+    color: #fff !important;
   }
 
   /* Banner meta on light mode */
