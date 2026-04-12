@@ -3,7 +3,7 @@
 // Quản lý cache & offline cho ứng dụng
 // ============================================
 
-const CACHE_VERSION = 'tramphim-v2';
+const CACHE_VERSION = 'tramphim-v3';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-${CACHE_VERSION}`;
@@ -69,6 +69,12 @@ const EXTERNAL_CACHE_URLS = [
   'https://fonts.googleapis.com',
   'https://fonts.gstatic.com',
   'https://cdnjs.cloudflare.com'
+];
+
+// Domain Cloudflare R2 — ảnh poster phim lưu trữ tại đây
+const R2_DOMAINS = [
+  'r2-uploader.thinhnd-2003.workers.dev',
+  '.r2.dev'
 ];
 
 // ============================================
@@ -155,7 +161,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // --- CHIẾN LƯỢC 2: STALE WHILE REVALIDATE cho ảnh ---
+  // --- CHIẾN LƯỢC 2: CACHE FIRST cho ảnh từ Cloudflare R2 ---
+  // R2 đã set Cache-Control: immutable → ảnh không bao giờ thay đổi → cache vĩnh viễn
+  if (isR2Request(url)) {
+    event.respondWith(cacheFirst(request, IMAGE_CACHE));
+    return;
+  }
+
+  // --- CHIẾN LƯỢC 3: STALE WHILE REVALIDATE cho ảnh khác ---
   if (isImageRequest(url, request)) {
     event.respondWith(staleWhileRevalidate(request, IMAGE_CACHE));
     return;
@@ -288,6 +301,11 @@ function isImageRequest(url, request) {
 /** Kiểm tra request tới CDN bên ngoài có nên cache không (fonts, icons) */
 function isExternalCacheableRequest(url) {
   return EXTERNAL_CACHE_URLS.some((cacheUrl) => url.href.startsWith(cacheUrl));
+}
+
+/** Kiểm tra request có phải ảnh từ Cloudflare R2 không */
+function isR2Request(url) {
+  return R2_DOMAINS.some((domain) => url.hostname.includes(domain) || url.href.includes(domain));
 }
 
 // ============================================
