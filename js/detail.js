@@ -408,7 +408,7 @@ async function viewMovieDetail(movieId, updateHistory = true) {
       updatePageMetadata(
           "Xem phim " + movie.title + " - Trạm Phim", 
           movie.description || "Rạp Chiếu Phim Blockchain - Xem phim trực tuyến, thanh toán bằng CRO Token", 
-          movie.posterUrl || movie.backgroundUrl || "https://public-frontend-cos.metadl.com/mgx/img/favicon_atoms.ico", 
+          movie.posterUrl || movie.backgroundUrl || "icons/icon-512x512.png", 
           window.location.origin + window.location.pathname + newUrl.substring(newUrl.indexOf("#"))
       );
   }

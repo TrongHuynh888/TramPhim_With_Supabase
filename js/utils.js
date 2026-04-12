@@ -292,7 +292,7 @@ function showPage(pageName, addToHistory = true) {
           updatePageMetadata(
               "Trạm Phim - Trải Nghiệm Điện Ảnh Đẳng Cấp",
               "Trạm Phim - Nền tảng xem phim Web3 tiên phong. Trải nghiệm điện ảnh đỉnh cao, bảo mật và tích hợp thanh toán Crypto.",
-              "https://public-frontend-cos.metadl.com/mgx/img/favicon_atoms.ico",
+              "icons/icon-512x512.png",
               window.location.href
           );
       }

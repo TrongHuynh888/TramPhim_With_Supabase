@@ -242,7 +242,7 @@ async function viewMovieIntro(movieId, updateHistory = true) {
         updatePageMetadata(
             movie.title + " - Trạm Phim", 
             movie.description || "Xem phim " + movie.title + " trực tuyến, thanh toán bằng CRO Token", 
-            movie.posterUrl || movie.backgroundUrl || "https://public-frontend-cos.metadl.com/mgx/img/favicon_atoms.ico", 
+            movie.posterUrl || movie.backgroundUrl || "icons/icon-512x512.png", 
             window.location.origin + window.location.pathname + newUrl.substring(newUrl.indexOf("#"))
         );
     }
