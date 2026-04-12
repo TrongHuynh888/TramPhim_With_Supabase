@@ -362,7 +362,7 @@ function showPage(pageName, addToHistory = true) {
         window._adminScriptsLoaded = true;
         lazyLoadScriptBundle([
             'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js',
-            'js/admin.js?v=16',
+            'js/admin.js?v=17',
             'js/admin-api-explorer.js?v=3',
             'js/admin-api-import.js?v=3',
             'js/admin-trailers.js?v=1'
@@ -433,7 +433,7 @@ function showPage(pageName, addToHistory = true) {
     // LAZY LOAD: Tải watch-party.js khi vào Xem Chung lần đầu
     if (!window._watchPartyScriptLoaded) {
         window._watchPartyScriptLoaded = true;
-        lazyLoadScript('js/watch-party.js?v=5').then(() => {
+        lazyLoadScript('js/watch-party.js?v=7').then(() => {
             console.log('✅ Watch Party script loaded!');
             if (typeof loadRooms === 'function') loadRooms();
         });

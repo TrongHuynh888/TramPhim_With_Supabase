@@ -239,41 +239,38 @@
   </div>
 </div>
 
-<!-- ============================================================
-     CREATE WATCH PARTY ROOM — POPUP MỚI (Layout 2 cột)
-     ============================================================ -->
-<div class="modal-overlay" id="createWatchPartyModal">
-  <div class="cr-modal">
+  <!-- ============================================================
+       TẠO PHÒNG XEM CHUNG — INLINE VIEW (thay cho popup)
+       ============================================================ -->
+  <div id="createRoomView" class="party-container hidden">
     <form onsubmit="handleCreateRoom(event)" id="crForm">
 
-      <!-- ▸ HEADER -->
-      <div class="cr-header">
-        <div class="cr-header-glow"></div>
-        <div class="cr-header-content">
-          <div class="cr-header-left">
-            <div class="cr-header-icon">
-              <i class="fas fa-film"></i>
-            </div>
-            <div>
-              <h2 class="cr-title">Tạo Phòng Xem Chung</h2>
-              <p class="cr-subtitle">Mời bạn bè cùng xem phim yêu thích</p>
-            </div>
+      <!-- ▸ HEADER: Quay lại + Tiêu đề -->
+      <div class="cr-inline-header">
+        <button type="button" class="cr-back-btn" onclick="backToRoomList()">
+          <i class="fas fa-arrow-left"></i>
+          <span>Quay lại</span>
+        </button>
+        <div class="cr-inline-title-group">
+          <div class="cr-header-icon">
+            <i class="fas fa-film"></i>
           </div>
-          <button type="button" class="cr-close-btn" onclick="closeModal('createWatchPartyModal')">
-            <i class="fas fa-times"></i>
-          </button>
+          <div>
+            <h2 class="cr-title">Tạo Phòng Xem Chung</h2>
+            <p class="cr-subtitle">Chọn phim, đặt tên và mời bạn bè cùng xem</p>
+          </div>
         </div>
       </div>
 
-      <!-- ▸ BODY 2 CỘT -->
-      <div class="cr-body">
+      <!-- ▸ BODY: Layout 2 cột (PC) / 1 cột (Mobile) -->
+      <div class="cr-inline-body">
 
         <!-- ═══ CỘT TRÁI: Chọn phim ═══ -->
         <div class="cr-left-panel">
-
           <div class="cr-panel-title">
             <span class="cr-step-badge">1</span>
             <span>Chọn Phim</span>
+            <i class="fas fa-info-circle" style="margin-left: 8px; font-size: 0.85rem; color: var(--text-muted); cursor: help;" title="Gợi ý sẵn 10 phim. Gõ vào ô tìm kiếm để tìm phim khác."></i>
           </div>
 
           <!-- Tìm kiếm -->
@@ -306,116 +303,106 @@
             <div class="wp-episode-grid" id="wpEpisodeGrid"></div>
             <input type="hidden" id="roomEpisodeIndex" value="0" />
           </div>
-
         </div><!-- end cr-left-panel -->
 
         <!-- ═══ CỘT PHẢI: Cài đặt phòng ═══ -->
         <div class="cr-right-panel">
+          <!-- Tên phòng -->
+          <div class="cr-field-group">
+            <label class="cr-label">
+              <i class="fas fa-door-open"></i> Tên phòng
+            </label>
+            <input type="text" class="cr-input" id="roomNameInput" required
+                   placeholder="Ví dụ: Phim đêm khuya cùng tụi mình...">
+          </div>
 
-          <div class="cr-right-scroll">
-
-            <!-- Tên phòng -->
-            <div class="cr-field-group">
-              <label class="cr-label">
-                <i class="fas fa-door-open"></i> Tên phòng
-              </label>
-              <input type="text" class="cr-input" id="roomNameInput" required
-                     placeholder="Ví dụ: Phim đêm khuya cùng tụi mình...">
+          <!-- Loại phòng -->
+          <div class="cr-field-group">
+            <label class="cr-label">
+              <i class="fas fa-globe"></i> Loại phòng
+            </label>
+            <div class="cr-room-type-cards">
+              <div class="cr-type-card active" data-value="public"
+                   onclick="selectRoomType('public', this)">
+                <i class="fas fa-globe-asia"></i>
+                <span>Công khai</span>
+                <small>Ai cũng vào được</small>
+              </div>
+              <div class="cr-type-card" data-value="private"
+                   onclick="selectRoomType('private', this)">
+                <i class="fas fa-lock"></i>
+                <span>Riêng tư</span>
+                <small>Cần mật khẩu</small>
+              </div>
             </div>
+            <select id="roomType" onchange="toggleRoomPass()" style="display:none;">
+              <option value="public">Công khai</option>
+              <option value="private">Riêng tư</option>
+            </select>
+          </div>
 
-            <!-- Loại phòng -->
-            <div class="cr-field-group">
-              <label class="cr-label">
-                <i class="fas fa-globe"></i> Loại phòng
-              </label>
-              <div class="cr-room-type-cards">
-                <div class="cr-type-card active" data-value="public"
-                     onclick="selectRoomType('public', this)">
-                  <i class="fas fa-globe-asia"></i>
-                  <span>Công khai</span>
-                  <small>Ai cũng vào được</small>
+          <!-- Mật khẩu (ẩn mặc định) -->
+          <div id="roomPassGroup" class="cr-field-group hidden">
+            <label class="cr-label">
+              <i class="fas fa-key"></i> Mật khẩu phòng
+            </label>
+            <div class="cr-input-icon-wrapper">
+              <input type="password" class="cr-input" id="roomPassword"
+                     placeholder="Nhập mật khẩu..." autocomplete="new-password">
+              <i class="fas fa-eye cr-eye-icon"
+                 onclick="togglePassword('roomPassword', this)"></i>
+            </div>
+          </div>
+
+          <!-- Bản chiếu (ẩn khi chưa chọn phim) -->
+          <div class="cr-field-group hidden" id="wpSourceSelectGroup">
+            <label class="cr-label">
+              <i class="fas fa-language"></i> Bản chiếu
+            </label>
+            <div class="cr-source-pills" id="crSourcePills"></div>
+            <select id="roomSourceLabel" style="display:none;"></select>
+          </div>
+
+          <!-- Hẹn giờ chiếu -->
+          <div class="cr-field-group">
+            <div class="cr-toggle-row">
+              <div class="cr-toggle-info">
+                <i class="fas fa-clock cr-toggle-icon"></i>
+                <div>
+                  <span class="cr-toggle-label">Hẹn giờ chiếu</span>
+                  <small class="cr-toggle-hint">Tự động bắt đầu theo lịch đã đặt</small>
                 </div>
-                <div class="cr-type-card" data-value="private"
-                     onclick="selectRoomType('private', this)">
-                  <i class="fas fa-lock"></i>
-                  <span>Riêng tư</span>
-                  <small>Cần mật khẩu</small>
-                </div>
               </div>
-              <!-- Select ẩn để JS cũ hoạt động (toggleRoomPass đọc #roomType) -->
-              <select id="roomType" onchange="toggleRoomPass()" style="display:none;">
-                <option value="public">Công khai</option>
-                <option value="private">Riêng tư</option>
-              </select>
-            </div>
-
-            <!-- Mật khẩu (ẩn mặc định) -->
-            <div id="roomPassGroup" class="cr-field-group hidden">
-              <label class="cr-label">
-                <i class="fas fa-key"></i> Mật khẩu phòng
+              <label class="cr-switch">
+                <input type="checkbox" id="roomScheduleToggle"
+                       onchange="toggleScheduleInput()">
+                <span class="cr-switch-slider"></span>
               </label>
-              <div class="cr-input-icon-wrapper">
-                <input type="password" class="cr-input" id="roomPassword"
-                       placeholder="Nhập mật khẩu..." autocomplete="new-password">
-                <i class="fas fa-eye cr-eye-icon"
-                   onclick="togglePassword('roomPassword', this)"></i>
-              </div>
             </div>
-
-            <!-- Bản chiếu (ẩn khi chưa chọn phim) -->
-            <div class="cr-field-group hidden" id="wpSourceSelectGroup">
-              <label class="cr-label">
-                <i class="fas fa-language"></i> Bản chiếu
+            <div id="roomScheduleInputGroup" class="cr-schedule-input hidden">
+              <label class="cr-label" style="margin-bottom: 8px;">
+                <i class="fas fa-calendar-alt"></i> Thời gian chiếu
               </label>
-              <!-- Pills render bởi renderSourcePills() -->
-              <div class="cr-source-pills" id="crSourcePills"></div>
-              <!-- Select ẩn để JS handleCreateRoom đọc giá trị -->
-              <select id="roomSourceLabel" style="display:none;"></select>
+              <input type="datetime-local" class="cr-input" id="roomScheduledTime">
             </div>
-
-            <!-- Hẹn giờ chiếu -->
-            <div class="cr-field-group">
-              <div class="cr-toggle-row">
-                <div class="cr-toggle-info">
-                  <i class="fas fa-clock cr-toggle-icon"></i>
-                  <div>
-                    <span class="cr-toggle-label">Hẹn giờ chiếu</span>
-                    <small class="cr-toggle-hint">Tự động bắt đầu theo lịch đã đặt</small>
-                  </div>
-                </div>
-                <label class="cr-switch">
-                  <input type="checkbox" id="roomScheduleToggle"
-                         onchange="toggleScheduleInput()">
-                  <span class="cr-switch-slider"></span>
-                </label>
-              </div>
-              <div id="roomScheduleInputGroup" class="cr-schedule-input hidden">
-                <label class="cr-label" style="margin-bottom: 8px;">
-                  <i class="fas fa-calendar-alt"></i> Thời gian chiếu
-                </label>
-                <input type="datetime-local" class="cr-input" id="roomScheduledTime">
-              </div>
-            </div>
-
-          </div><!-- end cr-right-scroll -->
-
-          <!-- ▸ FOOTER dính dưới cột phải -->
-          <div class="cr-footer">
-            <button type="button" class="cr-btn-cancel"
-                    onclick="closeModal('createWatchPartyModal')">
-              Hủy bỏ
-            </button>
-            <button type="submit" class="cr-btn-submit">
-              <i class="fas fa-rocket"></i>
-              <span>Tạo &amp; Vào Ngay</span>
-            </button>
           </div>
 
         </div><!-- end cr-right-panel -->
+      </div><!-- end cr-inline-body -->
 
-      </div><!-- end cr-body -->
+      <!-- ▸ FOOTER: Nút hành động -->
+      <div class="cr-inline-footer">
+        <button type="button" class="cr-btn-cancel" onclick="backToRoomList()">
+          Hủy bỏ
+        </button>
+        <button type="submit" class="cr-btn-submit">
+          <i class="fas fa-rocket"></i>
+          <span>Tạo &amp; Vào Ngay</span>
+        </button>
+      </div>
 
     </form>
-  </div><!-- end cr-modal -->
-</div><!-- end modal-overlay #createWatchPartyModal -->
+  </div><!-- end #createRoomView -->
+
+</div>
 

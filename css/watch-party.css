@@ -3262,35 +3262,92 @@ input[type="datetime-local"].cr-input { color-scheme: dark; }
 .cr-btn-submit:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,112,255,0.50); }
 .cr-btn-submit:active { transform: translateY(0); }
 
-/* Responsive */
-@media (max-width: 820px) {
-    #createWatchPartyModal .cr-modal {
-        width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0;
-    }
-    .cr-body { flex-direction: column; }
-    .cr-left-panel {
-        width: 100%; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.06);
-        max-height: 44vh; padding: 12px;
-    }
-    .cr-right-panel { flex: 1; min-height: 0; }
-    .cr-right-scroll { padding: 14px 16px; gap: 14px; }
-    .cr-footer { padding: 12px 16px; }
+/* ===================================================================
+   CREATE ROOM — INLINE VIEW (.cr-inline-* prefix)
+   =================================================================== */
+
+/* Header inline: Quay lại + Tiêu đề */
+.cr-inline-header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 20px 0; margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
 }
-@media (max-width: 480px) {
-    .cr-header { padding: 14px 16px; }
-    .cr-title { font-size: 16px; }
-    .cr-subtitle { display: none; }
-    .cr-type-card { padding: 11px 8px; }
-    .cr-type-card i { font-size: 18px; }
-    .cr-btn-submit { padding: 10px 16px; }
+.cr-back-btn {
+    display: flex; align-items: center; gap: 7px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+    color: rgba(255,255,255,0.65); padding: 8px 16px; border-radius: 10px;
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    flex-shrink: 0;
+}
+.cr-back-btn:hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.25); }
+.cr-inline-title-group { display: flex; align-items: center; gap: 12px; }
+
+/* Body 2 cột: Chọn phim (trái) + Cài đặt (phải) */
+.cr-inline-body {
+    display: grid;
+    grid-template-columns: 38% 1fr;
+    gap: 24px;
+    margin-top: 16px;
+}
+/* Inline: Cột trái không cần flex layout của modal, là phần tử grid */
+#createRoomView .cr-left-panel {
+    width: 100%; border-right: none; background: transparent;
+    padding: 0; overflow: visible;
+}
+/* Inline: Cột phải không cần flex layout riêng */
+#createRoomView .cr-right-panel {
+    width: 100%; display: flex; flex-direction: column; gap: 16px;
+    overflow: visible;
+}
+/* Grid phim: giới hạn chiều cao để trang không quá dài */
+#createRoomView .wp-movie-grid-container {
+    max-height: 320px;
+    overflow-y: auto;
+    border-radius: 10px;
 }
 
-/* Light mode */
-[data-theme="light"] #createWatchPartyModal .cr-modal { background: #fff; border-color: rgba(0,0,0,0.10); box-shadow: 0 20px 60px rgba(0,0,0,0.16); }
-[data-theme="light"] .cr-header { background: linear-gradient(135deg, rgba(0,180,220,0.07), rgba(100,60,200,0.07)); border-bottom-color: rgba(0,0,0,0.07); }
+/* Footer inline: nằm dưới cùng */
+.cr-inline-footer {
+    display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+    padding: 20px 0; margin-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+/* Responsive - Mobile: 1 cột */
+@media (max-width: 820px) {
+    .cr-inline-header { padding: 14px 0; margin-bottom: 6px; flex-wrap: wrap; gap: 10px; }
+    .cr-back-btn { padding: 7px 12px; font-size: 12px; }
+    .cr-inline-title-group .cr-header-icon { width: 34px; height: 34px; font-size: 14px; border-radius: 9px; }
+    .cr-inline-title-group .cr-title { font-size: 15px; }
+    .cr-inline-title-group .cr-subtitle { display: none; }
+
+    /* 1 cột trên mobile */
+    .cr-inline-body {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    /* Grid phim gọn */
+    #createRoomView .wp-movie-grid-container { max-height: 200px; }
+    #createRoomView .cr-left-panel .wp-movie-items {
+        grid-template-columns: repeat(auto-fill, minmax(66px, 1fr)) !important;
+        gap: 8px !important;
+    }
+    #createRoomView .cr-left-panel .wp-movie-card-info .title {
+        font-size: 10px; -webkit-line-clamp: 2; line-clamp: 2;
+    }
+
+    /* Fields gọn */
+    .cr-inline-footer { padding: 14px 0; margin-top: 14px; }
+}
+
+/* Light mode — Create Room inline */
+[data-theme="light"] .cr-inline-header { border-bottom-color: rgba(0,0,0,0.08); }
+[data-theme="light"] .cr-back-btn { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.10); color: rgba(0,0,0,0.60); }
+[data-theme="light"] .cr-back-btn:hover { background: rgba(0,0,0,0.10); color: #000; }
 [data-theme="light"] .cr-title { color: #0d1117; }
 [data-theme="light"] .cr-subtitle { color: rgba(0,0,0,0.42); }
-[data-theme="light"] .cr-left-panel { background: rgba(0,0,0,0.018); border-right-color: rgba(0,0,0,0.07); }
+[data-theme="light"] .cr-left-panel { background: rgba(0,0,0,0.018); }
 [data-theme="light"] .cr-panel-title, [data-theme="light"] .cr-panel-subtitle { color: rgba(0,0,0,0.48); }
 [data-theme="light"] .cr-search-box { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); }
 [data-theme="light"] .cr-search-box input { color: #0d1117; }
@@ -3304,7 +3361,7 @@ input[type="datetime-local"].cr-input { color-scheme: dark; }
 [data-theme="light"] .cr-toggle-row { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.07); }
 [data-theme="light"] .cr-toggle-label { color: rgba(0,0,0,0.80); }
 [data-theme="light"] .cr-toggle-hint { color: rgba(0,0,0,0.38); }
-[data-theme="light"] .cr-footer { background: rgba(248,248,255,0.94); border-top-color: rgba(0,0,0,0.07); }
+[data-theme="light"] .cr-inline-footer { border-top-color: rgba(0,0,0,0.08); }
 [data-theme="light"] .cr-btn-cancel { color: rgba(0,0,0,0.50); border-color: rgba(0,0,0,0.12); }
 [data-theme="light"] .cr-btn-cancel:hover { color: rgba(0,0,0,0.80); background: rgba(0,0,0,0.05); }
 [data-theme="light"] .cr-left-panel .wp-movie-card-info .title { color: rgba(0,0,0,0.75); }

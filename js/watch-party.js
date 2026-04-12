@@ -561,7 +561,7 @@ async function openCreateRoomModal() {
   console.log("DEBUG: Unique Movies for WP:", uniqueMovies.length, uniqueMovies);
   
   if (uniqueMovies.length > 0) {
-    renderWPMovies(uniqueMovies);
+    renderWPMovies(uniqueMovies.slice(0, 10));
   } else {
     console.error("DEBUG: No movies to render!");
   }
@@ -575,7 +575,13 @@ async function openCreateRoomModal() {
   const selectionArea = document.querySelector('.wp-movie-selection-area');
   if (selectionArea) selectionArea.classList.remove('wp-collapsed');
   
-  openModal('createWatchPartyModal');
+  // Hiển thị form tạo phòng inline (thay cho modal)
+  const lobby = document.getElementById('partyLobby');
+  const createView = document.getElementById('createRoomView');
+  if (lobby) lobby.classList.add('hidden');
+  if (createView) createView.classList.remove('hidden');
+  // Cuộn lên đầu form
+  if (createView) createView.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderWPMovies(movies) {
@@ -622,7 +628,7 @@ function filterWPMovies() {
   if (!window.allAllowedWPMovies) return;
   
   if (val === '') {
-    renderWPMovies(window.allAllowedWPMovies);
+    renderWPMovies(window.allAllowedWPMovies.slice(0, 10));
     return;
   }
   
@@ -630,7 +636,7 @@ function filterWPMovies() {
     m.title.toLowerCase().includes(val) || 
     (m.originTitle && m.originTitle.toLowerCase().includes(val))
   );
-  renderWPMovies(filtered);
+  renderWPMovies(filtered.slice(0, 10));
 }
 
 function selectWPMovie(id) {
@@ -742,6 +748,14 @@ function undoMovieSelection() {
   document.querySelectorAll('.wp-movie-card').forEach(card => card.classList.remove('selected'));
   
   showNotification("Mời bạn chọn lại phim", "info");
+}
+
+/* Quay lại danh sách phòng (ẩn form tạo phòng inline) */
+function backToRoomList() {
+  const lobby = document.getElementById('partyLobby');
+  const createView = document.getElementById('createRoomView');
+  if (createView) createView.classList.add('hidden');
+  if (lobby) lobby.classList.remove('hidden');
 }
 
 function selectWPEpisode(index, btnElement) {

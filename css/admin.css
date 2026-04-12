@@ -405,17 +405,29 @@
    ADMIN MOBILE RESPONSIVE
    ============================================ */
 @media (max-width: 768px) {
-  /* Sidebar ẩn trên mobile */
+  /* Sidebar ẩn bên trái trên mobile - trượt vào khi toggle */
   .admin-sidebar {
-    display: none;
+    transform: translateX(-100%);
+    width: 260px;
+    z-index: 6000;
+    top: 70px;
+    transition: transform 0.3s ease;
   }
 
-  /* Content chiếm full width */
+  /* Khi toggle mở sidebar trên mobile */
+  .admin-sidebar.active {
+    transform: translateX(0);
+  }
+
+  /* Content chiếm full width - Fix lỗi max-width vẫn trừ sidebar 260px */
   .admin-content {
     margin-left: 0 !important;
     padding: 15px !important;
     width: 100% !important;
+    max-width: 100vw !important;
     padding-top: 15px !important;
+    box-sizing: border-box;
+    overflow-x: hidden;
   }
 
   .admin-layout {
@@ -467,6 +479,10 @@
       justify-content: center;
   }
 
+
+  .admin-wp-overview {
+      grid-template-columns: 1fr !important;
+  }
 
   /* Stats cards xếp 2 cột trên mobile */
   .stats-grid {

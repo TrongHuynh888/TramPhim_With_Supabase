@@ -8084,6 +8084,11 @@ let adminWatchRoomsInterval = null;
 function loadAdminWatchRooms() {
     if (!supabase) return;
 
+    // Đảm bảo watch-party.js được tải để dùng tính năng Tạo phòng
+    if (typeof openCreateRoomModal !== "function" && typeof lazyLoadScript === "function") {
+        lazyLoadScript('js/watch-party.js?v=7');
+    }
+
     // Hủy đăng ký realtime trước đó nếu có
     if (adminWatchRoomsInterval) {
         adminWatchRoomsInterval.unsubscribe();

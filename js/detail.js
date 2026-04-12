@@ -1437,6 +1437,12 @@ function selectEpisode(index) {
   window.hasResumeHistory = false;
   window.resumeTimeData = null;
   
+  // ✅ XÓA DỮ LIỆU THỜI GIAN CŨ TRONG LOCALSTORAGE: Tránh tập mới nhảy đến phút của tập cũ
+  if (currentMovieId) {
+    localStorage.removeItem('localResumeTime_' + currentMovieId);
+    localStorage.removeItem('localVideoState_' + currentMovieId);
+  }
+  
   currentEpisode = index;
 
   // Update active state
