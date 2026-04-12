@@ -50,7 +50,29 @@ async function initApp() {
       "❌ Lỗi: Không tìm thấy hàm startTramPhimApp trong main.js",
     );
   }
+
+  // 3. Ẩn Splash Screen sau khi app đã sẵn sàng
+  hideSplash();
 }
+
+/** Ẩn splash screen với hiệu ứng fade out mượt */
+function hideSplash() {
+  const splash = document.getElementById("pwaSplash");
+  if (!splash) return;
+  splash.style.opacity = "0";
+  splash.style.visibility = "hidden";
+  // Xóa khỏi DOM sau khi animation kết thúc
+  setTimeout(() => splash.remove(), 500);
+}
+
+// Safety: Nếu app load quá 8 giây vẫn chưa xong → ẩn splash luôn để user không bị kẹt
+setTimeout(() => {
+  const splash = document.getElementById("pwaSplash");
+  if (splash && splash.style.opacity !== "0") {
+    console.warn("⚠️ Splash timeout — ẩn splash sau 8 giây");
+    hideSplash();
+  }
+}, 8000);
 
 // Gọi hàm initApp khi file load
 
