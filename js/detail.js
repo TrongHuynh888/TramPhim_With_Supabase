@@ -1007,6 +1007,8 @@ function setQuality(level) {
 
 /**
  * Bật/Tắt Hình trong hình (PiP)
+ * Trong PWA standalone mode trên iOS, Native PiP bị Apple cấm
+ * → Tự động chuyển sang dùng Mini Player tự build thay thế
  */
 async function togglePiP() {
     const html5Player = document.getElementById("html5Player");
@@ -1015,6 +1017,30 @@ async function togglePiP() {
         return;
     }
 
+    // Kiểm tra có đang chạy trong PWA standalone mode không
+    const isPWAStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                            window.navigator.standalone === true;
+
+    if (isPWAStandalone) {
+        // PWA mode: Dùng Mini Player tự build thay thế Native PiP
+        if (typeof window.isMiniPlayerActive !== 'undefined' && window.isMiniPlayerActive) {
+            // Đang bật Mini Player → tắt nó
+            if (typeof disableMiniPlayer === 'function') {
+                disableMiniPlayer(true);
+            }
+        } else {
+            // Chưa bật → kích hoạt Mini Player
+            if (typeof enableMiniPlayer === 'function') {
+                enableMiniPlayer();
+                showNotification("Đã bật Mini Player (PWA mode)", "info");
+            } else {
+                showNotification("Mini Player không khả dụng", "warning");
+            }
+        }
+        return;
+    }
+
+    // Trình duyệt bình thường: Dùng Native PiP
     try {
         if (document.pictureInPictureElement) {
             await document.exitPictureInPicture();
@@ -1022,7 +1048,12 @@ async function togglePiP() {
             await html5Player.requestPictureInPicture();
         }
     } catch (e) {
-        console.error("Lỗi PiP:", e);
+        // Nếu Native PiP cũng lỗi (một số trình duyệt không hỗ trợ) → fallback sang Mini Player
+        console.warn("Native PiP lỗi, chuyển sang Mini Player:", e);
+        if (typeof enableMiniPlayer === 'function') {
+            enableMiniPlayer();
+            showNotification("Đã bật Mini Player (fallback)", "info");
+        }
     }
 }
 
@@ -3438,6 +3469,23 @@ window.setSpeed = function(speed) {
 
 window.togglePiP = async function() {
     if (!videoEl) return;
+
+    // Kiểm tra PWA standalone mode (iOS cấm Native PiP trong PWA)
+    const isPWAStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                            window.navigator.standalone === true;
+
+    if (isPWAStandalone) {
+        // PWA mode: Dùng Mini Player thay thế
+        if (typeof window.isMiniPlayerActive !== 'undefined' && window.isMiniPlayerActive) {
+            if (typeof disableMiniPlayer === 'function') disableMiniPlayer(true);
+        } else if (typeof enableMiniPlayer === 'function') {
+            enableMiniPlayer();
+            showNotification("Đã bật Mini Player (PWA mode)", "info");
+        }
+        return;
+    }
+
+    // Trình duyệt bình thường: Dùng Native PiP
     try {
         if (document.pictureInPictureElement) {
             await document.exitPictureInPicture();
@@ -3445,8 +3493,12 @@ window.togglePiP = async function() {
             await videoEl.requestPictureInPicture();
         }
     } catch (error) {
-        console.error("PiP error:", error);
-        showNotification("Trình duyệt không hỗ trợ PiP!", "error");
+        // Fallback sang Mini Player nếu Native PiP lỗi
+        console.warn("Native PiP lỗi, chuyển sang Mini Player:", error);
+        if (typeof enableMiniPlayer === 'function') {
+            enableMiniPlayer();
+            showNotification("Đã bật Mini Player (fallback)", "info");
+        }
     }
 };
 
