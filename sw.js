@@ -3,7 +3,7 @@
 // Quản lý cache & offline cho ứng dụng
 // ============================================
 
-const CACHE_VERSION = 'tramphim-v9';
+const CACHE_VERSION = 'tramphim-v10';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-${CACHE_VERSION}`;
