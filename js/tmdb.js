@@ -885,7 +885,7 @@ async function bulkScanTmdbCast() {
         // Bước 1: Load toàn bộ actors từ Supabase
         _bulkLog('📋 Đang tải danh sách diễn viên từ Supabase...');
         const { data: actorsData, error: actorsErr } = await window.supabase
-            .from('actors').select('*');
+            .from('actors').select('id, name, avatar, bio, gender, role, dob, country, altNames');
         if (actorsErr) throw actorsErr;
 
         // Chỉ lấy actors thiếu ảnh (avatar trống hoặc dùng ui-avatars placeholder)

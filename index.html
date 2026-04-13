@@ -1,11 +1,16 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="vi" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
+    <!-- Preconnect ảnh poster: thiết lập kết nối sớm tới CDN ảnh (tiết kiệm ~200-400ms) -->
+    <link rel="preconnect" href="https://r2-uploader.thinhnd-2003.workers.dev" crossorigin>
+    <link rel="dns-prefetch" href="https://r2-uploader.thinhnd-2003.workers.dev">
+    <link rel="preconnect" href="https://image.tmdb.org" crossorigin>
+    <link rel="dns-prefetch" href="https://image.tmdb.org">
     <link rel="stylesheet" href="css/upgrade.css?v=3" />
     <link rel="stylesheet" href="css/variables.css?v=3" />
     <link rel="stylesheet" href="css/base.css?v=3" />
-    <link rel="stylesheet" href="css/components.css?v=19" />
+    <link rel="stylesheet" href="css/components.css?v=20" />
     <link rel="stylesheet" href="css/watch-party.css?v=11" />
     <link rel="stylesheet" href="css/layout.css?v=6" />
     <link rel="stylesheet" href="css/admin.css?v=4" />
@@ -57,6 +62,7 @@
     <link rel="manifest" href="manifest.json">
     <!-- iOS PWA Meta Tags (bắt buộc để iPhone nhận diện là App, không phải Bookmark) -->
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Trạm Phim">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -108,7 +114,7 @@
     <script src="js/emoji-picker.js" defer></script>
     <script src="js/home-comments.js" defer></script>
     <script src="js/admin-api-keys.js" defer></script>
-    <script src="js/admin-episodes.js" defer></script>
+    <script src="js/admin-episodes.js?v=4" defer></script>
 
     <!-- Custom CSS -->
   </head>
@@ -1561,27 +1567,27 @@
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="js/globals.js?v=2"></script>
-    <script src="js/utils.js?v=6"></script>
-    <script src="js/data.js?v=3"></script>
+    <script src="js/utils.js?v=8" defer></script>
+    <script src="js/data.js?v=4"></script>
 
     <script src="js/auth.js?v=5"></script>
-    <script src="js/notifications.js?v=4"></script>
-    <script src="js/user.js?v=9"></script>
-    <script src="js/home.js?v=4"></script>
-    <script src="js/detail.js?v=5"></script>
+    <script src="js/notifications.js?v=5"></script>
+    <script src="js/user.js?v=10"></script>
+    <script src="js/home.js?v=5"></script>
+    <script src="js/detail.js?v=8"></script>
     <!-- Chart.js, Admin, Community, Watch Party → LAZY LOAD trong utils.js khi cần -->
     <script src="js/contact-admin.js?v=1"></script>
 
-    <script src="js/upgrade.js?v=2"></script>
-    <script src="js/tmdb.js?v=1"></script>
-    <script src="js/intro.js?v=2"></script>
+    <script src="js/upgrade.js?v=3"></script>
+    <script src="js/tmdb.js?v=2"></script>
+    <script src="js/intro.js?v=5"></script>
     <!-- watch-party.js → LAZY LOAD khi vào Xem Chung -->
     <!-- community.js → LAZY LOAD khi vào Cộng Đồng -->
     <script src="js/series-movies.js?v=3"></script>
     <script src="js/single-movies.js?v=3"></script>
-    <script src="js/banner-slider.js?v=2"></script>
+    <script src="js/banner-slider.js?v=3"></script>
     <script src="js/actors.js?v=2"></script>
-    <script src="js/main.js?v=2"></script>
+    <script src="js/main.js?v=4"></script>
     <script src="js/loader.js?v=2"></script>
     <!-- admin.js, admin-api-explorer.js, admin-api-import.js → LAZY LOAD khi vào Admin -->
     

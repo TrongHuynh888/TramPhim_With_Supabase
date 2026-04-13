@@ -152,35 +152,43 @@ async function initVisitorStats() {
   }
 
   // 2. TỔNG TRUY CẬP & THỜI GIAN TRUNG BÌNH (Dữ liệu thật từ DB)
+  // Chỉ query khi đã có session (tránh 401 nếu bảng có RLS)
   try {
-    const { data: configData } = await supabase
-      .from('app_configs')
-      .select('value')
-      .eq('key', 'site_stats')
-      .maybeSingle();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const { data: configData } = await supabase
+        .from('app_configs')
+        .select('value')
+        .eq('key', 'site_stats')
+        .maybeSingle();
 
-    let stats = configData?.value || { total_visits: 0, total_minutes: 0 };
-    
-    // 👇 FIX: Reset số ảo 5000 nếu tồn tại (để về dữ liệu thật)
-    if (stats.total_visits >= 5000 && stats.total_visits < 5100) {
-        stats.total_visits = 1; // Reset về 1 để đếm lại từ đầu số thật
+      let stats = configData?.value || { total_visits: 0, total_minutes: 0 };
+      
+      // 👇 FIX: Reset số ảo 5000 nếu tồn tại (để về dữ liệu thật)
+      if (stats.total_visits >= 5000 && stats.total_visits < 5100) {
+          stats.total_visits = 1; // Reset về 1 để đếm lại từ đầu số thật
+      } else {
+          stats.total_visits = (parseInt(stats.total_visits) || 0) + 1;
+      }
+
+      // Cập nhật lượt truy cập mới ngay lập tức (Chỉ Admin mới có quyền ghi vào app_configs)
+      if (typeof isAdmin !== 'undefined' && isAdmin) {
+          await supabase.from('app_configs').upsert({ key: 'site_stats', value: stats });
+      }
+
+      // Hiển thị Tổng truy cập
+      if (statVisits) {
+          statVisits.textContent = typeof formatNumber === 'function' ? formatNumber(stats.total_visits) : stats.total_visits;
+      }
+
+      // Hiển thị TG trung bình ban đầu
+      updateAverageTimeUI(stats);
+
+      // 3. KÍCH HOẠT HEARTBEAT (Đếm thời gian thực mỗi phút)
+      startVisitorHeartbeat();
     } else {
-        stats.total_visits = (parseInt(stats.total_visits) || 0) + 1;
+      console.log("ℹ️ Chưa đăng nhập, bỏ qua thống kê truy cập.");
     }
-
-    // Cập nhật lượt truy cập mới ngay lập tức
-    await supabase.from('app_configs').upsert({ key: 'site_stats', value: stats });
-
-    // Hiển thị Tổng truy cập
-    if (statVisits) {
-        statVisits.textContent = typeof formatNumber === 'function' ? formatNumber(stats.total_visits) : stats.total_visits;
-    }
-
-    // Hiển thị TG trung bình ban đầu
-    updateAverageTimeUI(stats);
-
-    // 3. KÍCH HOẠT HEARTBEAT (Đếm thời gian thực mỗi phút)
-    startVisitorHeartbeat();
 
   } catch (error) {
     console.error("❌ Lỗi thống kê thực tế:", error);
@@ -212,6 +220,10 @@ function startVisitorHeartbeat() {
 
     heartbeatInterval = setInterval(async () => {
         try {
+            // Kiểm tra session trước mỗi heartbeat (tránh 401 nếu session hết hạn)
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+
             const { data: configData } = await supabase
                 .from('app_configs')
                 .select('value')
@@ -222,7 +234,11 @@ function startVisitorHeartbeat() {
                 let stats = configData.value;
                 stats.total_minutes = (parseFloat(stats.total_minutes) || 0) + 1; // Cộng thêm 1 phút
 
-                await supabase.from('app_configs').upsert({ key: 'site_stats', value: stats });
+                // Chỉ admin mới ghi đè lên db để tránh lỗi 401 (Unauthorized) do RLS
+                if (typeof isAdmin !== 'undefined' && isAdmin) {
+                    await supabase.from('app_configs').upsert({ key: 'site_stats', value: stats });
+                }
+                
                 updateAverageTimeUI(stats);
                 console.log("⏱️ Site Heartbeat: +1 minute to avg time.");
             }

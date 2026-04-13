@@ -222,13 +222,7 @@ async function loadEpisodesForMovie(movieIdFromGrid, resetPage = true) {
       if (!freshMovie) return;
 
       // 2. Fetch Episodes
-      const { data: episodes, error: epError } = await supabase
-          .from('episodes')
-          .select('*')
-          .eq('movie_id', movieId)
-          .order('episode_index', { ascending: true });
-
-      if (epError) throw epError;
+      const episodes = await window.fetchAllEpisodesFromSupabase(movieId, '*', 'episode_index');
 
       const fullMovieData = { ...freshMovie, episodes: episodes || [] };
       
@@ -607,6 +601,10 @@ async function saveBatchImportedEpisodes() {
             });
         }
 
+        const movieDoc = window.allMovies ? window.allMovies.find(m => m.id === movieId) : null;
+        const realDuration = movieDoc ? (movieDoc.duration || movieDoc.time) : '';
+        const realQuality = movieDoc ? movieDoc.quality : '1080p';
+
         episodesToInsert.push({
              movie_id: movieId,
              title: labelName, // ổi từ episode_name -> title theo schema thực tế
@@ -616,8 +614,8 @@ async function saveBatchImportedEpisodes() {
                  if (/^\d+$/.test(n)) n = String(parseInt(n, 10));
                  return (n || (existingCount + idx).toString()).toLowerCase();
              })(),
-             duration: "0 giờ 45 phút", 
-             quality: "1080p",
+             duration: realDuration, 
+             quality: realQuality,
              sources: sources,
              updated_at: new Date().toISOString()
         });
@@ -631,10 +629,17 @@ async function saveBatchImportedEpisodes() {
     try {
         showLoading(true, `ang xử lý thêm ${episodesToInsert.length} tập phim...`);
         
-        const { error } = await supabase.from('episodes').insert(episodesToInsert);
-        if (error) throw error;
+        // Batch insert để tránh giới hạn 1000 record của Supabase/PostgREST
+        const BATCH_SIZE = 100;
+        let insertedCount = 0;
+        for (let i = 0; i < episodesToInsert.length; i += BATCH_SIZE) {
+            const batch = episodesToInsert.slice(i, i + BATCH_SIZE);
+            const { error: batchErr } = await supabase.from('episodes').insert(batch);
+            if (batchErr) throw batchErr;
+            insertedCount += batch.length;
+        }
 
-        showNotification("Import thành công " + episodesToInsert.length + " tập!", "success");
+        showNotification("Import thành công " + insertedCount + " tập!", "success");
         closeModal("importEpisodesModal");
         
         if (typeof sendTelegramNotify === 'function') {
@@ -1455,11 +1460,9 @@ async function handleEpisodeSubmit(event) {
     // Kiểm tra nếu áp dụng cho tất cả tập
     const applyIntroToAll = document.getElementById("applyIntroToAll")?.checked;
     if (applyIntroToAll && episodes.length > 0) {
-        const { data: currentEpisodes, error: fetchErr } = await supabase.from('episodes')
-            .select('id')
-            .eq('movie_id', selectedMovieForEpisodes);
+        const currentEpisodes = await window.fetchAllEpisodesFromSupabase(selectedMovieForEpisodes, 'id', 'episode_index');
             
-        if (!fetchErr && currentEpisodes) {
+        if (currentEpisodes && currentEpisodes.length > 0) {
             for (const ep of currentEpisodes) {
                 await supabase.from('episodes')
                     .update({ intro_begin: introBegin, intro_end: introEnd, intro_start: outroStart })
@@ -1619,8 +1622,18 @@ async function deleteAllEpisodes() {
   try {
     showLoading(true, "Đang xóa tất cả tập...");
 
-    const { error } = await supabase.from('episodes').delete().eq('movie_id', selectedMovieForEpisodes);
-    if (error) throw error;
+    let deleteKeepGoing = true;
+    while (deleteKeepGoing) {
+        const { data: delEps, error: sErr } = await window.supabase.from('episodes').select('id').eq('movie_id', selectedMovieForEpisodes).limit(1000);
+        if (sErr) throw sErr;
+        if (!delEps || delEps.length === 0) {
+            deleteKeepGoing = false;
+        } else {
+            const idsToDelete = delEps.map(e => e.id);
+            const { error: dErr } = await window.supabase.from('episodes').delete().in('id', idsToDelete);
+            if (dErr) throw dErr;
+        }
+    }
 
     showNotification("Đã xóa tất cả tập phim!", "success");
 

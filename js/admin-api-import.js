@@ -729,6 +729,45 @@ function _findCountryIdByName(name) {
 
 
 /**
+ * Lấy toàn bộ episodes từ Supabase (vượt giới hạn 1000 rows mặc định).
+ * Supabase PostgREST chỉ trả tối đa 1000 rows/request → cần phân trang.
+ * @param {string} movieId - ID phim
+ * @param {string} selectColumns - Cột cần lấy, mặc định '*'
+ * @returns {Promise<Array>} Toàn bộ episodes
+ */
+async function _fetchAllEpisodes(movieId, selectColumns = '*') {
+    if (!movieId || typeof supabase === 'undefined') return [];
+    const PAGE_SIZE = 1000; // Supabase max rows per request
+    let allData = [];
+    let from = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+        const { data, error } = await supabase
+            .from('episodes')
+            .select(selectColumns)
+            .eq('movie_id', movieId)
+            .range(from, from + PAGE_SIZE - 1)
+            .order('episode_index', { ascending: true });
+
+        if (error) {
+            console.warn('[_fetchAllEpisodes] Lỗi fetch:', error.message);
+            break;
+        }
+        if (data && data.length > 0) {
+            allData = allData.concat(data);
+            from += PAGE_SIZE;
+            // Nếu nhận ít hơn PAGE_SIZE → đã hết dữ liệu
+            hasMore = data.length === PAGE_SIZE;
+        } else {
+            hasMore = false;
+        }
+    }
+    console.log(`[_fetchAllEpisodes] Tổng: ${allData.length} tập cho movieId: ${movieId}`);
+    return allData;
+}
+
+/**
  * Chuẩn hóa tên tập phim để tránh trùng lặp giữa các nguồn.
  * VD: "Tập 01" → "1", "Tap 5" → "5", "01" → "1", "Full" → "full"
  */
@@ -1301,13 +1340,38 @@ async function _importEpisodesForMovie(movieId, episodesData, movieDuration = ''
 
     if (!toInsert.length) return;
 
-    // Insert theo batch 50
+    // Insert theo batch 50 với retry logic (phim dài 1000+ tập sẽ insert 20+ lần)
     const BATCH = 50;
+    const MAX_RETRIES = 2;
+    let insertedCount = 0;
+    let failedCount = 0;
+
     for (let i = 0; i < toInsert.length; i += BATCH) {
-        const { error } = await supabase.from('episodes').insert(toInsert.slice(i, i + BATCH));
-        if (error) console.warn('[Episodes] Lỗi insert batch:', error.message);
+        const batch = toInsert.slice(i, i + BATCH);
+        let success = false;
+
+        for (let retry = 0; retry <= MAX_RETRIES; retry++) {
+            const { error } = await supabase.from('episodes').insert(batch);
+            if (!error) {
+                insertedCount += batch.length;
+                success = true;
+                break;
+            }
+            if (retry < MAX_RETRIES) {
+                console.warn(`[Episodes] Batch ${Math.floor(i/BATCH)+1} lỗi, thử lại (${retry+1}/${MAX_RETRIES})...`);
+                await new Promise(r => setTimeout(r, 500)); // Chờ 500ms trước khi retry
+            } else {
+                console.error(`[Episodes] Batch ${Math.floor(i/BATCH)+1} lỗi sau ${MAX_RETRIES} lần thử:`, error.message);
+                failedCount += batch.length;
+            }
+        }
     }
-    console.log(`✅ Import ${toInsert.length} tập phim cho movieId: ${movieId}`);
+
+    if (failedCount > 0) {
+        console.warn(`⚠️ Import ${insertedCount}/${toInsert.length} tập (${failedCount} tập lỗi) cho movieId: ${movieId}`);
+    } else {
+        console.log(`✅ Import thành công ${toInsert.length} tập phim cho movieId: ${movieId}`);
+    }
 }
 
 /* ─── HÀM IMPORT CHÍNH ─── */
@@ -2661,11 +2725,8 @@ async function syncEpisodesForMovie(movieId, slug, provider) {
         const apiEpisodes = raw.episodes || movieRaw.episodes || [];
         if (!apiEpisodes.length) return { added: 0, total: 0 };
 
-        // 2. Lấy danh sách episode đang có trong DB (cần cả id và sources để merge nguồn)
-        const { data: existingEps } = await supabase
-            .from('episodes')
-            .select('id, episode_number, sources')
-            .eq('movie_id', movieId);
+        // 2. Lấy danh sách episode đang có trong DB (dùng helper vượt giới hạn 1000 rows)
+        const existingEps = await _fetchAllEpisodes(movieId, 'id, episode_number, sources');
 
         // Normalize episode numbers trong DB để match đúng format chuẩn hóa
         const existingNumbers = new Set((existingEps || []).map(e => _normalizeEpNumber(e.episode_number)));
@@ -2735,9 +2796,18 @@ async function syncEpisodesForMovie(movieId, slug, provider) {
 
         if (toInsert.length > 0) {
             const BATCH = 50;
+            const MAX_RETRIES = 2;
             for (let i = 0; i < toInsert.length; i += BATCH) {
-                const { error } = await supabase.from('episodes').insert(toInsert.slice(i, i + BATCH));
-                if (error) console.warn(`[AutoSync] Lỗi insert tập batch:`, error.message);
+                const batch = toInsert.slice(i, i + BATCH);
+                for (let retry = 0; retry <= MAX_RETRIES; retry++) {
+                    const { error } = await supabase.from('episodes').insert(batch);
+                    if (!error) break;
+                    if (retry < MAX_RETRIES) {
+                        await new Promise(r => setTimeout(r, 500));
+                    } else {
+                        console.warn(`[AutoSync] Batch ${Math.floor(i/BATCH)+1} lỗi sau ${MAX_RETRIES} lần thử:`, error.message);
+                    }
+                }
             }
         }
 

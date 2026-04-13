@@ -87,21 +87,27 @@ async function loadInitialData() {
     console.log("🔄 Đang kiểm tra Metadata Sync...");
     
     // 1. Đọc document sync để kiểm tra thay đổi
+    // Chỉ query khi đã có session (tránh lỗi 401 nếu bảng có RLS)
     if (supabase) {
         try {
-            const { data: syncData, error } = await supabase
-                .from('app_configs')
-                .select('value')
-                .eq('key', 'sync')
-                .maybeSingle(); // Sử dụng maybeSingle để tránh lỗi 406/single if not found
-            
-            if (error) {
-                console.warn("⚠️ Lỗi truy vấn app_configs/sync:", error.message);
-            } else if (syncData) {
-                currentSyncData = syncData.value;
-                console.log("✅ Metadata Sync loaded:", currentSyncData);
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                const { data: syncData, error } = await supabase
+                    .from('app_configs')
+                    .select('value')
+                    .eq('key', 'sync')
+                    .maybeSingle(); // Sử dụng maybeSingle để tránh lỗi 406/single if not found
+                
+                if (error) {
+                    console.warn("⚠️ Lỗi truy vấn app_configs/sync:", error.message);
+                } else if (syncData) {
+                    currentSyncData = syncData.value;
+                    console.log("✅ Metadata Sync loaded:", currentSyncData);
+                } else {
+                    console.log("ℹ️ app_configs/sync chưa tồn tại.");
+                }
             } else {
-                console.log("ℹ️ app_configs/sync chưa tồn tại.");
+                console.log("ℹ️ Chưa đăng nhập, bỏ qua app_configs sync.");
             }
         } catch (e) {
             console.warn("⚠️ Không thể đọc app_configs/sync, chuyển sang mode load mặc định.", e);
@@ -534,7 +540,7 @@ async function updateAllWatchProgress() {
   try {
     const { data: historyData, error } = await supabase
       .from('watch_history')
-      .select('*')
+      .select('movie_id, resume_time, duration')
       .eq('user_id', currentUser.id);
     
     if (error) throw error;

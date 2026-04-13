@@ -72,7 +72,7 @@ function renderBannerSlider() {
 
     return `
       <div class="banner-slide ${index === 0 ? 'active' : ''}" data-index="${index}">
-        <div class="banner-bg" style="background-image: url('${bannerBgImage}')" 
+        <div class="banner-bg" ${index === 0 ? `style="background-image: url('${bannerBgImage}')"` : `data-bg="${bannerBgImage}"`}
              onerror="this.style.backgroundImage='url(${fallbackImage})'"></div>
         <div class="banner-overlay"></div>
         <div class="banner-content">
@@ -152,6 +152,10 @@ function goToBannerSlide(index) {
   document.querySelectorAll('.banner-thumb').forEach((thumb, i) => {
     thumb.classList.toggle('active', i === index);
   });
+
+  // Lazy load ảnh nền cho slide hiện tại và slide kế tiếp
+  _preloadBannerSlide(index);
+  _preloadBannerSlide((index + 1) % bannerSlides.length);
 
   // Reset auto-play timer
   resetBannerAutoPlay();
@@ -284,5 +288,19 @@ function handleBannerSwipe() {
   } else if (diff < -threshold) {
     // Vuốt sang phải → slide trước
     prevBannerSlide();
+  }
+}
+
+/**
+ * Lazy load ảnh nền cho banner slide (chỉ set background-image khi cần)
+ * Giảm 5 ảnh lớn (~500KB-1MB mỗi ảnh) phải tải khi mở trang
+ */
+function _preloadBannerSlide(index) {
+  const slides = document.querySelectorAll('.banner-slide');
+  if (!slides[index]) return;
+  const bg = slides[index].querySelector('.banner-bg[data-bg]');
+  if (bg && bg.dataset.bg) {
+    bg.style.backgroundImage = `url('${bg.dataset.bg}')`;
+    delete bg.dataset.bg; // Xóa data-bg để không load lại
   }
 }

@@ -49,13 +49,9 @@ async function viewMovieIntro(movieId, updateHistory = true) {
     // [NEW] Fetch đầy đủ tập phim nếu movie.episodes chỉ chứa ID hoặc trống
     if (movie && (!movie.episodes || movie.episodes.length === 0 || (movie.episodes[0] && !movie.episodes[0].sources))) {
         console.log("📥 Đang tải chi tiết tập phim từ Supabase cho:", movie.title);
-        const { data: fullEpisodes, error: epError } = await supabase
-            .from('episodes')
-            .select('*')
-            .eq('movie_id', movieId)
-            .order('episode_number', { ascending: true });
+        const fullEpisodes = await window.fetchAllEpisodesFromSupabase(movieId, '*', 'episode_index');
         
-        if (!epError && fullEpisodes) {
+        if (fullEpisodes && fullEpisodes.length > 0) {
             movie.episodes = fullEpisodes;
             console.log(`✅ Đã tải ${fullEpisodes.length} tập phim.`);
         }
@@ -926,6 +922,11 @@ function initStarRating(containerId) {
  */
 window.goBackFromIntro = function() {
     console.log("🔙 Đang xử lý nút quay lại từ Intro...");
+    
+    // Dừng trailer nếu đang chạy
+    if (typeof closeTrailerModal === 'function') {
+        try { closeTrailerModal(); } catch (e) {}
+    }
     
     // Nếu có lịch sử, dùng history.back()
     if (window.history.length > 1) {

@@ -282,7 +282,7 @@ async function openLibraryModal(type) {
       modalTitle.textContent = "Lịch Sử Đã Xem 🕒";
       const { data, error } = await supabase
         .from('watch_history')
-        .select('*')
+        .select('movie_id, episode_index, resume_time, duration')
         .eq('user_id', currentUser.id)
         .order('last_watched_at', { ascending: false })
         .limit(50);
@@ -435,7 +435,7 @@ async function loadMyAlbums() {
     try {
         const { data, error } = await supabase
             .from('user_albums')
-            .select('*')
+            .select('id, name, movies, created_at')
             .eq('user_id', currentUser.id)
             .order('created_at', { ascending: false });
 
@@ -765,7 +765,7 @@ async function loadAvatarLibrary(category = 'Tất cả') {
     const grid = document.getElementById("avatarLibraryGrid");
     if (!grid) return;
     try {
-        let query = supabase.from('avatar_library').select('*').order('created_at', { ascending: false });
+        let query = supabase.from('avatar_library').select('id, url').order('created_at', { ascending: false });
         
         // Nếu lọc theo danh mục cụ thể (không phải 'Tất cả')
         if (category !== 'Tất cả' && category !== 'all') {

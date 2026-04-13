@@ -318,8 +318,8 @@ function createMovieCard(movie, matchedTags = []) {
     <div class="movie-card-wrapper" id="movie-wrapper-${movie.id}" onclick="handleMovieClick(event, '${movie.id}')">
         
         <div class="card movie-card movie-card-static ${window.userWatchHistoryCache?.[movie.id] ? 'has-watched' : ''}">
-            <div class="card-image">
-                <img src="${movie.posterUrl}" alt="${movie.title}" loading="lazy" onerror="this.src='${fallbackImage}';">
+            <div class="card-image poster-shimmer">
+                <img src="${movie.posterUrl}" alt="${movie.title}" loading="lazy" onerror="this.src='${fallbackImage}';" onload="this.parentElement.classList.remove('poster-shimmer');">
                 ${episodeBadgeHtml}
                 ${matchBadgesHtml}
                 <!-- Watch Progress Bar -->
@@ -341,7 +341,7 @@ function createMovieCard(movie, matchedTags = []) {
 
         <div class="movie-popup-nfx" onclick="event.stopPropagation()">
             <div class="popup-header-img">
-                <img src="${movie.backgroundUrl || movie.posterUrl}" onerror="this.onerror=null; this.src='${fallbackImage}';">
+                <img data-src="${movie.backgroundUrl || movie.posterUrl}" src="" loading="lazy" onerror="this.onerror=null; this.src='${fallbackImage}';" style="opacity:0; transition: opacity 0.3s;">
                 ${partBadgeOnImage}
             </div>
             <div class="popup-body">
@@ -419,6 +419,10 @@ function createMovieCard(movie, matchedTags = []) {
 /* --- DÁN ĐÈ VÀO js/home.js --- */
 
 function handleMovieClick(event, movieId) {
+  // Lazy load ảnh popup khi click/hover
+  const wrapper = event.currentTarget || event.target.closest('.movie-card-wrapper');
+  if (wrapper) loadPopupImages(wrapper);
+
   // 1. PC: Chuyển trang luôn
   if (window.innerWidth > 1366) {
     viewMovieIntro(movieId);
@@ -637,6 +641,27 @@ document.addEventListener("touchmove", function () {
     if (document.querySelector('.movie-card-wrapper.active-mobile')) {
         closeAllPopups();
     }
+}, { passive: true });
+
+/**
+ * Lazy load ảnh popup: chỉ tải ảnh background popup khi user hover/click card
+ * Giảm ~50% request ảnh ban đầu khi mở trang
+ */
+function loadPopupImages(wrapper) {
+  if (!wrapper) return;
+  const imgs = wrapper.querySelectorAll('.popup-header-img img[data-src]');
+  imgs.forEach(img => {
+    if (img.dataset.src && !img.src.includes(img.dataset.src)) {
+      img.src = img.dataset.src;
+      img.onload = () => { img.style.opacity = '1'; };
+    }
+  });
+}
+
+// PC: Lazy load ảnh popup khi hover card (preload trước khi popup hiện)
+document.addEventListener('mouseover', function(e) {
+  const wrapper = e.target.closest('.movie-card-wrapper');
+  if (wrapper) loadPopupImages(wrapper);
 }, { passive: true });
 
 /**
@@ -1528,7 +1553,7 @@ function renderNavSearchResults(query) {
     
     navSearchList.innerHTML = filtered.map(movie => `
         <li>
-            <a href="javascript:void(0)" class="nav-search-item" onclick="document.getElementById('navSearchDropdown').classList.add('hidden'); viewMovieIntro('${movie.id}')">
+            <a style="cursor: pointer;" class="nav-search-item" onclick="document.getElementById('navSearchDropdown').classList.add('hidden'); viewMovieIntro('${movie.id}')">
                 <img src="${movie.posterUrl}" onerror="this.onerror=null; this.src='${dfImage}'">
                 <div class="nav-search-info">
                     <h4>${movie.title}</h4>

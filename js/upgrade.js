@@ -117,7 +117,7 @@ async function submitVipRequest() {
         const fiveMinsAgo = new Date(Date.now() - 300000).toISOString();
         const { data: existingRequests, error: checkError } = await supabase
             .from('upgrade_requests')
-            .select('*')
+            .select('id')
             .eq('user_id', currentUser.id)
             .eq('status', 'pending')
             .gt('created_at', fiveMinsAgo);

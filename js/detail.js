@@ -176,6 +176,7 @@ async function viewMovieDetail(movieId, updateHistory = true) {
         .select('*, episodes(*)')
         .eq('id', movieId)
         .order('episode_number', { foreignTable: 'episodes', ascending: true })
+        .limit(5000, { foreignTable: 'episodes' })
         .single();
       
       if (data) {
@@ -191,13 +192,9 @@ async function viewMovieDetail(movieId, updateHistory = true) {
   } else if (movie && (!movie.episodes || movie.episodes.length === 0 || (movie.episodes[0] && !movie.episodes[0].sources))) {
     // Nếu phim có trong cache nhưng chưa có tập (do load ở trang chủ chỉ lấy metadata)
     try {
-      const { data, error } = await supabase
-        .from('episodes')
-        .select('*')
-        .eq('movie_id', movieId)
-        .order('episode_number', { ascending: true });
+      const data = await window.fetchAllEpisodesFromSupabase(movieId, '*', 'episode_index');
       
-      if (data) {
+      if (data && data.length > 0) {
         movie.episodes = data;
       }
     } catch (error) {
@@ -233,7 +230,7 @@ async function viewMovieDetail(movieId, updateHistory = true) {
     try {
       const { data, error } = await supabase
         .from('watch_history')
-        .select('*')
+        .select('episode_index, resume_time, duration')
         .eq('user_id', currentUser.id)
         .eq('movie_id', movieId)
         .single();
@@ -1076,7 +1073,7 @@ async function loadUserAlbums() {
         
         const { data, error } = await supabase
             .from('user_albums')
-            .select('*')
+            .select('id, name, movies')
             .eq('user_id', currentUser.id)
             .order('created_at', { ascending: false });
         
@@ -1161,7 +1158,7 @@ async function addToAlbum(albumId, albumName) {
     try {
         const { data: album, error: fetchError } = await supabase
             .from('user_albums')
-            .select('*')
+            .select('id, movies')
             .eq('id', albumId)
             .single();
             
@@ -2105,7 +2102,7 @@ async function getWatchProgress(movieId) {
     try {
         const { data, error } = await supabase
             .from('watch_history')
-            .select('*')
+            .select('episode_index, resume_time, duration')
             .eq('user_id', currentUser.id)
             .eq('movie_id', movieId)
             .single();
@@ -2136,7 +2133,7 @@ async function checkMoviePurchased(movieId) {
     try {
         const { data, error } = await supabase
             .from('user_purchases')
-            .select('*')
+            .select('id')
             .eq('user_id', currentUser.id)
             .eq('movie_id', movieId)
             .single();
@@ -2766,7 +2763,7 @@ async function processErrorReport(reportData) {
             // 1. Tìm báo lỗi "pending" tương tự
             const { data: existingReport, error: fetchError } = await supabase
                 .from('error_reports')
-                .select('*')
+                .select('id, reporters')
                 .eq('movie_id', movieId)
                 .eq('episode_name', safeEpName)
                 .eq('error_type', errorType)
@@ -4566,7 +4563,7 @@ async function checkAndShowContinueWatchingModal() {
     try {
         const { data, error } = await supabase
             .from('watch_history')
-            .select('*')
+            .select('episode_index, resume_time, duration')
             .eq('user_id', currentUser.id)
             .eq('movie_id', currentMovieId)
             .single();
@@ -5870,7 +5867,15 @@ window.pauseMainPlayer = function() {
         iframe.classList.add("hidden");
     }
 
-    // 4. Cập nhật UI
+    // 4. Đóng Video Trailer trên modal nếu đang mở (đặc biệt ở trang Intro)
+    if (typeof closeTrailerModal === 'function') {
+        try {
+            closeTrailerModal();
+            console.log("🛑 Dừng Trailer phim nếu đang mở.");
+        } catch (e) {}
+    }
+
+    // 5. Cập nhật UI
     updateDetailPlayButtonState("paused");
 };
 
