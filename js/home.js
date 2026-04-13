@@ -3,6 +3,10 @@
  * Query bảng view_logs trên Supabase để lấy lượt xem theo ngày
  * Fallback: nếu không có dữ liệu view_logs → dùng tổng views
  */
+var ALL_MOVIES_PER_PAGE = 60;
+var allMoviesCurrentPage = 1;
+var allMoviesFilteredData = [];
+
 async function renderFeaturedMovies() {
   const container = document.getElementById("featuredMovies");
   if (!container) return;
@@ -762,9 +766,7 @@ function filterMovies(searchQuery = null) {
 }
 
 // --- STATE PHÂN TRANG TRANG TẤT CẢ PHIM ---
-const ALL_MOVIES_PER_PAGE = 60;
-let allMoviesCurrentPage = 1;
-let allMoviesFilteredData = [];
+// (Các biến đã được chuyển lên đầu file để tránh lỗi Cannot access before initialization)
 
 /** Render phim theo trang hiện tại và vẽ pagination */
 function _renderAllMoviesPage() {
