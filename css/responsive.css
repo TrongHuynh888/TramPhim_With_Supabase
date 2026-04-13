@@ -441,6 +441,18 @@ body.watch-party-active #watchPartyPage {
     flex-shrink: 0 !important;
   }
 
+  /* --- FIX NAV SEARCH TRÊN TABLET --- */
+  .nav-search-container {
+    min-width: 220px !important; /* Ngăn menu đè bẹp ô tìm kiếm */
+    margin: 0 10px !important;
+  }
+  .nav-search-dropdown {
+    width: 330px !important; /* Đảm bảo dropdown không bị nén, giữ nguyên chữ */
+    max-width: 90vw !important;
+    left: 0 !important;
+    right: auto !important;
+  }
+
   /* FIX PADDING CHO TABLET: Tránh bị che header và full chiều cao */
   /* Chỉ áp dụng cho Tablet thực sự (>768px), KHÔNG ảnh hưởng mobile */
   @media (min-width: 769px) {
@@ -556,6 +568,18 @@ body.watch-party-active #watchPartyPage {
   }
   .brand-icon-wrapper {
     margin-right: 2px !important;
+  }
+
+  /* --- FIX NAV SEARCH TRÊN MOBILE --- */
+  .nav-search-container {
+    min-width: 0 !important; /* Reset cho mobile tránh tràn màn hình */
+    margin: 0 6px !important;
+  }
+  .nav-search-dropdown {
+    width: 280px !important; 
+    max-width: 90vw !important;
+    left: -20px !important; /* Cân chỉnh lại vị trí popup trên mobile */
+    right: auto !important;
   }
 
   /* 2. Nhóm nút bên phải (Chứa tất cả icon) */
