@@ -22,14 +22,12 @@ jobs:
       - name: 🏗 Setup Expo
         uses: expo/expo-github-action@v8
         with:
+          eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: 📦 Install dependencies
         working-directory: TramPhim-RN
         run: npm install
-
-      - name: 🔨 Install EAS CLI
-        run: npm install -g eas-cli
 
       - name: 🔨 Build IPA (Local)
         working-directory: TramPhim-RN
