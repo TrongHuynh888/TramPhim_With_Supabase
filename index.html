@@ -1,0 +1,1753 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="css/upgrade.css?v=3" />
+    <link rel="stylesheet" href="css/variables.css?v=3" />
+    <link rel="stylesheet" href="css/base.css?v=3" />
+    <link rel="stylesheet" href="css/components.css?v=19" />
+    <link rel="stylesheet" href="css/watch-party.css?v=11" />
+    <link rel="stylesheet" href="css/layout.css?v=6" />
+    <link rel="stylesheet" href="css/admin.css?v=4" />
+    <link rel="stylesheet" href="css/admin-api-explorer.css?v=1" />
+    <link rel="stylesheet" href="css/admin-api-keys.css?v=1" />
+    <link rel="stylesheet" href="css/responsive.css?v=160" />
+    <link rel="stylesheet" href="css/detail-redesign.css?v=3" />
+    <link rel="stylesheet" href="css/intro.css?v=3" />
+    <link rel="stylesheet" href="css/policy.css?v=1" />
+    <link rel="stylesheet" href="css/community.css?v=4.9" />
+    
+    <!-- Preload: Đã loại bỏ do trùng với các thẻ load bên dưới -->
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+    <!--<link rel="stylesheet" href="css/style.css" />-->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Trạm Phim - Nền tảng xem phim trực tuyến miễn phí chất lượng cao. Xem phim mới nhất, tạo phòng xem chung cùng bạn bè và tham gia cộng đồng yêu phim."
+    />
+    <meta
+      name="keywords"
+      content="xem phim, phim mới, phim online, watch party, xem chung, cộng đồng phim, trạm phim"
+    />
+
+    <title>Trạm Phim - Trải Nghiệm Điện Ảnh Đẳng Cấp</title>
+    
+    <!-- Open Graph Meta Tags cho tính năng Chia Sẻ (Share Link) -->
+    <meta property="og:site_name" content="Trạm Phim" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" id="ogTitle" content="Trạm Phim - Trải Nghiệm Điện Ảnh Đẳng Cấp" />
+    <meta property="og:description" id="ogDescription" content="Xem phim mới nhất chất lượng cao, tạo phòng xem chung cùng bạn bè và tham gia cộng đồng yêu phim sôi động." />
+    <meta property="og:image" id="ogImage" content="https://public-frontend-cos.metadl.com/mgx/img/favicon_atoms.ico" />
+    <meta property="og:url" id="ogUrl" content="https://tronghuynh888.github.io/TramPhim/" />
+    <!-- Thẻ Twitter Card cho tương thích phụ -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" id="twTitle" content="Trạm Phim - Trải Nghiệm Điện Ảnh Đẳng Cấp">
+    <meta name="twitter:description" id="twDescription" content="Xem phim mới nhất chất lượng cao, tạo phòng xem chung cùng bạn bè và tham gia cộng đồng yêu phim sôi động.">
+    <meta name="twitter:image" id="twImage" content="https://public-frontend-cos.metadl.com/mgx/img/favicon_atoms.ico">
+
+    <!-- Favicon -->
+    <link
+      rel="icon"
+      href="https://public-frontend-cos.metadl.com/mgx/img/favicon_atoms.ico"
+      type="image/x-icon"
+    />
+
+    <!-- Montserrat Font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Font Awesome Icons -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+
+    <!-- HLS.js for Streaming -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest" crossorigin defer></script>
+    <!-- SortableJS for Drag & Drop -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
+    <!-- QR Code Generator cho tính năng mã QR user -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js" defer></script>
+    <!-- QR Code Reader/Decoder cho tính năng quét QR -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" defer></script>
+    <script src="js/emoji-picker.js" defer></script>
+    <script src="js/home-comments.js" defer></script>
+    <script src="js/admin-api-keys.js" defer></script>
+    <script src="js/admin-episodes.js" defer></script>
+
+    <!-- Custom CSS -->
+  </head>
+  <body>
+    <!-- ============================================
+         NAVIGATION BAR
+         ============================================ -->
+    <nav class="navbar" id="navbar">
+      <div class="nav-container">
+        <button
+          id="sidebarToggleBtn"
+          onclick="toggleSidebar()"
+        >
+          <i class="fas fa-bars"></i>
+        </button>
+
+        <!-- Logo -->
+        <a href="javascript:void(0)" class="nav-logo" onclick="showPage('home')" style="text-decoration: none;">
+          <div class="brand-logo-container">
+            <div class="brand-icon-wrapper">
+              <i class="fas fa-subway brand-train-icon"></i>
+              <i class="fas fa-play brand-play-icon"></i>
+            </div>
+            <div class="brand-text-column">
+              <span class="brand-text-new">Trạm Phim</span>
+              <span class="brand-slogan">Trạm dừng chân của những mọt phim</span>
+            </div>
+          </div>
+        </a>
+
+        <!-- Thanh Tìm Kiếm Header -->
+        <div class="nav-search-container" id="navSearchContainer">
+          <i class="fas fa-search search-icon"></i>
+          <input type="text" id="navSearchInput" placeholder="Tìm kiếm phim, diễn viên" autocomplete="off">
+          <button class="clear-search-btn hidden" id="clearNavSearch" onclick="clearNavSearchInput()" title="Xóa">
+            <i class="fas fa-times"></i>
+          </button>
+          
+          <div class="nav-search-dropdown hidden" id="navSearchDropdown">
+            <div class="nav-search-header">Danh sách phim</div>
+            <ul id="navSearchList" class="nav-search-list">
+              <!-- Render logic JS -->
+            </ul>
+          </div>
+        </div>
+
+        <!-- Navigation Menu -->
+        <div class="nav-menu" id="navMenu">
+          <a
+            href="javascript:void(0)"
+            class="nav-link active"
+            data-page="home"
+            onclick="showPage('home')"
+          >
+            <i class="fas fa-home"></i> Trang Chủ
+          </a>
+
+          <a
+            href="javascript:void(0)"
+            class="nav-link"
+            data-page="movies"
+            onclick="showPage('movies')"
+          >
+            <i class="fas fa-film"></i> Tất cả Phim
+          </a>
+
+          <a href="javascript:void(0)" class="nav-link" data-page="singleMovies" onclick="showPage('singleMovies')">
+            <i class="fas fa-video"></i> Phim Lẻ
+          </a>
+          <a href="javascript:void(0)" class="nav-link" data-page="seriesMovies" onclick="showPage('seriesMovies')">
+            <i class="fas fa-layer-group"></i> Phim Bộ
+          </a>
+          <a
+            href="javascript:void(0)"
+            class="nav-link"
+            data-page="categories"
+            onclick="showPage('categories')"
+          >
+            <i class="fas fa-tags"></i> Thể Loại
+          </a>
+          <a
+            href="javascript:void(0)"
+            class="nav-link"
+            data-page="actors"
+            onclick="showPage('actors')"
+          >
+            <i class="fas fa-users"></i> Diễn Viên
+          </a>
+          <!-- Xem Chung (Watch Party) -->
+          <a
+            href="javascript:void(0)"
+            class="nav-link"
+            data-page="watchParty"
+            onclick="showPage('watchParty')"
+          >
+            <i class="fas fa-tv"></i> Xem Chung
+          </a>
+          <!-- Cộng Đồng -->
+          <a
+            href="javascript:void(0)"
+            class="nav-link"
+            data-page="community"
+            onclick="showPage('community')"
+          >
+            <i class="fas fa-globe"></i> Cộng Đồng
+          </a>
+          <!-- Admin Link - Chỉ hiện khi là Admin -->
+          <a
+            href="javascript:void(0)"
+            class="nav-link hidden"
+            id="adminNavLink"
+            data-page="admin"
+            onclick="showPage('admin')"
+          >
+            <i class="fas fa-cog"></i> Admin
+          </a>
+        </div>
+
+        <!-- Theme + Wallet (nhóm phụ - nằm giữa menu và auth) -->
+        <div class="nav-utilities" style="display: flex; align-items: center; gap: 12px;">
+          <!-- Notification Bell Wrapper -->
+          <div class="notification-wrapper">
+            <button
+              class="notification-btn"
+              id="notificationBtn"
+              title="Thông báo"
+              onclick="toggleNotificationDropdown(event)"
+            >
+              <i class="fas fa-bell" style="font-size: 20px; pointer-events: none;"></i>
+              <span id="notificationBadge" class="notification-badge">0</span>
+            </button>
+            
+            <!-- Notification Dropdown -->
+            <div id="notificationDropdown" class="notification-dropdown hidden">
+              <div class="notification-dropdown-header">
+                  <strong><i class="fas fa-bell text-info"></i> Thông báo</strong>
+                  <button onclick="markAllAsRead()" class="btn-mark-read">Đánh dấu đã đọc</button>
+              </div>
+              <!-- Tab chuyển đổi Phim / Cộng đồng -->
+              <div class="notification-tabs">
+                <button class="notif-tab active" data-tab="movie" onclick="switchNotifTab('movie')">
+                  <i class="fas fa-film"></i> Phim <span class="notif-tab-count" id="notifTabCountMovie" style="font-size:0.75rem; color:#888; margin-left:3px;"></span><span class="notif-tab-badge" id="notifTabBadgeMovie"></span>
+                </button>
+                <button class="notif-tab" data-tab="community" onclick="switchNotifTab('community')">
+                  <i class="fas fa-globe"></i> Cộng đồng <span class="notif-tab-count" id="notifTabCountCommunity" style="font-size:0.75rem; color:#888; margin-left:3px;"></span><span class="notif-tab-badge" id="notifTabBadgeCommunity"></span>
+                </button>
+              </div>
+              <ul class="dropdown-list" id="notificationList" style="padding: 0; margin: 0; list-style: none; overflow-y: auto; flex-grow: 1;">
+                  <li style="padding: 15px; text-align: center; color: var(--text-muted);">Đang tải thông báo...</li>
+              </ul>
+              <div class="notification-dropdown-footer">
+                  <button onclick="deleteAllNotifications()" class="btn-delete-all"><i class="fas fa-trash-alt"></i> Xóa tất cả</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Theme Toggle -->
+          <button
+            class="theme-toggle"
+            id="themeToggle"
+            onclick="toggleTheme()"
+            title="Đổi giao diện"
+          >
+            <i class="fas fa-moon" id="themeIcon"></i>
+          </button>
+
+          <!-- Wallet Button -->
+          <button
+            class="btn wallet-btn"
+            id="walletBtn"
+            onclick="connectWallet()"
+          >
+            <i class="fas fa-wallet"></i>
+            <span class="wallet-btn-text">Kết nối ví</span>
+          </button>
+
+          <!-- Auth Button (ngay sau Wallet) -->
+          <div id="authContainer" style="position: relative; display: flex; align-items: center; flex-shrink: 0;">
+            <button
+              class="btn btn-primary hidden"
+              id="loginBtn"
+              onclick="openAuthModal()"
+              style="white-space: nowrap; flex-shrink: 0; min-width: fit-content; padding: 10px 24px; border-radius: 8px; display: flex; align-items: center; gap: 8px;"
+            >
+              <i class="fas fa-user"></i> <span>Đăng nhập / Đăng ký</span>
+            </button>
+
+            <div
+              id="userMenuTrigger"
+              class="hidden"
+              onclick="toggleUserDropdown(event)"
+              style="cursor: pointer; margin-left: 30px; position: static;"
+            >
+              <img id="userAvatarSmall" src="" class="nav-user-avatar" />
+            </div>
+
+            <div id="userDropdown" class="user-dropdown">
+              <div class="dropdown-header">
+                <img id="dropdownAvatar" src="" alt="Avatar" />
+                <div class="dropdown-user-info">
+                  <span class="dropdown-role">Free</span>
+                  <strong id="dropdownName">Tên User</strong>
+                </div>
+              </div>
+
+              <div class="dropdown-upgrade">
+                <p>
+                  Nâng cấp tài khoản Trạm Phim để có trải nghiệm đẳng cấp hơn.
+                </p>
+                <button class="btn-upgrade" onclick="showPage('upgrade')">
+                  Nâng cấp ngay <i class="fas fa-arrow-up"></i>
+                </button>
+              </div>
+
+              <ul class="dropdown-list">
+                <li class="dropdown-item">
+                  <i class="fas fa-wallet"></i>
+                  <span>Số dư</span>
+                  <span class="balance-badge">0 C</span>
+                  <button class="btn-deposit" onclick="showPage('upgrade')">
+                    + Nạp
+                  </button>
+                </li>
+                <li
+                  class="dropdown-item"
+                  onclick="openLibraryModal('favorites')"
+                >
+                  <i class="fas fa-heart"></i> Yêu thích
+                </li>
+                <li class="dropdown-item" onclick="openLibraryModal('history')">
+                  <i class="fas fa-history"></i> Xem tiếp
+                </li>
+                <li class="dropdown-item" onclick="openMyAlbumsModal()">
+                  <i class="fas fa-folder-open"></i> Album của tôi
+                </li>
+                <li class="dropdown-item" onclick="openProfileModal()">
+                  <i class="fas fa-user-cog"></i> Tài khoản
+                </li>
+                <li class="dropdown-item" onclick="resetChangePasswordModal(); openModal('changePasswordModal')">
+                  <i class="fas fa-key"></i> Đổi mật khẩu
+                </li>
+                <li class="dropdown-item logout" onclick="handleLogout()">
+                  <i class="fas fa-sign-out-alt"></i> Thoát
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mobile Menu Toggle -->
+        <div class="nav-actions">
+          <button
+            class="mobile-menu-toggle"
+            id="mobileMenuToggle"
+            onclick="toggleMobileMenu()"
+          >
+            <i class="fas fa-bars"></i>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- ============================================
+         MAIN CONTENT
+         ============================================ -->
+    <!-- Marquee thông báo (nằm ngoài main để luôn hiển thị) -->
+    <div class="site-marquee-bar" id="siteMarqueeBar" style="display:none;">
+      <div class="site-marquee-inner" id="siteMarqueeInner"></div>
+      <button class="site-marquee-close" onclick="closeSiteMarquee()" title="Đóng"><i class="fas fa-times"></i></button>
+    </div>
+
+    <main id="mainContent">
+      <!-- HOME PAGE -->
+      <div id="homePage" class="page active">
+        <!-- Banner Slider Section -->
+        <section class="hero-banner" id="heroBanner">
+          <div class="banner-track" id="bannerTrack">
+            <!-- Các slide được render bởi banner-slider.js -->
+          </div>
+          <!-- Nút điều hướng trái/phải -->
+          <button class="banner-nav banner-prev" id="bannerPrev" aria-label="Slide trước">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <button class="banner-nav banner-next" id="bannerNext" aria-label="Slide tiếp">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <!-- Dot indicators -->
+          <div class="banner-dots" id="bannerDots"></div>
+          <!-- Thumbnail preview (góc phải dưới) -->
+          <div class="banner-thumbs" id="bannerThumbs"></div>
+        </section>
+
+        <!-- Featured Movies Section -->
+        <section class="section">
+          <div class="section-header">
+            <h2 class="section-title">Phim Nổi Bật</h2>
+            <a href="javascript:void(0)" class="btn btn-secondary" onclick="showPage('movies')">
+              Xem tất cả <i class="fas fa-arrow-right"></i>
+            </a>
+          </div>
+          <div class="featured-scroll-wrapper" id="featuredScrollWrapper">
+            <div class="movie-grid" id="featuredMovies">
+             
+              <div class="skeleton" style="height: 350px"></div>
+              <div class="skeleton" style="height: 350px"></div>
+              <div class="skeleton" style="height: 350px"></div>
+              <div class="skeleton" style="height: 350px"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- New Movies Section -->
+        <section class="section">
+          <div class="section-header">
+            <h2 class="section-title">Phim Mới Cập Nhật</h2>
+          </div>
+          <div class="movie-grid" id="newMovies">
+           
+          </div>
+        </section>
+
+        <!-- Country Sections (Hàn Quốc, Trung Quốc, US-UK) -->
+        <div id="countrySections"></div>
+
+        <!-- TOP BÌNH LUẬN — Carousel + Grid Thống Kê chung 1 khung -->
+        <section class="section top-comments-section" id="topCommentsSection" style="display:none;">
+          <div class="section-header">
+            <h2 class="section-title"><i class="fas fa-comments" style="color:#fbbf24;"></i> Top Bình Luận</h2>
+          </div>
+          <div class="tc-main-wrapper">
+            <!-- Carousel -->
+            <div class="tc-carousel-area">
+              <button class="tc-nav-btn tc-prev" onclick="scrollTopComments('prev')" aria-label="Trước">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <div class="tc-carousel-track" id="topCommentsTrack">
+                <!-- Cards render bởi home-comments.js -->
+              </div>
+              <button class="tc-nav-btn tc-next" onclick="scrollTopComments('next')" aria-label="Sau">
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+            <!-- Đường ngăn cách -->
+            <div class="tc-divider"></div>
+            <!-- Grid 5 cột thống kê -->
+            <div class="home-stats-grid">
+              <div class="hs-column">
+                <h3 class="hs-column-title"><i class="fas fa-fire"></i> SÔI NỔI NHẤT</h3>
+                <ol class="hs-list" id="hsHottestList">
+                  <li class="hs-loading">Đang tải...</li>
+                </ol>
+                <button class="hs-more-btn" onclick="showHsPopup('hottest')">Xem thêm</button>
+              </div>
+              <div class="hs-column">
+                <h3 class="hs-column-title"><i class="fas fa-heart"></i> YÊU THÍCH TUẦN</h3>
+                <ol class="hs-list" id="hsWeeklyList">
+                  <li class="hs-loading">Đang tải...</li>
+                </ol>
+                <button class="hs-more-btn" onclick="showHsPopup('weekly')">Xem thêm</button>
+              </div>
+              <div class="hs-column">
+                <h3 class="hs-column-title"><i class="fas fa-tags"></i> THỂ LOẠI HOT</h3>
+                <ol class="hs-list" id="hsHotCategoryList">
+                  <li class="hs-loading">Đang tải...</li>
+                </ol>
+                <button class="hs-more-btn" onclick="showHsPopup('categories')">Xem thêm</button>
+              </div>
+              <div class="hs-column">
+                <h3 class="hs-column-title"><i class="fas fa-comment-dots"></i> BÌNH LUẬN MỚI</h3>
+                <div class="hs-comments-list" id="hsRecentComments">
+                  <div class="hs-loading">Đang tải...</div>
+                </div>
+              </div>
+              <div class="hs-column">
+                <h3 class="hs-column-title"><i class="fas fa-star"></i> REVIEW PHIM</h3>
+                <div class="hs-reviews-list" id="hsReviewsList">
+                  <div class="hs-loading">Đang tải...</div>
+                </div>
+                <button class="hs-more-btn" onclick="showNotification('🚀 Tính năng Review Phim đang được phát triển!', 'info')">Xem thêm</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- POPUP TOP 10 -->
+      <div class="hs-popup-overlay" id="hsPopupOverlay" onclick="closeHsPopup()">
+        <div class="hs-popup" onclick="event.stopPropagation()">
+          <button class="hs-popup-close" onclick="closeHsPopup()"><i class="fas fa-times"></i></button>
+          <h3 class="hs-popup-title" id="hsPopupTitle"></h3>
+          <div class="hs-popup-list" id="hsPopupList"></div>
+        </div>
+      </div>
+
+      <!-- MOVIES PAGE -->
+      <div id="moviesPage" class="page">
+        <section class="section">
+          <div class="section-header">
+            <h2 class="section-title">Tất Cả Phim</h2>
+            <div class="search-filter">
+              <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input
+                  type="text"
+                  class="form-input"
+                  id="searchMovies"
+                  placeholder="Tìm kiếm phim..."
+                  onkeydown="if(event.key==='Enter') filterMovies()"
+                />
+              </div>
+              <div class="custom-filter-group">
+                <!-- Thể loại -->
+                <div class="custom-filter-box" id="boxFilterCategory">
+                  <i class="fas fa-tags"></i>
+                  <input type="text" id="inputFilterCategory" placeholder="Thể loại..." autocomplete="off">
+                  <div class="suggestions-dropdown" id="listFilterCategory"></div>
+                </div>
+
+                <!-- Quốc gia -->
+                <div class="custom-filter-box" id="boxFilterCountry">
+                  <i class="fas fa-globe-asia"></i>
+                  <input type="text" id="inputFilterCountry" placeholder="Quốc gia..." autocomplete="off">
+                  <div class="suggestions-dropdown" id="listFilterCountry"></div>
+                </div>
+
+                <!-- Năm -->
+                <div class="custom-filter-box" id="boxFilterYear">
+                  <i class="fas fa-calendar-alt"></i>
+                  <input type="text" id="inputFilterYear" placeholder="Năm..." autocomplete="off">
+                  <div class="suggestions-dropdown" id="listFilterYear"></div>
+                </div>
+
+                <!-- Nút Xác Nhận Lọc -->
+                <button class="btn-filter-apply" onclick="filterMovies()">
+                  <i class="fas fa-filter"></i> Lọc Phim
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="homeFilterResultSummary" class="filter-result-summary"></div>
+          <div class="movie-grid" id="allMoviesGrid">
+            <!-- Movies sẽ được load từ Firestore -->
+          </div>
+          <div class="pagination-container" id="allMoviesPagination" style="display: none;">
+            <!-- JS sẽ render pagination -->
+          </div>
+        </section>
+      </div>
+
+      <!-- SERIES MOVIES PAGE (SPA) -->
+      <div id="seriesMoviesPage" class="page"></div>
+
+      <!-- SINGLE MOVIES PAGE (SPA) -->
+      <div id="singleMoviesPage" class="page"></div>
+
+      <!-- CATEGORIES PAGE -->
+      <div id="categoriesPage" class="page">
+        <section class="section">
+          <div class="section-header">
+            <h2 class="section-title">Thể Loại Phim</h2>
+          </div>
+          <div
+            class="movie-grid"
+            id="categoriesList"
+            style="grid-template-columns: repeat(auto-fill, minmax(250px, 1fr))"
+          >
+            <!-- Categories sẽ được load từ Firestore -->
+          </div>
+        </section>
+      </div>
+
+      <!-- ACTORS PAGE -->
+      <div id="actorsPage" class="page">
+        <section class="section">
+          <div class="section-header">
+            <h2 class="section-title">Diễn Viên</h2>
+            <div class="search-filter">
+              <!-- Ô tìm kiếm tên diễn viên -->
+              <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input
+                  type="text"
+                  class="form-input"
+                  id="searchActors"
+                  placeholder="Tìm diễn viên..."
+                  onkeydown="if(event.key==='Enter') filterActors()"
+                />
+              </div>
+              <div class="custom-filter-group">
+                <!-- Quốc gia -->
+                <div class="custom-filter-box" id="boxFilterActorCountry">
+                  <i class="fas fa-globe-asia"></i>
+                  <input type="text" id="inputFilterActorCountry" placeholder="Quốc gia..." autocomplete="off">
+                  <div class="suggestions-dropdown" id="listFilterActorCountry"></div>
+                </div>
+
+                <!-- Giới tính -->
+                <div class="custom-filter-box" id="boxFilterActorGender">
+                  <i class="fas fa-venus-mars"></i>
+                  <input type="text" id="inputFilterActorGender" placeholder="Giới tính..." autocomplete="off">
+                  <div class="suggestions-dropdown" id="listFilterActorGender"></div>
+                </div>
+
+                <!-- Sắp xếp -->
+                <div class="custom-filter-box" id="boxFilterActorSort">
+                  <i class="fas fa-sort-amount-down"></i>
+                  <input type="text" id="inputFilterActorSort" placeholder="Sắp xếp..." autocomplete="off">
+                  <div class="suggestions-dropdown" id="listFilterActorSort"></div>
+                </div>
+
+                <!-- Nút Lọc -->
+                <button class="btn-filter-apply" onclick="filterActors()">
+                  <i class="fas fa-filter"></i> Lọc
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="actorFilterResultSummary" class="filter-result-summary"></div>
+          <div class="actors-grid" id="actorsGrid">
+            <!-- Actors sẽ được render bằng JS -->
+          </div>
+          <!-- Phân trang diễn viên -->
+          <div class="pagination-container" id="actorsPagination" style="display: none;">
+            <!-- JS sẽ render pagination -->
+          </div>
+        </section>
+      </div>
+
+      <!-- ACTOR DETAIL PAGE -->
+      <div id="actorDetailPage" class="page">
+        <div class="actor-detail-layout" id="actorDetailContent">
+          <!-- Render bằng JS -->
+        </div>
+      </div>
+
+      <!-- MOVIE INTRO PAGE (Load dynamic) -->
+      <div id="movieIntroPage" class="page"></div>
+
+      <!-- MOVIE DETAIL PAGE -->
+      <div id="movieDetailPage" class="page movie-detail-redesign">
+        <!-- TOP BAR: Back + Title -->
+        <div class="detail-top-bar">
+            <button class="btn-back-square" onclick="goBackFromDetail()">
+              <i class="fas fa-chevron-left"></i>
+            </button>
+            <span class="detail-page-title" id="redesignTopTitle">Xem phim ...</span>
+          </div>
+
+          <!-- PLAYER SECTION -->
+          <div class="player-section">
+            <div class="video-container" id="videoContainer">
+              <div class="video-locked" id="videoLocked">
+                <div class="video-locked-bg"></div>
+                <div class="video-locked-content">
+                  <div class="lock-icon-wrapper">
+                    <i class="fas fa-lock"></i>
+                  </div>
+                  <div class="locked-info">
+                    <span class="locked-badge"> PREMIUM</span>
+                    <h3>Phim Trả Phí</h3>
+                    <p class="movie-title" id="lockedMovieTitle">Tên phim</p>
+                    <p class="unlock-text">
+                      Mua vé để mở khóa và thưởng thức phim chất lượng cao với giá chỉ từ <span class="price-highlight" id="lockedPrice">...</span>
+                    </p>
+                  </div>
+                  <button class="btn btn-unlock btn-lg" onclick="buyTicket()">
+                    <i class="fas fa-unlock"></i> <span>Mua Vé Ngay</span>
+                  </button>
+                  <p class="secure-text">
+                    <i class="fas fa-shield-alt"></i> Thanh toán nhanh chóng, bảo mật tuyệt đối
+                  </p>
+                </div>
+              </div>
+
+              <!-- LỚP PHỦ BÁO LỖI VIDEO -->
+              <div class="video-error hidden" id="videoError">
+                <div class="video-error-bg"></div>
+                <div class="video-error-content">
+                  <div class="error-icon-wrapper">
+                    <i class="fas fa-exclamation-triangle"></i>
+                  </div>
+                  <div class="error-info">
+                    <h3>Lỗi Trình Phát</h3>
+                    <p id="videoErrorMessage">Rất tiếc, video hiện tại không thể tải được. Vui lòng thử lại sau hoặc báo cáo lỗi cho Admin.</p>
+                  </div>
+                  <div class="error-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="location.reload()">
+                      <i class="fas fa-sync-alt"></i> Thử lại
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="reportVideoErrorManual()">
+                      <i class="fas fa-bug"></i> Báo lỗi Admin
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <iframe id="videoPlayer" class="hidden" src="" allowfullscreen></iframe>
+              <video id="html5Player" class="hidden" playsinline></video>
+
+              <!-- NÚT BỎ QUA INTRO (SKIP INTRO) -->
+              <button id="btnSkipIntro" class="btn-skip-intro hidden" onclick="event.stopPropagation(); event.preventDefault(); handleSkipIntro();" ontouchend="event.stopPropagation(); event.preventDefault(); handleSkipIntro();">
+                <i class="fas fa-fast-forward"></i> Bỏ qua intro
+              </button>
+
+              <!-- NÚT CHUYỂN TẬP NHANH (NEXT EPISODE) -->
+              <button id="btnNextEpisode" class="btn-next-episode hidden" onclick="event.stopPropagation(); event.preventDefault(); handleNextEpisode();" ontouchend="event.stopPropagation(); event.preventDefault(); handleNextEpisode();">
+                <span>Tập tiếp theo</span> <i class="fas fa-step-forward"></i>
+              </button>
+              
+              <!-- TOP INFO BAR (Tên phim + Danh sách tập) - chỉ hiện khi fullscreen -->
+              <div class="player-top-bar" id="playerTopBar">
+                <div class="top-bar-left">
+                  <span class="top-bar-title" id="topBarTitle">Đang tải...</span>
+                  <span class="top-bar-episode" id="topBarEpisode"></span>
+                </div>
+                <div class="top-bar-right">
+                  <button class="top-bar-btn" id="episodeListBtn" onclick="toggleEpisodePanel(); event.stopPropagation();">
+                    <i class="fas fa-list-ul"></i> <span>Danh sách tập</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Center Controls -->
+              <div class="center-controls-overlay" id="centerOverlay">
+                <button class="center-btn skip-btn" onclick="skipTime(-10); event.stopPropagation();">
+                  <svg viewBox="0 0 24 24" fill="none" class="skip-svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 32px; height: 32px;"><polyline points="11 17 6 12 11 7"></polyline><polyline points="18 17 13 12 18 7"></polyline></svg>
+                </button>
+                <button class="center-btn play-btn-large" onclick="togglePlay(); event.stopPropagation();">
+                  <i class="fas fa-play" id="centerPlayIcon"></i>
+                </button>
+                <button class="center-btn skip-btn" onclick="skipTime(10); event.stopPropagation();">
+                  <svg viewBox="0 0 24 24" fill="none" class="skip-svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 32px; height: 32px;"><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></svg>
+                </button>
+              </div>
+
+              <!-- CUSTOM VIDEO CONTROLS -->
+              <div class="custom-video-controls hidden" id="customControls">
+                <!-- Thời gian hiện tại (góc trái) + Tổng (góc phải) - ngang hàng progress -->
+                <div class="time-row">
+                  <span class="time-current" id="currentTime">00:00</span>
+                  <span class="time-duration" id="duration">00:00</span>
+                </div>
+                <div class="progress-tooltip" id="progressTooltip">00:00</div>
+                <div class="video-progress-container" id="progressContainer">
+                  <div class="video-progress-filled" id="progressBar"></div>
+                  <div class="video-progress-buffer" id="bufferBar"></div>
+                  <input type="range" class="video-progress-slider" id="progressSlider" min="0" max="100" value="0" step="0.1">
+                </div>
+                <div class="video-controls-row">
+                  <div class="controls-left">
+                    <button class="control-btn" id="playPauseBtn" onclick="togglePlay()">
+                      <i class="fas fa-play"></i>
+                    </button>
+                    <button class="control-btn skip-btn-small" onclick="skipTime(-10)" title="Lùi 10s">
+                      <svg viewBox="0 0 24 24" fill="none" class="skip-svg" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg><span class="skip-label">10</span>
+                    </button>
+                    <button class="control-btn skip-btn-small" onclick="skipTime(10)" title="Tới 10s">
+                      <svg viewBox="0 0 24 24" fill="none" class="skip-svg" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg><span class="skip-label">10</span>
+                    </button>
+                    <div class="volume-container">
+                      <button class="control-btn" id="volumeBtn" onclick="toggleMute()">
+                        <i class="fas fa-volume-up"></i>
+                      </button>
+                      <div class="volume-slider-wrapper">
+                        <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.05" value="1">
+                      </div>
+                    </div>
+                  </div>
+                  <div class="controls-right">
+                    <div class="settings-container cc-container">
+                      <button class="control-btn" id="ccBtn" onclick="toggleSubtitleMenu()" style="display:none;" title="Phụ đề / CC">
+                        <i class="fas fa-closed-captioning"></i>
+                      </button>
+                      <div class="subtitle-popup-menu" id="ccSubtitleMenu" style="display: none;">
+                        <div class="subtitle-menu-header">
+                          <span class="smt-title">Phụ Đề</span>
+                          <div class="smt-mode-switch">
+                            <button class="smt-mode-btn" id="smtBtnOn" onclick="setSubtitleMode('on')">Bật</button>
+                            <button class="smt-mode-btn" id="smtBtnOff" onclick="setSubtitleMode('off')">Tắt</button>
+                          </div>
+                        </div>
+                        <div class="subtitle-lang-list" id="ccLangList">
+                          <!-- JS render: <div class="smt-lang-item" onclick="...">Tiếng Việt <i class="fas fa-check"></i></div> -->
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- NÚT NEXT TẬP -->
+                    <button class="control-btn" id="ctrlNextEpBtn" onclick="forceNextEpisode()" title="Tập tiếp theo (Next)" style="display: none;">
+                      <i class="fas fa-step-forward"></i>
+                    </button>
+
+                    <div class="settings-container">
+                      <button class="control-btn" id="settingsBtn" onclick="toggleSettingsMenu()">
+                        <i class="fas fa-cog"></i>
+                      </button>
+                      <div class="settings-menu" id="settingsMenu">
+                        <div class="settings-item" onclick="showSubMenu('speed')">
+                          <span>Tốc độ</span>
+                          <span class="settings-value" id="currentSpeedVal">Chuẩn</span>
+                          <i class="fas fa-chevron-right"></i>
+                        </div>
+                        <div class="settings-item" id="qualitySettingsItem" onclick="showSubMenu('quality')" style="display:none;">
+                          <span>Chất lượng</span>
+                          <span class="settings-value" id="currentQualityVal">Tự động</span>
+                          <i class="fas fa-chevron-right"></i>
+                        </div>
+                        <div class="settings-item" onclick="showSubMenu('subtitleStyle')">
+                          <span>Tuỳ chỉnh phụ đề</span>
+                          <i class="fas fa-chevron-right"></i>
+                        </div>
+                      </div>
+                      <div class="settings-submenu" id="speedMenu">
+                        <div class="submenu-header" onclick="hideSubMenu()">
+                          <i class="fas fa-chevron-left"></i> Tốc độ phát
+                        </div>
+                        <div class="submenu-item" onclick="setSpeed(0.5)">0.5x</div>
+                        <div class="submenu-item" onclick="setSpeed(0.75)">0.75x</div>
+                        <div class="submenu-item active" onclick="setSpeed(1)">Chuẩn</div>
+                        <div class="submenu-item" onclick="setSpeed(1.25)">1.25x</div>
+                        <div class="submenu-item" onclick="setSpeed(1.5)">1.5x</div>
+                        <div class="submenu-item" onclick="setSpeed(2)">2x</div>
+                      </div>
+                      <div class="settings-submenu" id="qualityMenu">
+                        <div class="submenu-header" onclick="hideSubMenu()">
+                          <i class="fas fa-chevron-left"></i> Chất lượng video
+                        </div>
+                        <div class="submenu-item active" data-level="-1" onclick="setQuality(-1)">Tự động</div>
+                      </div>
+
+                      <!-- SUBMENU TUỲ CHỈNH PHỤ ĐỀ -->
+                      <div class="settings-submenu sub-style-menu" id="subtitleStyleMenu">
+                        <div class="submenu-header" onclick="hideSubMenu()">
+                          <i class="fas fa-chevron-left"></i> Tuỳ chỉnh phụ đề
+                        </div>
+                        <!-- Màu chữ -->
+                        <div class="sub-style-row" onclick="showSubMenu('subColor')">
+                          <span>Màu chữ</span>
+                          <span class="sub-style-preview">
+                            <span class="sub-color-dot" id="subColorDot"></span>
+                            <span id="subColorLabel">Trắng</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                        <!-- Cỡ chữ -->
+                        <div class="sub-style-row" onclick="showSubMenu('subSize')">
+                          <span>Cỡ chữ</span>
+                          <span class="sub-style-preview">
+                            <span id="subSizeLabel">16pt</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                        <!-- Font chữ -->
+                        <div class="sub-style-row" onclick="showSubMenu('subFont')">
+                          <span>Font chữ</span>
+                          <span class="sub-style-preview">
+                            <span id="subFontLabel">Mặc định</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                        <!-- Viền chữ -->
+                        <div class="sub-style-row" onclick="showSubMenu('subOutline')">
+                          <span>Viền chữ</span>
+                          <span class="sub-style-preview">
+                            <span id="subOutlineLabel">Đổ bóng</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                        <!-- Màu nền -->
+                        <div class="sub-style-row" onclick="showSubMenu('subBg')">
+                          <span>Màu nền</span>
+                          <span class="sub-style-preview">
+                            <span class="sub-color-dot" id="subBgDot" style="background:#000"></span>
+                            <span id="subBgLabel">Đen</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                        <!-- Độ trong nền -->
+                        <div class="sub-style-row" onclick="showSubMenu('subBgOpacity')">
+                          <span>Độ trong nền</span>
+                          <span class="sub-style-preview">
+                            <span id="subBgOpacityLabel">0%</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                        <!-- Vị trí -->
+                        <div class="sub-style-row" onclick="showSubMenu('subPosition')">
+                          <span>Vị trí</span>
+                          <span class="sub-style-preview">
+                            <span id="subPositionLabel">Dưới</span>
+                            <i class="fas fa-chevron-right"></i>
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- CÁC SUBMENU CON CỦA TUỲ CHỈNH PHỤ ĐỀ -->
+                      <div class="settings-submenu" id="subColorMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Màu chữ
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('color','#ffffff','Trắng')"><span class="sub-color-dot" style="background:#fff"></span> Trắng</div>
+                        <div class="submenu-item" onclick="setSubStyle('color','#ffeb3b','Vàng')"><span class="sub-color-dot" style="background:#ffeb3b"></span> Vàng</div>
+                        <div class="submenu-item" onclick="setSubStyle('color','#00ffff','Cyan')"><span class="sub-color-dot" style="background:#00ffff"></span> Cyan</div>
+                        <div class="submenu-item" onclick="setSubStyle('color','#4caf50','Xanh lá')"><span class="sub-color-dot" style="background:#4caf50"></span> Xanh lá</div>
+                        <div class="submenu-item" onclick="setSubStyle('color','#ff5722','Cam')"><span class="sub-color-dot" style="background:#ff5722"></span> Cam</div>
+                      </div>
+                      <div class="settings-submenu" id="subSizeMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Cỡ chữ
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('fontSize','12pt','12pt')">12pt</div>
+                        <div class="submenu-item" onclick="setSubStyle('fontSize','14pt','14pt')">14pt</div>
+                        <div class="submenu-item" onclick="setSubStyle('fontSize','16pt','16pt')">16pt</div>
+                        <div class="submenu-item" onclick="setSubStyle('fontSize','20pt','20pt')">20pt</div>
+                        <div class="submenu-item" onclick="setSubStyle('fontSize','24pt','24pt')">24pt</div>
+                        <div class="submenu-item" onclick="setSubStyle('fontSize','28pt','28pt')">28pt</div>
+                      </div>
+                      <div class="settings-submenu" id="subFontMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Font chữ
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('fontFamily','inherit','Mặc định')">Mặc định</div>
+                        <div class="submenu-item" style="font-family:'Arial'" onclick="setSubStyle('fontFamily','Arial','Arial')">Arial</div>
+                        <div class="submenu-item" style="font-family:'Roboto'" onclick="setSubStyle('fontFamily','Roboto','Roboto')">Roboto</div>
+                        <div class="submenu-item" style="font-family:'Times New Roman'" onclick="setSubStyle('fontFamily','Times New Roman','Times New Roman')">Times New Roman</div>
+                        <div class="submenu-item" style="font-family:'Courier New'" onclick="setSubStyle('fontFamily','Courier New','Courier New')">Courier New</div>
+                      </div>
+                      <div class="settings-submenu" id="subOutlineMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Viền chữ
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('outline','shadow','Đổ bóng')">Đổ bóng</div>
+                        <div class="submenu-item" onclick="setSubStyle('outline','outline','Viền đậm')">Viền đậm</div>
+                        <div class="submenu-item" onclick="setSubStyle('outline','raised','Nổi')">Nổi</div>
+                        <div class="submenu-item" onclick="setSubStyle('outline','none','Không')">Không</div>
+                      </div>
+                      <div class="settings-submenu" id="subBgMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Màu nền
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('bgColor','#000000','Đen')"><span class="sub-color-dot" style="background:#000"></span> Đen</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgColor','#ffffff','Trắng')"><span class="sub-color-dot" style="background:#fff;border:1px solid #555"></span> Trắng</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgColor','#1a237e','Xanh Navy')"><span class="sub-color-dot" style="background:#1a237e"></span> Xanh Navy</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgColor','transparent','Trong suốt')"><span class="sub-color-dot" style="background:transparent;border:1px dashed #555"></span> Trong suốt</div>
+                      </div>
+                      <div class="settings-submenu" id="subBgOpacityMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Độ trong nền
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('bgOpacity','0','0%')">0%</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgOpacity','0.25','25%')">25%</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgOpacity','0.5','50%')">50%</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgOpacity','0.75','75%')">75%</div>
+                        <div class="submenu-item" onclick="setSubStyle('bgOpacity','1','100%')">100%</div>
+                      </div>
+                      <div class="settings-submenu" id="subPositionMenu">
+                        <div class="submenu-header" onclick="showSubMenu('subtitleStyle')">
+                          <i class="fas fa-chevron-left"></i> Vị trí phụ đề
+                        </div>
+                        <div class="submenu-item" onclick="setSubStyle('position','bottom','Dưới')">Dưới</div>
+                        <div class="submenu-item" onclick="setSubStyle('position','middle','Giữa')">Giữa</div>
+                        <div class="submenu-item" onclick="setSubStyle('position','top','Trên')">Trên</div>
+                      </div>
+                    </div>
+                    <button class="control-btn" id="pipBtn" onclick="togglePiP()" title="Hình trong hình">
+                      <i class="fas fa-external-link-alt"></i>
+                    </button>
+                    <button class="control-btn" id="fullscreenBtn" onclick="toggleFullscreen()">
+                      <i class="fas fa-expand"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- NÚT KHÓA MÀN HÌNH - Nổi bên trái, chỉ hiện khi fullscreen -->
+              <button class="screen-lock-float" id="screenLockBtn" onclick="toggleScreenLock(); event.stopPropagation();" title="Khóa màn hình">
+                <i class="fas fa-lock-open"></i>
+              </button>
+
+              <!-- EPISODE PANEL (Slide-in từ phải khi bấm Danh sách tập) -->
+              <div class="player-episode-panel" id="playerEpisodePanel">
+                <div class="episode-panel-header">
+                  <h4>Danh sách tập</h4>
+                  <button class="episode-panel-close" onclick="toggleEpisodePanel()">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+                <div class="episode-panel-list" id="episodePanelList">
+                  <!-- JS sẽ render danh sách tập vào đây -->
+                </div>
+              </div>
+
+              
+              <!-- JW PLAYER MODALS -->
+              <div class="jw-modal" id="jwAboutModal" style="display: none;">
+                <div class="jw-modal-overlay" onclick="closeJwModals()"></div>
+                <div class="jw-modal-content jw-about-content">
+                  <div class="jw-about-col">
+                    <div class="jw-info-row"><strong>Title</strong> <span id="jwA_title">Unknown Title</span></div>
+                    <div class="jw-info-row"><strong>Media ID</strong> (none)</div>
+                    <div class="jw-info-row"><strong>Player ID</strong> KB5zFt7A</div>
+                    <div class="jw-info-row"><strong>Analytics ID</strong> GCCG</div>
+                    <div class="jw-info-row"><strong>Stream Type</strong> hls</div>
+                    <div class="jw-info-row"><strong>Viewport</strong> <span id="jwA_vp">1600x900</span></div>
+                    <div class="jw-info-row"><strong>Dropped Frames</strong> <span id="jwA_drop">2/941</span></div>
+                    <div class="jw-info-row"><strong>BW / Dowlink / Type</strong> <span id="jwA_bw">7.9 / 10 / 4g</span></div>
+                    <div class="jw-progress-bar"><div class="jw-progress-bar-fill jw-blue" id="jwA_bwFill" style="width: 100%"></div></div>
+                    <div class="jw-info-row" style="margin-top: 5px;"><strong>Buffer Health</strong> <span id="jwA_buf">25.07s</span></div>
+                    <div class="jw-progress-bar"><div class="jw-progress-bar-fill jw-blue" id="jwA_bufFill" style="width: 100%"></div></div>
+                  </div>
+                  <div class="jw-about-col">
+                    <div class="jw-info-row"><strong>Duration</strong> <span id="jwA_dur">01:35:26</span></div>
+                    <div class="jw-info-row"><strong>Client ID</strong> <span id="jwA_cid">134tfn91czag</span></div>
+                    <div class="jw-info-row"><strong>Feed ID</strong> (none)</div>
+                    <div class="jw-info-row"><strong>Stream Host</strong> s6.kkphimplayer6.com</div>
+                    <div class="jw-info-row"><strong>Provider</strong> hlsjs</div>
+                    <div class="jw-info-row"><strong>Resolution / Mode</strong> <span id="jwA_res">1920x800 / manual</span></div>
+                    <div class="jw-info-row"><strong>Version</strong> 8.38.3</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="jw-modal" id="jwShortcutsModal" style="display: none;">
+                <div class="jw-modal-overlay" onclick="closeJwModals()"></div>
+                <div class="jw-modal-content jw-sc-content">
+                  <div class="jw-sc-header">
+                    <strong>Keyboard Shortcuts</strong>
+                    <div class="jw-sc-toggle" onclick="this.classList.toggle('off')">
+                        <span class="jw-sc-text">Enabled</span>
+                        <div class="jw-sc-switch"></div>
+                    </div>
+                  </div>
+                  <div class="jw-sc-list">
+                    <div class="jw-sc-item"><span>Shortcuts Open/Close</span><div class="jw-sc-keys"><kbd>/ or ?</kbd></div></div>
+                    <div class="jw-sc-item"><span>Play/Pause</span><div class="jw-sc-keys"><kbd>SPACE</kbd></div></div>
+                    <div class="jw-sc-item"><span>Increase Volume</span><div class="jw-sc-keys"><kbd>&uarr;</kbd></div></div>
+                    <div class="jw-sc-item"><span>Decrease Volume</span><div class="jw-sc-keys"><kbd>&darr;</kbd></div></div>
+                    <div class="jw-sc-item"><span>Seek Forward</span><div class="jw-sc-keys"><kbd>&rarr;</kbd></div></div>
+                    <div class="jw-sc-item"><span>Seek Backward</span><div class="jw-sc-keys"><kbd>&larr;</kbd></div></div>
+                    <div class="jw-sc-item"><span>Captions On/Off</span><div class="jw-sc-keys"><kbd>c</kbd></div></div>
+                    <div class="jw-sc-item"><span>Fullscreen/Exit Fullscreen</span><div class="jw-sc-keys"><kbd>f</kbd></div></div>
+                    <div class="jw-sc-item"><span>Mute/Unmute</span><div class="jw-sc-keys"><kbd>m</kbd></div></div>
+                    <div class="jw-sc-item"><span>Decrease Caption Size</span><div class="jw-sc-keys"><kbd>-</kbd></div></div>
+                    <div class="jw-sc-item"><span>Increase Caption Size</span><div class="jw-sc-keys"><kbd>+ or =</kbd></div></div>
+                    <div class="jw-sc-item"><span>Seek %</span><div class="jw-sc-keys"><kbd>0-9</kbd></div></div>
+                  </div>
+                </div>
+              </div>
+              <!-- CUSTOM RIGHT CLICK MENU (JW PLAYER STYLE) -->
+              <div class="video-context-menu" id="videoContextMenu" style="display: none;">
+                <ul class="context-menu-list">
+                  <li onclick="ctxShowInfo()">Thông tin về video này</li>
+                  <li onclick="ctxShowShortcuts()">Phím Tắt</li>
+                  <li onclick="togglePiP()">Picture in Picture (PiP)</li>
+                  <li class="context-powered" onclick="window.open('https://jwplayer.com/','_blank')">
+                    <svg viewBox="0 0 24 24" fill="none" class="jw-logo-svg" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px; margin-right: 5px;">
+                       <polyline points="3 14 7 14 10 4 14 20 18 10 22 10"></polyline>
+                    </svg>
+                    Cung cấp bởi JW Player 8.46.2
+                  </li>
+                </ul>
+              </div>
+
+            </div> <!-- End video-container -->
+
+            <!-- REACTION SIDEBAR (Vertical Floating) - Outside video-container -->
+            <div class="reaction-sidebar hidden" id="reactionSidebar">
+              <span class="reaction-btn" onclick="if(window.sendReaction) { sendReaction('❤️'); event.stopPropagation(); }">❤️</span>
+              <span class="reaction-btn" onclick="if(window.sendReaction) { sendReaction('😂'); event.stopPropagation(); }">😂</span>
+              <span class="reaction-btn" onclick="if(window.sendReaction) { sendReaction('😮'); event.stopPropagation(); }">😮</span>
+              <span class="reaction-btn" onclick="if(window.sendReaction) { sendReaction('😢'); event.stopPropagation(); }">😢</span>
+              <span class="reaction-btn" onclick="if(window.sendReaction) { sendReaction('🔥'); event.stopPropagation(); }">🔥</span>
+              <span class="reaction-btn" onclick="if(window.sendReaction) { sendReaction('💩'); event.stopPropagation(); }">💩</span>
+            </div>
+          </div> <!-- End player-section -->
+
+          <!-- BOTTOM TOOLBAR -->
+          <div class="detail-toolbar">
+            <div class="toolbar-group">
+                <button class="btn-toolbar" id="btnLikeDetail" onclick="toggleFavorite()">
+                    <i class="far fa-heart"></i> Yêu thích
+                </button>
+                <button class="btn-toolbar" id="btnAddAlbum" onclick="openAlbumModal()">
+                    <i class="fas fa-plus"></i> Thêm vào
+                </button>
+            </div>
+
+            <div class="toolbar-group">
+                <div class="switch-item">
+                    <span>Chuyển tập</span>
+                    <span class="badge-switch on" id="swNextEpisode" onclick="toggleSwitch('swNextEpisode')">ON</span>
+                </div>
+                <div class="switch-item">
+                    <span>Rạp phim</span>
+                    <span class="badge-switch off" id="swCinemaMode" onclick="toggleSwitch('swCinemaMode')">OFF</span>
+                </div>
+                <div class="switch-item">
+                    <span>Native Player</span>
+                    <span class="badge-switch off" id="swAntiLe" onclick="toggleSwitch('swAntiLe')">OFF</span>
+                </div>
+                <button class="btn-toolbar" onclick="shareMovie()">
+                    <i class="fas fa-paper-plane"></i> Chia sẻ
+                </button>
+                <button class="btn-toolbar" onclick="startWatchParty()">
+                    <i class="fas fa-users"></i> Xem chung
+                </button>
+                <div class="switch-item">
+                    <span>Lạ đời</span>
+                    <span class="badge-switch off" id="swStrange" onclick="toggleSwitch('swStrange')">OFF</span>
+                </div>
+                <div class="switch-item">
+                    <span>Reaction</span>
+                    <span class="badge-switch off" id="swReaction" onclick="toggleSwitch('swReaction')">OFF</span>
+                </div>
+                <div class="switch-item">
+                    <span>Auto Server</span>
+                    <span class="badge-switch on" id="swAutoFallback" onclick="toggleSwitch('swAutoFallback')">ON</span>
+                </div>
+            </div>
+
+            <div class="toolbar-group">
+                <button class="btn-toolbar btn-report" onclick="reportError()">
+                    <i class="fas fa-flag"></i> Báo lỗi
+                </button>
+            </div>
+          </div>
+          
+          <!-- MOVIE INFO REDESIGN (ThiaPhim style) -->
+          <div class="movie-info-redesign container">
+            <div class="info-layout">
+                <!-- Poster bên trái -->
+                <div class="info-poster-wrapper">
+                    <img id="detailPoster" src="" alt="Poster" class="info-poster">
+                    <div class="info-price-tag hidden" id="purchasePriceTag">
+                        <i class="fab fa-ethereum"></i> <span id="croPriceValue">...</span> CRO
+                    </div>
+                </div>
+
+                <!-- Nội dung thông tin bên phải -->
+                <div class="info-content-wrapper">
+                    <h1 class="info-title" id="detailTitle">...</h1>
+                    <p id="detailOriginTitle" style="font-size: 1.05em; color: #555; margin: 0 0 10px; font-style: italic; display: none; font-weight: 500;"></p>
+                    <div class="info-meta">
+                        <span class="meta-item year" id="detailYear">...</span>
+                        <span class="meta-item country" id="detailCountry">...</span>
+                        <span class="meta-item rating"><i class="fas fa-star text-warning"></i> <span id="detailRating">...</span></span>
+                        <span class="meta-item views"><i class="fas fa-eye"></i> <span id="detailViews">...</span></span>
+                    </div>
+                    
+                    <div class="info-categories" id="detailCategory">...</div>
+
+                    <div class="info-description-box">
+                        <p class="info-description-short" id="detailDescription">...</p>
+                        <a href="#" class="info-link" onclick="event.preventDefault(); viewMovieIntro(currentMovieId)">Thông tin phim <i class="fas fa-chevron-right"></i></a>
+                    </div>
+
+                    <!-- Nút thanh toán (Chỉ hiện khi phim trả phí) -->
+                    <div class="info-payment-action hidden" id="paymentActionBox">
+                        <button class="btn-buy-ticket" id="buyTicketBtn" onclick="buyTicket()">
+                            <i class="fas fa-ticket-alt"></i> Mua Vé Xem Phim (<span id="btnCroPrice">...</span> CRO)
+                        </button>
+                        <p class="payment-hint"><i class="fas fa-info-circle"></i> Thanh toán bằng ví MetaMask qua mạng Cronos</p>
+                    </div>
+                </div>
+                
+                <!-- Unified Controls Row (New) -->
+                <div id="movieExtraControlsRow" style="display: none;">
+                    <div class="movie-extra-controls-inner">
+                        <!-- Part Selector Dropdown -->
+                        <div class="part-selector-dropdown" id="partSelector">
+                            <div class="part-selector-trigger" onclick="togglePartDropdown(event)">
+                                <i class="fas fa-bars"></i>
+                                <span id="currentPartName">Phần 1</span>
+                                <i class="fas fa-chevron-down" id="partChevron" style="font-size: 10px; margin-left: 5px; display: none;"></i>
+                            </div>
+                            <div class="part-dropdown-menu" id="partDropdownMenu">
+                                <!-- JS sẽ render các phần vào đây -->
+                            </div>
+                        </div>
+
+                        <div class="divider-vertical"></div>
+
+                        <!-- Servers List (hiện trước) -->
+                        <div class="version-list-modern" id="serverListModern">
+                            <!-- JS sẽ render các server (KKPhim, OPhim) vào đây -->
+                        </div>
+
+                        <div class="divider-vertical" id="serverDivider" style="display: none;"></div>
+
+                        <!-- Versions List (hiện sau, lọc theo server đang chọn) -->
+                        <div class="version-list-modern" id="versionListModern">
+                            <!-- JS sẽ render các bản (Vietsub, Thuyết minh) vào đây -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Episodes Section (Moved up) -->
+                <div id="episodesSectionWrapper">
+                    <div class="episodes-section" id="episodesSection">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3 class="section-title" style="margin: 0;">Danh Sách Tập</h3>
+                            <!-- Pagination Dropdown -->
+                            <select id="episodePageSelect" class="form-select bg-dark text-white border-secondary" style="width: auto; max-width: 200px; display: none;" onchange="changeEpisodePage(this.value)">
+                                <!-- Options generated by JS -->
+                            </select>
+                        </div>
+                        
+                        <div class="episodes-list" id="episodesList">
+                        <!-- Episodes sẽ được load động -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- CỘT 3: Actor Sidebar MỚI -->
+                <div class="detail-actor-sidebar">
+                  <h4 class="sidebar-title"><i class="fas fa-users"></i> Diễn viên</h4>
+                  <div class="sidebar-actor-grid" id="detailActorGrid">
+                    <!-- JS sẽ render danh sách diễn viên vào đây -->
+                  </div>
+                </div>
+            </div>
+          </div>
+
+          <!-- Recommended Movies (New) -->
+          <div class="container" id="recommendedMoviesContainer" style="display: none;">
+              <h4 class="text-white mb-2" style="font-size: 1rem; opacity: 0.8;">Đề xuất cho bạn:</h4>
+              <div id="recommendedMoviesList" style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px;"></div>
+          </div>
+
+          <!-- Main Content + Actor Sidebar Grid -->
+          <div class="detail-main-grid container">
+            <!-- CỘT TRÁI: Episodes + Comments -->
+            <div class="detail-main-col">
+              <!-- Comments Section moved episodes out of here -->
+
+              <!-- Comments Section -->
+              <div class="comments-section">
+                <h3 class="section-title">Bình Luận & Đánh Giá</h3>
+
+                <!-- Comment Form -->
+                <div class="comment-form" id="commentForm">
+                  <div class="rating-input">
+                    <label>Đánh giá của bạn:</label>
+                    <div class="rating-stars" id="ratingStars">
+                      <!-- Stars sẽ được tạo bằng JS -->
+                    </div>
+                    <span class="rating-value" id="ratingValue">0/5</span>
+                  </div>
+                  <div class="form-group">
+                    <textarea
+                      class="form-textarea"
+                      id="commentContent"
+                      placeholder="Viết bình luận của bạn..."
+                    ></textarea>
+                  </div>
+                  <button class="btn btn-primary" onclick="submitComment()">
+                    <i class="fas fa-paper-plane"></i> Gửi Bình Luận
+                  </button>
+                </div>
+
+                <!-- Comments List -->
+                <div class="comments-list" id="commentsList">
+                  <!-- Comments sẽ được load từ Firestore -->
+                </div>
+              </div>
+            </div>
+
+            <!-- CỘT PHẢI: Actor Sidebar -->
+            <!-- The detail-actor-sidebar was moved to info-layout -->
+          </div>
+      </div>
+      <div id="admin-container"></div>
+    </main>
+
+    <!-- ============================================
+         FOOTER
+         ============================================ -->
+    <footer class="footer" id="footer">
+      <div class="footer-content">
+        <div class="footer-section">
+          <h4><i class="fas fa-film"></i> Trạm Phim</h4>
+          <p class="text-muted">
+            Nền tảng xem phim trực tuyến — Xem chung cùng bạn bè, khám phá
+            cộng đồng yêu phim.
+          </p>
+          <div class="social-links">
+            <a href="javascript:void(0)"><i class="fab fa-facebook-f"></i></a>
+            <a href="javascript:void(0)"><i class="fab fa-telegram-plane"></i></a>
+            <a href="javascript:void(0)"><i class="fab fa-discord"></i></a>
+          </div>
+        </div>
+
+        <div class="footer-section">
+          <h4>Khám Phá</h4>
+          <ul>
+            <li><a href="javascript:void(0)" onclick="showPage('movies')">Kho Phim</a></li>
+            <li><a href="javascript:void(0)" onclick="showPage('categories')">Thể Loại</a></li>
+            <li><a href="javascript:void(0)" onclick="showPage('upgrade')">Gói VIP</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-section">
+          <h4>Hỗ Trợ</h4>
+          <ul>
+            <li><a href="javascript:void(0)" onclick="showPage('terms')">Điều khoản</a></li>
+            <li><a href="javascript:void(0)" onclick="showPage('privacy')">Bảo mật</a></li>
+            <li><a href="javascript:void(0)" onclick="showPage('contact')">Liên hệ Admin</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-section stats-box">
+          <h4><i class="fas fa-chart-line"></i> Thống Kê</h4>
+
+          <div class="live-stat-item">
+            <span class="stat-label"
+              ><i class="fas fa-users"></i> Đang Online:</span
+            >
+            <span class="stat-value highlight" id="statOnline">--</span>
+          </div>
+
+          <div class="live-stat-item">
+            <span class="stat-label"
+              ><i class="fas fa-globe"></i> Tổng truy cập:</span
+            >
+            <span class="stat-value" id="statVisits">--</span>
+          </div>
+
+          <div class="live-stat-item">
+            <span class="stat-label"
+              ><i class="fas fa-clock"></i> TG trung bình:</span
+            >
+            <span class="stat-value" id="statTime">--</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <p>&copy; 2026 Trạm Phim. All rights reserved.</p>
+      </div>
+
+      <!-- Watermark Background Logo (Nét mảnh, chìm trong hình nền footer) -->
+      <style>
+        /* Giảm chiều cao dư thừa của Footer */
+        .footer { position: relative; overflow: hidden; padding-top: 40px !important; }
+        .footer-content { padding-bottom: 25px !important; margin-bottom: 0 !important; }
+        .footer-bottom { padding: 15px 0 !important; border-top: none !important; }
+
+        .footer-watermark-logo {
+          position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+          z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center;
+          opacity: 1; 
+        }
+        .bg-watermark-train { font-size: 440px; -webkit-text-stroke: 1.5px rgba(255,255,255,0.06); -webkit-text-fill-color: transparent !important; color: transparent !important; }
+        
+        .bg-watermark-play { 
+          position: absolute; font-size: 105px; top: 43%; left: 50%; transform: translate(-50%, -50%);
+          -webkit-text-stroke: 1.5px rgba(255,255,255,0.06); 
+          -webkit-text-fill-color: var(--bg-secondary) !important; /* Dùng nền thứ cấp che đi bụng bị rỗng */
+          color: var(--bg-secondary) !important;
+        }
+
+        [data-theme="light"] .bg-watermark-train { -webkit-text-stroke-color: rgba(0,0,0,0.18); }
+        [data-theme="light"] .bg-watermark-play { 
+            -webkit-text-stroke-color: rgba(0,0,0,0.18);
+            -webkit-text-fill-color: var(--bg-primary) !important; 
+            color: var(--bg-primary) !important;
+        }
+        
+        /* Chỉnh z-index các phần tử footer lướt lên trên khối nền */
+        .footer-content, .footer-bottom { position: relative; z-index: 2; }
+      </style>
+      <div class="footer-watermark-logo">
+        <i class="fas fa-subway bg-watermark-train"></i>
+        <i class="fas fa-play bg-watermark-play"></i>
+      </div>
+    </footer>
+    
+    <!-- MODAL: CUỘC GỌI ĐẾN (INCOMING CALL) - Redesign v2.0 -->
+    <div id="incomingCallModal" class="comm-modal incoming-call-modal" style="display: none;">
+        <div class="comm-modal-content text-center call-modal-content">
+            <!-- Hiệu ứng nền -->
+            <div class="call-bg-glow"></div>
+            
+            <!-- Avatar với ring wave 3 lớp -->
+            <div class="call-avatar-wrapper">
+                <img src="https://ui-avatars.com/api/?name=User" id="incomingCallAvatar" alt="Caller">
+                <div class="call-ring-wave"></div>
+                <div class="call-ring-wave"></div>
+                <div class="call-ring-wave"></div>
+            </div>
+
+            <!-- Thông tin người gọi -->
+            <div class="call-caller-info">
+                <h3 id="incomingCallName">Tên người gọi</h3>
+                <p id="incomingCallDesc"><i class="fas fa-phone-volume call-phone-shake"></i> Cuộc gọi đến...</p>
+            </div>
+
+            <!-- Nút chấp nhận / từ chối kiểu iOS -->
+            <div class="call-actions-group">
+                <div class="call-action-item">
+                    <button class="btn-call-decline" onclick="declineCall()"><i class="fas fa-phone-slash"></i></button>
+                    <span class="call-action-label">Từ chối</span>
+                </div>
+                <div class="call-action-item">
+                    <button class="btn-call-accept" onclick="acceptCall()"><i class="fas fa-phone"></i></button>
+                    <span class="call-action-label">Chấp nhận</span>
+                </div>
+            </div>
+        </div>
+    </div>
+  
+    <!-- CỬA SỔ PEERJS CALL (PICTURE-IN-PICTURE) - Redesign v2.0 -->
+    <div id="activeCallWindow" class="active-call-window" style="display: none;">
+        <!-- Biểu tượng khi thu nhỏ: icon + timer + nút mở rộng -->
+        <div class="call-minimized-icon">
+            <span class="call-mini-pulse"></span>
+            <i class="fas fa-phone-alt call-mini-phone"></i>
+            <span class="call-mini-timer" id="callTimerDisplay">00:00</span>
+            <button class="call-mini-expand" onclick="toggleMinimizeCall()" title="Mở rộng"><i class="fas fa-expand-alt"></i></button>
+        </div>
+
+        <!-- Header với gradient + trạng thái -->
+        <div class="call-window-header" id="activeCallHeader">
+            <div class="call-header-left">
+                <span class="call-status-dot"></span>
+                <span id="activeCallStatus">Đang gọi...</span>
+            </div>
+            <button class="btn-minimize-call" onclick="toggleMinimizeCall()"><i class="fas fa-compress-alt"></i></button>
+        </div>
+
+        <!-- Video body -->
+        <div class="call-window-body">
+            <div class="call-video-container">
+                <video id="remoteVideo" class="call-video remote-video" autoplay playsinline></video>
+                <video id="localVideo" class="call-video local-video" autoplay playsinline muted></video>
+                
+                <!-- Placeholder khi chỉ gọi Audio hoặc khi tắt cam -->
+                <div id="audioCallPlaceholder" class="audio-call-placeholder" style="display: none;">
+                    <img src="https://ui-avatars.com/api/?name=User" id="activeCallAvatar" alt="Avatar">
+                    <div class="audio-wave-animation">
+                        <span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls tách riêng bên dưới -->
+        <div class="call-window-controls">
+            <button id="btnToggleMic" class="call-ctrl-btn" onclick="toggleCallMic()" title="Tắt/Bật Mic"><i class="fas fa-microphone"></i></button>
+            <button id="btnToggleCam" class="call-ctrl-btn" onclick="toggleCallCam()" title="Tắt/Bật Camera"><i class="fas fa-video"></i></button>
+            <button class="call-ctrl-btn btn-end-call" onclick="endCall()" title="Kết thúc cuộc gọi"><i class="fas fa-phone-slash"></i></button>
+        </div>
+    </div>
+    
+    <div id="modals-container"></div>
+
+    <!-- PeerJS for WebRTC -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js" defer></script>
+    <!-- ============================================
+         SCRIPTS
+
+         
+         ============================================ -->
+    <!-- Supabase SDK -->
+    <!-- Ethers.js for Web3 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" defer></script>
+    <!-- Web3 Config: Kết nối ví MetaMask / Cronos -->
+    <script src="js/web3-config.js" defer></script>
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Popup thông báo toàn site (ẩn mặc định, JS sẽ hiện 1 lần/ngày) -->
+    <div class="site-popup-overlay" id="sitePopupOverlay" style="display:none;" onclick="if(event.target===this) closeSitePopup()">
+      <div class="site-popup-card" id="sitePopupCard">
+        <button class="site-popup-close" onclick="closeSitePopup()"><i class="fas fa-times"></i></button>
+        <img class="site-popup-image" id="sitePopupImage" src="" alt="" style="display:none;">
+        <div class="site-popup-top">
+          <h2 id="sitePopupTitle" class="site-popup-title"></h2>
+        </div>
+        <div class="site-popup-middle">
+          <p id="sitePopupContent" class="site-popup-text"></p>
+        </div>
+        <div class="site-popup-bottom">
+          <a id="sitePopupBtn" class="site-popup-btn" href="#">Khám phá ngay</a>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/supabase-config.js?v=2"></script>
+    <script src="js/site-frontend.js?v=1"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="js/globals.js?v=2"></script>
+    <script src="js/utils.js?v=6"></script>
+    <script src="js/data.js?v=3"></script>
+
+    <script src="js/auth.js?v=5"></script>
+    <script src="js/notifications.js?v=4"></script>
+    <script src="js/user.js?v=9"></script>
+    <script src="js/home.js?v=4"></script>
+    <script src="js/detail.js?v=5"></script>
+    <!-- Chart.js, Admin, Community, Watch Party → LAZY LOAD trong utils.js khi cần -->
+    <script src="js/contact-admin.js?v=1"></script>
+
+    <script src="js/upgrade.js?v=2"></script>
+    <script src="js/tmdb.js?v=1"></script>
+    <script src="js/intro.js?v=2"></script>
+    <!-- watch-party.js → LAZY LOAD khi vào Xem Chung -->
+    <!-- community.js → LAZY LOAD khi vào Cộng Đồng -->
+    <script src="js/series-movies.js?v=3"></script>
+    <script src="js/single-movies.js?v=3"></script>
+    <script src="js/banner-slider.js?v=2"></script>
+    <script src="js/actors.js?v=2"></script>
+    <script src="js/main.js?v=2"></script>
+    <script src="js/loader.js?v=2"></script>
+    <!-- admin.js, admin-api-explorer.js, admin-api-import.js → LAZY LOAD khi vào Admin -->
+    
+    <script>
+      // Buộc trình duyệt phải dùng hàm này (Ghi đè mọi hàm cũ bị lỗi)
+      window.showAdminPanel = function (panelName) {
+        console.log("🖱️ Đang chuyển sang tab:", panelName);
+
+        // 1. Ẩn tất cả các trang con
+        var allPanels = document.querySelectorAll(".admin-panel");
+        allPanels.forEach(function (panel) {
+          panel.classList.remove("active");
+        });
+
+        // 2. Hiện trang cần chọn
+        var targetId = panelName + "Panel"; // Ví dụ: dashboardPanel
+        var targetPanel = document.getElementById(targetId);
+
+        if (targetPanel) {
+          targetPanel.classList.add("active");
+          
+          // Thêm logic load cho Kho Avatar
+          if (panelName === 'avatarLibrary' && typeof adminLoadAvatarLibrary === 'function') {
+            adminLoadAvatarLibrary();
+          }
+
+          // [NEW] Khởi tạo bảng chọn phim cho Quản lý Tập
+          if (panelName === 'episodes' && typeof goBackToMovieSelection === 'function') {
+            goBackToMovieSelection(); 
+          }
+        } else {
+          console.error("❌ Không tìm thấy trang có ID là: " + targetId);
+          // Nếu không tìm thấy panel, thử hiện thông báo để kiểm tra
+          // alert("Lỗi: Không tìm thấy giao diện " + panelName);
+        }
+
+        // 3. Đổi màu menu bên trái (Active)
+        var allNavItems = document.querySelectorAll(".admin-nav-item");
+        allNavItems.forEach(function (item) {
+          item.classList.remove("active");
+          // Kiểm tra xem nút này có phải là nút vừa bấm không
+          if (
+            item.getAttribute("onclick") &&
+            item.getAttribute("onclick").includes(panelName)
+          ) {
+            item.classList.add("active");
+          }
+        });
+
+        // 4. [NEW] Tự động tải dữ liệu cho các tab cụ thể
+        if (panelName === "errorReports" && typeof loadErrorReports === "function") {
+            loadErrorReports();
+        }
+        if (panelName === "watchRooms" && typeof loadAdminWatchRooms === "function") {
+            loadAdminWatchRooms();
+        }
+        // Re-render biểu đồ khi quay lại Dashboard (fix kích thước canvas)
+        if (panelName === "dashboard" && typeof loadAdminStats === "function") {
+            setTimeout(function() { loadAdminStats(); }, 100);
+        }
+        // Load cài đặt hiệu ứng khi mở tab Giao diện & Hiệu ứng
+        if (panelName === "visualEffects" && typeof loadVisualEffectsSettings === "function") {
+            loadVisualEffectsSettings();
+            // Load cài đặt giao diện (màu, font, theme)
+            if (typeof loadAppearanceSettings === "function") loadAppearanceSettings();
+            // Load cài đặt Marquee + Popup
+            if (typeof loadMarqueeSettings === "function") loadMarqueeSettings();
+            if (typeof loadPopupSettings === "function") loadPopupSettings();
+        }
+        // Load yêu cầu liên hệ khi mở tab
+        if (panelName === "contactRequests") {
+            loadContactRequests();
+        }
+        // Khởi tạo API Explorer khi mở tab Quản lý API (render nút nguồn, năm, loại)
+        // [FIX] Nếu script chưa lazy load xong → chờ và retry thay vì bỏ qua
+        if (panelName === "apiExplorer") {
+            if (typeof initApiExplorer === "function") {
+                initApiExplorer();
+            } else {
+                // Script chưa load xong → hiện loading và retry
+                var _explorerPanel = document.getElementById('apiExplorerPanel');
+                var _toolbar = _explorerPanel ? _explorerPanel.querySelector('.api-explorer-toolbar') : null;
+                if (_toolbar) {
+                    _toolbar.style.opacity = '0.4';
+                    _toolbar.style.pointerEvents = 'none';
+                }
+                var _retryCount = 0;
+                var _maxRetry = 26; // ~8 giây
+                var _retryTimer = setInterval(function() {
+                    _retryCount++;
+                    if (typeof initApiExplorer === "function") {
+                        clearInterval(_retryTimer);
+                        if (_toolbar) {
+                            _toolbar.style.opacity = '1';
+                            _toolbar.style.pointerEvents = 'auto';
+                        }
+                        initApiExplorer();
+                        console.log("✅ [API Explorer] Script đã sẵn sàng sau " + (_retryCount * 300) + "ms");
+                    } else if (_retryCount >= _maxRetry) {
+                        clearInterval(_retryTimer);
+                        if (_toolbar) {
+                            _toolbar.style.opacity = '1';
+                            _toolbar.style.pointerEvents = 'auto';
+                        }
+                        console.warn("⚠️ [API Explorer] Script không tải được sau 8s. Hãy thử reload trang.");
+                        if (typeof showNotification === 'function') {
+                            showNotification('Script API Explorer chưa tải xong. Vui lòng chờ hoặc reload trang (F5).', 'warning');
+                        }
+                    }
+                }, 300);
+            }
+        }
+
+        // 4. [NEW] Tự động đóng menu trên Mobile sau khi chọn
+        if (window.innerWidth <= 768) {
+             var sidebar = document.querySelector(".admin-sidebar");
+             if (sidebar && sidebar.classList.contains("active")) {
+                 toggleSidebar(); // Gọi hàm đóng menu
+             }
+        }
+      };
+    </script>
+    <script>
+      // Hàm load file HTML bên ngoài vào trang chính
+      async function loadUpgradePage() {
+        try {
+          // Tải file upgrade.html
+          const response = await fetch("./components/upgrade.html");
+          const html = await response.text();
+
+          // Chèn vào cuối thẻ <main>
+          document
+            .getElementById("mainContent")
+            .insertAdjacentHTML("beforeend", html);
+          console.log("✅ Đã tải giao diện Upgrade thành công!");
+        } catch (error) {
+          console.error("Lỗi tải trang Upgrade:", error);
+        }
+      }
+
+      // Gọi hàm chạy ngay khi web mở
+      loadUpgradePage();
+
+      // Load trang Chính sách Bảo mật
+      async function loadPrivacyPage() {
+        try {
+          const response = await fetch("./components/privacy.html");
+          const html = await response.text();
+          document.getElementById("mainContent").insertAdjacentHTML("beforeend", html);
+          console.log("✅ Đã tải trang Chính sách Bảo mật!");
+        } catch (error) {
+          console.error("Lỗi tải trang Privacy:", error);
+        }
+      }
+      loadPrivacyPage();
+
+      // Load trang Điều khoản sử dụng
+      async function loadTermsPage() {
+        try {
+          const response = await fetch("./components/terms.html");
+          const html = await response.text();
+          document.getElementById("mainContent").insertAdjacentHTML("beforeend", html);
+          console.log("✅ Đã tải trang Điều khoản!");
+        } catch (error) {
+          console.error("Lỗi tải trang Terms:", error);
+        }
+      }
+      loadTermsPage();
+
+      // Load trang Liên hệ Admin
+      async function loadContactPage() {
+        try {
+          const response = await fetch("./components/contact.html");
+          const html = await response.text();
+          document.getElementById("mainContent").insertAdjacentHTML("beforeend", html);
+          console.log("✅ Đã tải trang Liên hệ!");
+          // Kiểm tra user có yêu cầu pending không → ẩn form
+          if (typeof checkPendingContact === 'function') checkPendingContact();
+        } catch (error) {
+          console.error("Lỗi tải trang Contact:", error);
+        }
+      }
+      loadContactPage();
+    </script>
+    
+    <!-- Resume Watch Modal -->
+    <div class="modal-overlay" id="resumeWatchModal">
+        <div class="modal resume-watch-modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-play-circle"></i> Tiếp Tục Xem Phim</h3>
+            </div>
+            <div class="modal-body">
+                <p id="resumeWatchMessage">Bạn có muốn tiếp tục xem phim từ vị trí đã dừng không?</p>
+                <div class="resume-info">
+                    <span class="resume-time-label">Thời gian đã xem:</span>
+                    <span class="resume-time-value" id="resumeWatchTime">--:--</span>
+                </div>
+                <div class="resume-info">
+                    <span class="resume-progress-label">Tiến trình:</span>
+                    <span class="resume-progress-value" id="resumeWatchPercent">0%</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="resumeFromStartBtn" onclick="handleResumeChoice(false)">
+                    <i class="fas fa-redo"></i> Xem Từ Đầu
+                </button>
+                <button class="btn btn-primary" id="resumeContinueBtn" onclick="handleResumeChoice(true)">
+                    <i class="fas fa-play"></i> Tiếp Tục
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mini Player Container -->
+    <div id="miniPlayerContainer" class="mini-player-container hidden">
+      <div class="mini-player-header">
+        <marquee class="mini-player-title" id="miniPlayerTitle" scrollamount="3">Đang phát...</marquee>
+        <div class="mini-player-actions">
+          <button class="btn-mini-action" id="btnExpandMiniPlayer" onclick="expandMiniPlayer()" title="Trở lại trang xem phim"><i class="fas fa-expand"></i></button>
+          <button class="btn-mini-action" id="btnCloseMiniPlayer" onclick="closeMiniPlayer()" title="Đóng (Dừng phát)"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
+      <div class="mini-player-video-wrapper" id="miniPlayerVideoWrapper">
+        <!-- Video element sẽ được move vào đây bằng JS -->
+        <div class="mini-player-overlay">
+          <div class="mini-player-controls-center">
+            <button class="btn-mini-control" onclick="skipTime(-10)" title="Lùi 10s">
+              <svg viewBox="0 0 24 24" fill="none" class="skip-svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;"><polyline points="11 17 6 12 11 7"></polyline><polyline points="18 17 13 12 18 7"></polyline></svg>
+            </button>
+            <button class="btn-mini-play-large" id="btnMiniPlayCenter" onclick="togglePlay()"><i class="fas fa-pause"></i></button>
+            <button class="btn-mini-control" onclick="skipTime(10)" title="Tiến 10s">
+              <svg viewBox="0 0 24 24" fill="none" class="skip-svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;"><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></svg>
+            </button>
+          </div>
+          <div class="mini-player-progress-container" id="miniPlayerProgressContainer">
+            <div class="mini-player-progress-bar" id="miniPlayerProgressBar"></div>
+            <div class="mini-player-time-info">
+              <span id="miniPlayerCurrentTime">00:00</span> / <span id="miniPlayerDuration">00:00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mini-player-resizer" id="miniPlayerResizer"></div>
+    </div>
+
+    <!-- Back to Top Button -->
+    <button id="scrollTopBtn" class="scroll-top-btn" onclick="scrollToTop()">
+      <i class="fas fa-arrow-up"></i>
+      <span>ĐẦU TRANG</span>
+    </button>
+    <!-- admin-api-import.js → LAZY LOAD cùng admin.js -->
+  </body>
+</html>

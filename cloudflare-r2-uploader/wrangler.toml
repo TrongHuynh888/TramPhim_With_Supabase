@@ -1,0 +1,12 @@
+name = "r2-uploader"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# Gắn kết R2 Bucket vào Worker
+[[r2_buckets]]
+binding = "MY_BUCKET"
+bucket_name = "tramphim-assets"
+
+# Biến môi trường - URL công khai của R2 bucket
+[vars]
+PUBLIC_URL = "https://pub-3a15ea4c0ace4ecc92d9907088499410.r2.dev"

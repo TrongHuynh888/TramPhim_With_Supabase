@@ -1,0 +1,47 @@
+name: iOS Build (IPA)
+
+on:
+  push:
+    branches: [ "build-ipa" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: 🏗 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: TramPhim-RN/package-lock.json
+
+      - name: 🏗 Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📦 Install dependencies
+        working-directory: TramPhim-RN
+        run: npm install
+
+      - name: 🔨 Build IPA (Local)
+        working-directory: TramPhim-RN
+        run: |
+          # Lưu ý: Build IPA yêu cầu Apple Certificate và Provisioning Profile.
+          # Nếu bạn đã cấu hình Expo, lệnh này sẽ tự động lấy credentials từ Expo hoặc sử dụng Secrets.
+          # Để build không cần credentials (chỉ test), hãy dùng profile simulator.
+          npx eas build --platform ios --profile preview --local --non-interactive --output=./build.ipa
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📂 Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tramphim-ios-ipa
+          path: TramPhim-RN/build.ipa

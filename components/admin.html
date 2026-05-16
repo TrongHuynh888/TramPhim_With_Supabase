@@ -1,0 +1,3294 @@
+<!-- ADMIN PAGE -->
+<div id="adminPage" class="page">
+  <div class="admin-layout">
+    <!-- Admin Sidebar -->
+    <aside class="admin-sidebar" id="adminSidebar">
+      <nav class="admin-nav">
+        <div
+          class="admin-nav-item active"
+          data-panel="dashboard"
+          onclick="showAdminPanel('dashboard')"
+        >
+          <i class="fas fa-chart-line"></i>
+          <span>Dashboard</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="movies"
+          onclick="showAdminPanel('movies')"
+        >
+          <i class="fas fa-film"></i>
+          <span>Quản lý Phim</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="episodes"
+          onclick="showAdminPanel('episodes')"
+        >
+          <i class="fas fa-list-ol"></i>
+          <span>Quản lý Tập</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="trailers"
+          onclick="showAdminPanel('trailers'); if(typeof loadAdminTrailers === 'function') loadAdminTrailers(1);"
+        >
+          <i class="fas fa-video" style="color: #ff4757;"></i>
+          <span>Quản lý Trailer</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="categories"
+          onclick="showAdminPanel('categories')"
+        >
+          <i class="fas fa-tags"></i>
+          <span>Thể loại</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="countries"
+          onclick="showAdminPanel('countries')"
+        >
+          <i class="fas fa-globe"></i>
+          <span>Quốc gia</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="actors"
+          onclick="showAdminPanel('actors')"
+        >
+          <i class="fas fa-user-tie"></i>
+          <span>Diễn viên</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="users"
+          onclick="showAdminPanel('users')"
+        >
+          <i class="fas fa-users"></i>
+          <span>Người dùng</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="comments"
+          onclick="showAdminPanel('comments')"
+        >
+          <i class="fas fa-comments"></i>
+          <span>Bình luận</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="transactions"
+          onclick="showAdminPanel('transactions')"
+        >
+          <i class="fas fa-exchange-alt"></i>
+          <span>Giao dịch</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="notifications"
+          onclick="showAdminPanel('notifications')"
+        >
+          <i class="fas fa-bell" style="color: #4db8ff;"></i>
+          <span>Thông báo</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          id="adminNavVipRequests"
+          data-panel="vipRequests"
+          onclick="showAdminPanel('vipRequests')"
+        >
+          <i class="fas fa-star" style="color: var(--warning-color, #ffc107);"></i>
+          <span>Yêu Cầu VIP</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="errorReports"
+          onclick="showAdminPanel('errorReports')"
+        >
+          <i class="fas fa-exclamation-triangle" style="color: #ff6b6b;"></i>
+          <span>Báo Lỗi</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="avatarLibrary"
+          onclick="showAdminPanel('avatarLibrary')"
+        >
+          <i class="fas fa-images" style="color: #fcd535;"></i>
+          <span>Kho Avatar</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="watchRooms"
+          onclick="showAdminPanel('watchRooms')"
+        >
+          <i class="fas fa-users-viewfinder" style="color: #ff9ff3;"></i>
+          <span>Quản lý Phòng</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="visualEffects"
+          onclick="showAdminPanel('visualEffects')"
+        >
+          <i class="fas fa-magic" style="color: #a78bfa;"></i>
+          <span>Giao diện & Hiệu ứng</span>
+        </div>
+        <div
+          class="admin-nav-item"
+          data-panel="contactRequests"
+          onclick="showAdminPanel('contactRequests')"
+        >
+          <i class="fas fa-envelope-open-text" style="color: #34d399;"></i>
+          <span>Liên hệ <span id="contactBadge" class="admin-nav-badge" style="display:none;">0</span></span>
+        </div>
+        <!-- API Explorer Nav Item -->
+        <div
+          class="admin-nav-item"
+          data-panel="apiExplorer"
+          onclick="showAdminPanel('apiExplorer')"
+        >
+          <i class="fas fa-plug" style="color: #00d2ff;"></i>
+          <span>Quản lý API</span>
+        </div>
+        <!-- API Keys Nav Item -->
+        <div
+          class="admin-nav-item"
+          data-panel="apiKeys"
+          onclick="showAdminPanel('apiKeys'); if(typeof initApiKeysManager === 'function') initApiKeysManager();"
+        >
+          <i class="fas fa-key" style="color: #f1c40f;"></i>
+          <span>Cấu hình API Key</span>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Admin Content -->
+    <div class="admin-content">
+      <!-- Dashboard Panel -->
+      <div class="admin-panel active" id="dashboardPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title"><i class="fas fa-chart-line"></i> Dashboard</h2>
+          <span class="text-muted">Tổng quan hệ thống · Realtime</span>
+        </div>
+
+        <!-- ═══════════════ STAT CARDS ═══════════════ -->
+        <div class="dashboard-stats-grid">
+          <!-- Card 1: Tổng phim -->
+          <div class="dash-stat-card" data-color="red">
+            <div class="dash-stat-icon">
+              <i class="fas fa-film"></i>
+            </div>
+            <div class="dash-stat-body">
+              <span class="dash-stat-value" id="statTotalMovies" data-count="0">0</span>
+              <span class="dash-stat-label">Tổng số phim</span>
+            </div>
+            <div class="dash-stat-trend up" id="trendMovies">
+              <i class="fas fa-arrow-up"></i> <span>--</span>
+            </div>
+          </div>
+
+          <!-- Card 2: Tổng lượt xem -->
+          <div class="dash-stat-card" data-color="blue">
+            <div class="dash-stat-icon">
+              <i class="fas fa-eye"></i>
+            </div>
+            <div class="dash-stat-body">
+              <span class="dash-stat-value" id="statTotalViews" data-count="0">0</span>
+              <span class="dash-stat-label">Tổng lượt xem</span>
+            </div>
+            <div class="dash-stat-trend up" id="trendViews">
+              <i class="fas fa-signal"></i> <span>--</span>
+            </div>
+          </div>
+
+          <!-- Card 3: Doanh thu -->
+          <div class="dash-stat-card" data-color="green">
+            <div class="dash-stat-icon">
+              <i class="fas fa-coins"></i>
+            </div>
+            <div class="dash-stat-body">
+              <span class="dash-stat-value" id="statTotalRevenue" data-count="0">0 CRO</span>
+              <span class="dash-stat-label">Doanh thu ước tính</span>
+            </div>
+            <div class="dash-stat-trend" id="trendRevenue">
+              <i class="fas fa-chart-line"></i> <span>CRO</span>
+            </div>
+          </div>
+
+          <!-- Card 4: Tổng users -->
+          <div class="dash-stat-card" data-color="orange">
+            <div class="dash-stat-icon">
+              <i class="fas fa-users"></i>
+            </div>
+            <div class="dash-stat-body">
+              <span class="dash-stat-value" id="statTotalUsers" data-count="0">0</span>
+              <span class="dash-stat-label">Tổng người dùng</span>
+            </div>
+            <div class="dash-stat-trend up" id="trendUsers">
+              <i class="fas fa-user-plus"></i> <span>--</span>
+            </div>
+          </div>
+
+          <!-- Card 5: VIP Users -->
+          <div class="dash-stat-card" data-color="gold">
+            <div class="dash-stat-icon">
+              <i class="fas fa-crown"></i>
+            </div>
+            <div class="dash-stat-body">
+              <span class="dash-stat-value" id="statVipUsers" data-count="0">0</span>
+              <span class="dash-stat-label">Thành viên VIP</span>
+            </div>
+            <div class="dash-stat-trend" id="trendVip">
+              <i class="fas fa-gem"></i> <span>Premium</span>
+            </div>
+          </div>
+
+          <!-- Card 6: Báo lỗi chờ -->
+          <div class="dash-stat-card" data-color="pink">
+            <div class="dash-stat-icon">
+              <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div class="dash-stat-body">
+              <span class="dash-stat-value" id="statPendingErrors" data-count="0">0</span>
+              <span class="dash-stat-label">Báo lỗi chờ xử lý</span>
+            </div>
+            <div class="dash-stat-trend" id="trendErrors">
+              <i class="fas fa-clock"></i> <span>Pending</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════ CHARTS ROW 1 ═══════════════ -->
+        <div class="dashboard-charts-row">
+          <!-- Biểu đồ: Phim theo thể loại -->
+          <div class="dash-chart-card">
+            <div class="dash-chart-header">
+              <h3><i class="fas fa-tags"></i> Phim theo thể loại</h3>
+            </div>
+            <div class="chart-period-tabs" style="padding: 8px 20px;">
+              <button class="chart-tab active" onclick="changeDashChartPeriod('categories', 'all')" data-chart="categories" data-period="all">Tất cả</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('categories', 'day')" data-chart="categories" data-period="day">Hôm nay</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('categories', 'week')" data-chart="categories" data-period="week">Tuần</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('categories', 'month')" data-chart="categories" data-period="month">Tháng</button>
+            </div>
+            <div class="dash-chart-body">
+              <canvas id="chartMoviesByCategory"></canvas>
+            </div>
+          </div>
+
+          <!-- Biểu đồ: Phân bổ lượt xem -->
+          <div class="dash-chart-card">
+            <div class="dash-chart-header">
+              <h3><i class="fas fa-chart-area"></i> Phân bổ lượt xem</h3>
+            </div>
+            <div class="chart-period-tabs" style="padding: 8px 20px;">
+              <button class="chart-tab active" onclick="changeDashChartPeriod('views', 'all')" data-chart="views" data-period="all">Tất cả</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('views', 'day')" data-chart="views" data-period="day">Hôm nay</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('views', 'week')" data-chart="views" data-period="week">Tuần</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('views', 'month')" data-chart="views" data-period="month">Tháng</button>
+            </div>
+            <div class="dash-chart-body">
+              <canvas id="chartViewsRecent"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════ CHARTS ROW 2 ═══════════════ -->
+        <div class="dashboard-charts-row">
+          <!-- Biểu đồ: Tỉ lệ phim lẻ/bộ -->
+          <div class="dash-chart-card">
+            <div class="dash-chart-header">
+              <h3><i class="fas fa-chart-pie"></i> Tỉ lệ Phim lẻ / Phim bộ</h3>
+            </div>
+            <div class="dash-chart-body dash-chart-body-doughnut">
+              <canvas id="chartMovieTypes"></canvas>
+            </div>
+          </div>
+
+          <!-- Biểu đồ: Top 10 phim xem nhiều -->
+          <div class="dash-chart-card">
+            <div class="dash-chart-header">
+              <h3><i class="fas fa-trophy"></i> Top 10 phim xem nhiều nhất</h3>
+            </div>
+            <div class="chart-period-tabs" style="padding: 8px 20px;">
+              <button class="chart-tab active" onclick="changeDashChartPeriod('topMovies', 'all')" data-chart="topMovies" data-period="all">Tất cả</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('topMovies', 'day')" data-chart="topMovies" data-period="day">Hôm nay</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('topMovies', 'week')" data-chart="topMovies" data-period="week">Tuần</button>
+              <button class="chart-tab" onclick="changeDashChartPeriod('topMovies', 'month')" data-chart="topMovies" data-period="month">Tháng</button>
+            </div>
+            <div class="dash-chart-body">
+              <canvas id="chartTopMovies"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════ TABLES ROW ═══════════════ -->
+        <div class="dashboard-tables-row">
+          <!-- Bảng: Phim gần đây -->
+          <div class="dash-table-card">
+            <div class="dash-table-header">
+              <h3><i class="fas fa-clock"></i> Phim mới thêm gần đây</h3>
+            </div>
+            <div class="dash-table-body">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Poster</th>
+                    <th>Tên phim</th>
+                    <th>Loại</th>
+                    <th>Lượt xem</th>
+                    <th>Trạng thái</th>
+                    <th>Ngày tạo</th>
+                  </tr>
+                </thead>
+                <tbody id="recentMoviesTable">
+                  <!-- Data sẽ được load động -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Bảng: Hoạt động gần đây -->
+          <div class="dash-table-card">
+            <div class="dash-table-header">
+              <h3><i class="fas fa-stream"></i> Hoạt động gần đây</h3>
+            </div>
+            <div class="dash-table-body">
+              <div class="dash-activity-list" id="recentActivitiesList">
+                <!-- Data sẽ được load động -->
+                <div class="dash-activity-empty">
+                  <i class="fas fa-spinner fa-spin"></i> Đang tải...
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Keys Panel -->
+      <div class="admin-panel" id="apiKeysPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Cấu hình API Key</h2>
+        </div>
+        
+        <div class="api-keys-wrapper">
+
+          <div class="api-keys-header-info">
+            <h3><i class="fas fa-shield-alt"></i> Quản lý khóa API Hệ thống</h3>
+            <p>Tại đây bạn có thể quản lý các API Key được dùng trên toàn trạm phim. Các key quan trọng (Cơ sở dữ liệu, Xác thực) bắt buộc phải cấu hình trực tiếp qua code File để đảm bảo an toàn kết nối, chỉ cho phép hiển thị. Các key mở rộng có thể được thay đổi theo thời gian thực.</p>
+          </div>
+          <!-- Nơi render bằng JS -->
+          <div id="adminApiKeysContainer">
+            <div class="api-skeleton" style="height: 150px; background: rgba(255,255,255,0.05); margin-bottom: 20px; border-radius: 10px;"></div>
+            <div class="api-skeleton" style="height: 150px; background: rgba(255,255,255,0.05); margin-bottom: 20px; border-radius: 10px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Avatar Library Panel -->
+      <div class="admin-panel" id="avatarLibraryPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Quản lý Kho Avatar</h2>
+          <div class="header-actions">
+            <!-- Nút Thêm mới đã được xóa theo yêu cầu -->
+          </div>
+        </div>
+
+        <div class="admin-notif-send-box" style="background: rgba(252, 213, 53, 0.05); border: 1px dashed var(--accent-primary); margin-bottom: 25px;">
+          <h3 style="margin-bottom: 15px; font-size: 1.1rem;"><i class="fas fa-upload" style="color: var(--accent-primary);"></i> Thêm Avatar mới</h3>
+          
+          <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 15px;">
+            <!-- Preview Box (Đã cải tiến cho nhiều ảnh) -->
+            <div id="adminAvatarPreviewBox" style="display: none; flex-direction: column; gap: 10px; width: 100%; max-width: 500px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px; border: 1px dashed var(--accent-primary);">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.9rem; color: var(--accent-primary); font-weight: 600;"><i class="fas fa-eye"></i> Xem trước ảnh đang chờ (<span id="adminAvatarPreviewCount">0</span>)</span>
+              </div>
+              <div id="adminAvatarPreviewGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 10px; max-height: 200px; overflow-y: auto; padding: 5px;">
+                <!-- Các thumbnail sẽ được thêm vào đây bằng JS -->
+              </div>
+            </div>
+
+            <div style="flex: 1; display: grid; grid-template-columns: minmax(150px, 1fr) 3fr; gap: 15px; align-items: flex-end;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Danh mục</label>
+                <select class="form-select" id="newAdminAvatarCategory" style="padding: 10px 15px;">
+                  <!-- Sẽ được load động -->
+                  <option value="Chưa phân loại">Sơ khai...</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Link hoặc Tải ảnh lên</label>
+                <div class="input-with-action" style="display: flex; gap: 8px; align-items: stretch; margin-bottom: 0;">
+                  <input type="url" class="form-input" id="newAdminAvatarUrl" placeholder="https://..." style="flex: 1; padding: 10px 15px;" oninput="adminHandleAvatarUrlInput(this)" />
+                  <button type="button" class="btn btn-action-glass" onclick="document.getElementById('adminAvatarFileUpload').click()" style="padding: 10px 15px; white-space: nowrap;">
+                    <i class="fas fa-file-upload"></i> Chọn ảnh
+                  </button>
+                  <input type="file" id="adminAvatarFileUpload" accept="image/*" multiple style="display: none;" onchange="adminHandleAvatarFileSelect(this)" />
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px; width: 100%; justify-content: flex-end; margin-top: 10px;">
+              <button class="btn btn-primary" id="btnSaveAdminAvatar" onclick="adminSaveAvatarToLibrary()" style="padding: 10px 20px; white-space: nowrap; display: none;">
+                <i class="fas fa-save"></i> Lưu Avatar
+              </button>
+              <button class="btn btn-secondary" id="btnCancelAdminAvatar" onclick="adminCancelAvatarAdd()" style="padding: 10px 20px; white-space: nowrap; display: none;">
+                Hủy
+              </button>
+            </div>
+          </div>
+          
+          <small class="text-muted" style="display: block; margin-bottom: 15px;">* Bạn có thể nhập Link ảnh hoặc tải tệp lên từ máy. Cloudinary sẽ tự động xử lý lưu trữ.</small>
+
+          <div style="border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 15px; margin-top: 15px;">
+            <h4 style="margin-bottom: 12px; font-size: 0.95rem; color: var(--accent-primary);"><i class="fas fa-tags"></i> Tùy biến Danh mục</h4>
+            <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+              <div class="form-group" style="flex: 1; margin-bottom: 0; min-width: 200px;">
+                <input type="text" class="form-input" id="newAvatarCategoryName" placeholder="Tên danh mục mới (VD: Siêu anh hùng...)" style="height: 38px;" />
+              </div>
+              <button class="btn btn-success btn-sm" onclick="adminAddAvatarCategory()" style="height: 38px;">
+                <i class="fas fa-plus"></i> Thêm mới
+              </button>
+            </div>
+            <div id="adminAvatarCategoryList" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;">
+              <!-- Categories load động -->
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <div class="avatar-filters-container" id="adminAvatarFilters">
+            <!-- Filter buttons load động (Tất cả, Anime, Meme...) -->
+            <button class="avatar-filter-btn active" onclick="adminFilterAvatarsByCat('all')">Tất cả</button>
+          </div>
+          
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+              <h3 style="font-size: 1.2rem;"><i class="fas fa-th-large"></i> Danh sách ảnh đang có</h3>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: var(--text-muted); cursor: pointer; background: rgba(255,255,255,0.05); padding: 4px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);">
+                <input type="checkbox" id="adminAvatarSelectAll" onclick="adminToggleSelectAllAvatars(this.checked)" />
+                Chọn tất cả
+              </label>
+            </div>
+            <span class="text-muted" id="adminAvatarCount">Số lượng: 0</span>
+          </div>
+
+          <!-- Thanh thao tác hàng loạt (Bulk Actions) -->
+          <div id="avatarBulkActionsBar">
+            <div class="bulk-info">
+              <span class="selected-count">Đã chọn: <strong id="adminSelectedAvatarCount">0</strong></span>
+              <button class="btn btn-sm btn-secondary" onclick="adminClearAvatarSelection()">Bỏ chọn</button>
+            </div>
+            <div class="bulk-actions">
+              <span style="font-size: 0.9rem; color: var(--text-muted);">Đổi sang:</span>
+              <select class="form-select btn-sm" id="adminBulkAvatarCategory" style="width: 150px; padding: 5px 10px;">
+                <!-- Load động danh mục -->
+              </select>
+              <button class="btn btn-sm btn-primary" onclick="adminBulkUpdateAvatarCategory()">
+                <i class="fas fa-check"></i> Cập nhật
+              </button>
+              <button class="btn btn-sm btn-danger" onclick="adminBulkDeleteAvatars()" style="background: #e50914;">
+                <i class="fas fa-trash"></i> Xóa chọn
+              </button>
+            </div>
+          </div>
+
+          <div class="avatar-grid" id="adminAvatarLibraryGrid" style="grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 20px;">
+            <!-- Data will be loaded here -->
+            <div class="loading-spinner" style="margin: 20px auto;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Movies Panel -->
+      <div class="admin-panel" id="moviesPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Quản lý Phim</h2>
+          <div class="header-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button id="btnFilterDuplicates" class="btn" onclick="toggleDuplicateMoviesFilter()" title="Lọc phim bị trùng lặp trong Database" style="background: rgba(255, 152, 0, 0.15); color: #ffb74d; border: 1px solid rgba(255, 152, 0, 0.35); white-space: nowrap;">
+              <i class="fas fa-clone"></i> Lọc phim trùng
+            </button>
+            <button class="btn btn-secondary" onclick="syncAllMoviesActors()" title="Đồng bộ ID diễn viên cho toàn bộ phim">
+              <i class="fas fa-sync-alt"></i> Đồng bộ Diễn viên
+            </button>
+            <button id="btnDeleteAllMovies" class="btn" onclick="deleteAllMoviesConfirm()" title="Làm sạch Database - Xóa toàn bộ phim" style="display: none; background-color: rgba(229, 9, 20, 0.2); color: #ff4444; border: 1px solid rgba(229, 9, 20, 0.4);">
+              <i class="fas fa-bomb"></i> Xóa tất cả phim
+            </button>
+            <button class="btn btn-primary" onclick="openMovieModal()">
+              <i class="fas fa-plus"></i> Thêm phim mới
+            </button>
+          </div>
+        </div>
+
+        <div class="movie-filter-grid">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              class="form-input"
+              id="adminSearchMovies"
+              placeholder="Tìm kiếm phim..."
+              oninput="filterAdminMoviesDebounced()"
+            />
+          </div>
+          <select class="form-select" id="adminSortMovies" onchange="filterAdminMovies()">
+            <option value="newest">Mới nhất</option>
+            <option value="oldest">Cũ nhất</option>
+          </select>
+          <select class="form-select" id="adminFilterMovieType" onchange="filterAdminMovies()">
+            <option value="">Tất cả loại</option>
+            <option value="single">Phim lẻ</option>
+            <option value="series">Phim bộ</option>
+          </select>
+          <select class="form-select" id="adminFilterMovieCategory" onchange="filterAdminMovies()">
+            <option value="">Tất cả thể loại</option>
+            <!-- Sẽ được load động các thể loại có phim -->
+          </select>
+          <select class="form-select" id="adminFilterCountry" onchange="filterAdminMovies()">
+            <option value="">Tất cả quốc gia</option>
+            <!-- Sẽ được load động theo số lượng phim -->
+          </select>
+          <select class="form-select" id="adminFilterStatus" onchange="filterAdminMovies()">
+            <option value="">Tất cả trạng thái</option>
+            <option value="public">Công khai</option>
+            <option value="hidden">Ẩn</option>
+            <option value="pending">Chờ duyệt</option>
+          </select>
+        </div>
+
+        <!-- Thống kê phim -->
+        <div class="admin-movie-stats mb-3" style="display: flex; gap: 20px; font-size: 0.9rem; color: var(--text-muted);">
+            <div id="statMoviesTotal">Tổng: 0</div>
+            <div id="statMoviesSingle" style="color: #4dabf7;">Phim lẻ: 0</div>
+            <div id="statMoviesSeries" style="color: #da77f2;">Phim bộ: 0</div>
+        </div>
+
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Poster</th>
+              <th>Tên phim</th>
+              <th>Quốc gia</th>
+              <th>Phân loại</th>
+              <th>Thể loại</th>
+              <th>Tình trạng</th>
+              <th>Giá (CRO)</th>
+              <th>Lượt xem</th>
+              <th>Trạng thái</th>
+              <th><i class="fas fa-clock" style="margin-right: 4px;"></i>Ngày up</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="adminMoviesTable">
+            <!-- Data sẽ được load động -->
+          </tbody>
+        </table>
+        <div id="adminMoviePagination" class="pagination-container"></div>
+      </div>
+
+      <!-- Episodes Panel -->
+      <div class="admin-panel" id="episodesPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Quản lý Tập Phim</h2>
+        </div>
+
+        <!-- Vùng chọn phim trực quan -->
+        <div id="movieSelectionSection">
+          <div class="form-group">
+            <label class="form-label">Tìm và chọn phim để quản lý tập:</label>
+
+            <div style="position: relative; margin-bottom: 12px">
+              <i class="fas fa-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #888"></i>
+              <input
+                type="text"
+                class="form-input"
+                id="episodeMovieSearch"
+                placeholder="Gõ tên phim..."
+                oninput="filterEpisodeMoviesDebounced()"
+                style="padding-left: 38px"
+              />
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+              <select class="form-select" id="episodeMovieSort" onchange="currentEpMovieSelectPage=1; filterEpisodeMovies()" style="flex: 1;">
+                <option value="newest">MỚI NHẤT</option>
+                <option value="oldest">CŨ NHẤT</option>
+              </select>
+              <select class="form-select" id="episodeMovieAlphabet" onchange="currentEpMovieSelectPage=1; filterEpisodeMovies()" style="flex: 1;">
+                <option value="">CHỮ CÁI (TẤT CẢ)</option>
+                <option value="A-D">Vần A - D</option>
+                <option value="E-H">Vần E - H</option>
+                <option value="I-L">Vần I - L</option>
+                <option value="M-P">Vần M - P</option>
+                <option value="Q-T">Vần Q - T</option>
+                <option value="U-Z">Vần U - Z</option>
+                <option value="others">Khác (Số...)</option>
+              </select>
+            </div>
+            
+            <!-- Grid chọn phim -->
+            <div id="movieSelectionGrid" class="movie-selection-grid">
+               <!-- JS load phim vào đây -->
+               <div class="text-center py-5 w-100" style="grid-column: 1/-1; opacity: 0.5;">
+                  <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
+                  <p>Đang tải danh sách phim...</p>
+               </div>
+            </div>
+            <div id="epMovieSelectPagination" class="pagination-container"></div>
+
+            <!-- Dropdown ẩn (vẫn giữ để tránh lỗi code cũ đang ref tới nó nếu có) -->
+            <select id="selectMovieForEpisodes" style="display: none;" onchange="loadEpisodesForMovie()">
+              <option value="">-- Chọn phim --</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="episodesManagement" class="hidden">
+          <!-- Thanh Tổng số tập -->
+          <div id="totalEpisodesContainer" style="display: flex; align-items: center; gap: 12px; background: rgba(78, 205, 196, 0.08); border: 1px solid rgba(78, 205, 196, 0.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <i class="fas fa-layer-group" style="color: #4ecdc4;"></i>
+              <label style="font-weight: 600; white-space: nowrap;">Tổng số tập:</label>
+            </div>
+            <input type="number" class="form-input" id="totalEpisodesInput" min="0" placeholder="VD: 16" 
+              style="width: 90px; text-align: center; padding: 6px 10px;">
+            <button class="btn btn-sm" style="background: #4ecdc4; color: #fff; border: none; padding: 6px 14px; border-radius: 6px;" onclick="saveTotalEpisodes()">
+              <i class="fas fa-save"></i> Lưu
+            </button>
+            <span id="episodeStatusBadge" style="margin-left: auto; font-size: 0.85rem; font-weight: 600; padding: 4px 12px; border-radius: 6px; background: rgba(255,255,255,0.08);"></span>
+          </div>
+
+          <!-- Thanh hành động hàng loạt (Bulk Actions) cho Tập phim -->
+          <div id="episodeBulkActionsBar" class="bulk-actions-bar">
+            <div class="bulk-info">
+              <input type="checkbox" id="episodeSelectAll" onclick="toggleAllEpisodes(this.checked)" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-primary);">
+              <span class="selected-count"><span id="episodeSelectedCount">0</span> tập đã chọn</span>
+            </div>
+            <div class="bulk-buttons">
+              <button class="btn btn-sm btn-secondary" onclick="openBulkEpisodeEditModal()">
+                <i class="fas fa-edit"></i> Chỉnh sửa (Chất lượng/Thời lượng)
+              </button>
+              <button class="btn btn-sm btn-danger" onclick="bulkDeleteEpisodes()">
+                <i class="fas fa-trash"></i> Xóa tập đã chọn
+              </button>
+              <button class="btn btn-sm" style="background: rgba(255,255,255,0.1); color: #fff;" onclick="clearEpisodeSelection()">
+                Bỏ chọn
+              </button>
+            </div>
+          </div>
+
+          <h3 id="currentMovieEpisodesTitle" style="margin-bottom: 12px;">Danh sách tập</h3>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+              <button class="btn" style="background: var(--accent-primary); color: #fff;" onclick="goBackToMovieSelection()">
+                <i class="fas fa-arrow-left"></i> Đổi phim khác
+              </button>
+              <button class="btn btn-danger" onclick="deleteAllEpisodes()">
+                <i class="fas fa-trash-alt"></i> Xóa tất cả tập
+              </button>
+              <button class="btn" style="background: #9b59b6; color: #fff;" onclick="openBulkAddDubbedModal('dubbed')">
+                <i class="fas fa-microphone-alt"></i> Bổ sung Link Lồng tiếng
+              </button>
+              <button class="btn" style="background: #e67e22; color: #fff;" onclick="openBulkAddDubbedModal('voiceover')">
+                <i class="fas fa-headset"></i> Bổ sung Link Thuyết minh
+              </button>
+              <button class="btn btn-success" onclick="openImportEpisodesModal()">
+                <i class="fas fa-file-import"></i> Thêm nhiều tập (API)
+              </button>
+              <button class="btn btn-primary" onclick="openEpisodeModal()">
+                <i class="fas fa-plus"></i> Thêm tập mới
+              </button>
+          </div>
+
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th style="width: 40px;"><input type="checkbox" id="episodeSelectAllHeader" onclick="toggleAllEpisodes(this.checked)" style="width: 16px; height: 16px; cursor: pointer;"></th> <!-- Checkbox column -->
+                <th style="width: 40px;" id="dragHeader"></th> <!-- Drag handle column -->
+                <th style="width: 80px;">Tập</th>
+                <th>Nguồn phát</th>
+                <th>Thời lượng</th>
+                <th>Chất lượng</th>
+                <th>Ngày thêm</th>
+                <th>Thao tác</th>
+              </tr>
+
+            </thead>
+            <tbody id="adminEpisodesTable">
+              <!-- Data sẽ được load động -->
+            </tbody>
+          </table>
+          <div id="adminEpisodePagination" class="pagination-container"></div>
+        </div>
+      </div>
+
+      <!-- ═══════════════ INLINE EPISODE EDITOR (thay thế popup cũ) ═══════════════ -->
+      <div id="inlineEpisodeEditorContainer" class="hidden" style="display: none;">
+        <div class="admin-panel-header" style="border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; padding-bottom: 15px;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <button type="button" class="btn btn-secondary" onclick="closeEpisodeModal()" style="padding: 8px 18px;">
+                    <i class="fas fa-arrow-left"></i> Quay lại
+                </button>
+                <h3 id="episodeModalTitle" style="margin: 0; font-size: 1.4rem;"><i class="fas fa-edit" style="color: var(--accent-primary); margin-right: 6px;"></i> Thêm Tập Mới</h3>
+            </div>
+        </div>
+
+        <div class="inline-editor-body" style="padding-bottom: 90px;">
+          <form id="episodeForm" onsubmit="handleEpisodeSubmit(event)">
+            <input type="hidden" id="episodeIndex" />
+            <div class="form-group" id="episodeNumberGroup">
+              <label class="form-label">Số tập *</label>
+              <input type="text" class="form-input" id="episodeNumber" placeholder="Ví dụ: 1 hoặc Tập Đặc Biệt" required />
+            </div>
+            <!-- Multi-Version Sources -->
+            <div class="form-group">
+                <label class="form-label">Danh sách phiên bản (Sources)</label>
+                <div id="sourceListContainer" style="display: flex; flex-direction: column; gap: 10px;">
+                    <!-- Source items will be added here by JS -->
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" style="margin-top: 10px;" onclick="addSourceInput()">
+                    <i class="fas fa-plus"></i> Thêm phiên bản
+                </button>
+            </div>
+            
+            <!-- Trường ẩn để tương thích ngược với code cũ -->
+            <input type="hidden" id="episodeYoutubeId" />
+            <!-- BỔ SUNG: KHUNG PREVIEW VIDEO ĐỂ LẤY THỜI GIAN INTRO -->
+            <div class="intro-preview-container" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                <label class="form-label" style="color: var(--accent-primary); display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                    <i class="fas fa-play-circle"></i> Xem trước để đánh dấu Bỏ qua intro
+                </label>
+
+                <!-- Vùng chứa các nút chuyển đổi phiên bản video -->
+                <div id="adminPreviewSourceSwitch" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                    <!-- Nút sẽ được chèn tự động bằng JS -->
+                </div>
+                
+                <div id="adminIntroPlayerWrapper" style="width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 4px; overflow: hidden; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; position: relative;">
+                    <!-- Video hoặc Iframe sẽ được chèn vào đây bằng JS -->
+                    <div id="adminIntroPlayerPlaceholder" style="text-align: center; color: #666;">
+                        <i class="fas fa-video-slash fa-2x mb-2"></i>
+                        <p style="font-size: 0.9rem;">Chưa có video. Hãy nhập link video bên trên.</p>
+                    </div>
+
+                    <!-- Overlay nút tua ±10s ở giữa video -->
+                    <div id="adminPreviewOverlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 44px); z-index: 5; pointer-events: none;">
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 40px; pointer-events: auto;">
+                            <button type="button" onclick="adminPreviewSkip(-10)" title="Tua lùi 10 giây" style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.5); color: #fff; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                                <i class="fas fa-undo-alt"></i>
+                            </button>
+                            <button type="button" onclick="adminPreviewTogglePlay()" id="adminPreviewPlayBtn" title="Play/Pause" style="width: 56px; height: 56px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.8); background: rgba(0,0,0,0.5); color: #fff; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            <button type="button" onclick="adminPreviewSkip(10)" title="Tua tới 10 giây" style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.5); color: #fff; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                                <i class="fas fa-redo-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Custom controls bar phía dưới -->
+                    <div id="adminPreviewControls" style="display: none; position: absolute; bottom: 0; left: 0; width: 100%; background: linear-gradient(transparent, rgba(0,0,0,0.85)); padding: 8px 12px 6px; z-index: 6;">
+                        <input type="range" id="adminPreviewSeekbar" min="0" max="100" value="0" step="1" style="width: 100%; height: 6px; cursor: pointer; accent-color: var(--accent-primary); margin-bottom: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: #ccc; font-family: monospace;">
+                            <span id="adminPreviewTimeDisplay">00:00 / 00:00</span>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span id="adminPreviewSecondDisplay" style="color: var(--accent-primary); font-weight: 600;"></span>
+                                <button type="button" onclick="adminPreviewFullscreen()" title="Toàn màn hình" style="background: none; border: none; color: #ccc; font-size: 1rem; cursor: pointer; padding: 2px 4px; transition: color 0.2s;">
+                                    <i class="fas fa-expand"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nút action ngay dưới video -->
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="getCurrentTimeFromPreview()" style="height: 34px; white-space: nowrap; font-size: 0.82rem;">
+                        <i class="fas fa-clock"></i> Lấy thời gian hiện tại
+                    </button>
+                    <button type="button" class="btn btn-warning btn-sm" onclick="previewSkipIntro()" style="height: 34px; white-space: nowrap; font-size: 0.82rem;">
+                        <i class="fas fa-fast-forward"></i> Thử nhảy đoạn này
+                    </button>
+                    <div style="display: flex; align-items: center; gap: 6px; margin-left: auto; height: 34px;">
+                        <input type="checkbox" id="applyIntroToAll" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent-primary);">
+                        <label for="applyIntroToAll" style="margin-bottom: 0; font-size: 0.82rem; font-weight: 600; color: #ffc107; cursor: pointer;">
+                            Áp dụng tất cả tập
+                        </label>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <!-- Intro bắt đầu -->
+                    <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                        <label class="form-label" style="font-size: 0.82rem; color: #f39c12; display: flex; align-items: center; gap: 6px; cursor: pointer; margin-bottom: 6px;">
+                            <input type="radio" name="timeCaptureTarget" value="introStart" style="width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: #f39c12;">
+                            <span>Intro bắt đầu:</span>
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <input type="number" id="introBeginMinute" class="form-input" placeholder="0" min="0" style="width: 58px; text-align: center; border-color: #f39c12; padding: 5px;">
+                            <span class="text-muted" style="font-size: 0.8rem;">p</span>
+                            <input type="number" id="introBeginSecond" class="form-input" placeholder="0" min="0" max="59" style="width: 58px; text-align: center; border-color: #f39c12; padding: 5px;">
+                            <span class="text-muted" style="font-size: 0.8rem;">s</span>
+                        </div>
+                    </div>
+
+                    <!-- Intro kết thúc -->
+                    <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                        <label class="form-label" style="font-size: 0.82rem; display: flex; align-items: center; gap: 6px; cursor: pointer; margin-bottom: 6px;">
+                            <input type="radio" name="timeCaptureTarget" value="intro" checked style="width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: var(--accent-primary);">
+                            <span>Intro kết thúc:</span>
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <input type="number" id="introEndMinute" class="form-input" placeholder="0" min="0" style="width: 58px; text-align: center; padding: 5px;">
+                            <span class="text-muted" style="font-size: 0.8rem;">p</span>
+                            <input type="number" id="introEndSecond" class="form-input" placeholder="0" min="0" max="59" style="width: 58px; text-align: center; padding: 5px;">
+                            <span class="text-muted" style="font-size: 0.8rem;">s</span>
+                        </div>
+                    </div>
+
+                    <!-- Outro -->
+                    <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                        <label class="form-label" style="font-size: 0.82rem; color: #4ecdc4; display: flex; align-items: center; gap: 6px; cursor: pointer; margin-bottom: 6px;">
+                            <input type="radio" name="timeCaptureTarget" value="outro" style="width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: #4ecdc4;">
+                            <span>Outro (chuyển tập):</span>
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <input type="number" id="outroStartMinute" class="form-input" placeholder="0" min="0" style="width: 58px; text-align: center; border-color: #4ecdc4; padding: 5px;">
+                            <span class="text-muted" style="font-size: 0.8rem;">p</span>
+                            <input type="number" id="outroStartSecond" class="form-input" placeholder="0" min="0" max="59" style="width: 58px; text-align: center; border-color: #4ecdc4; padding: 5px;">
+                            <span class="text-muted" style="font-size: 0.8rem;">s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <small class="text-muted" style="display: block; margin-top: 8px; font-size: 0.8rem;">
+                    * Lưu ý: "Intro bắt đầu" (mốc intro xuất hiện, mặc định 0s). "Intro kết thúc" (nhảy tới đây khi bỏ qua). "Chuyển tập" (hiện thông báo từ lúc đánh dấu Outro).
+                </small>
+            </div>
+            <!-- END BỔ SUNG -->
+
+            <!-- BỔ SUNG: PHỤ ĐỀ SONG NGỮ -->
+            <div class="form-group" style="background: rgba(255, 193, 7, 0.05); border: 1px dashed rgba(255, 193, 7, 0.3); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                <label class="form-label" style="color: #ffc107; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                    <span style="display: flex; align-items: center; gap: 8px;"><i class="fas fa-closed-captioning"></i> Phụ Đề Song Ngữ (AI)</span>
+                    <div style="display: flex; align-items: center; gap: 10px">
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
+                            <input type="checkbox" id="aiBilingualMode" style="accent-color: #6f42c1;"> Gộp sub Song Ngữ
+                        </label>
+                        <select id="aiTargetLang" class="form-select" style="width: auto; height: 32px; padding: 0 10px; font-size: 0.85rem; border-color: rgba(255,193,7,0.4); background: rgba(0,0,0,0.5);">
+                            <option value="vi">🇻🇳 Tiếng Việt (Vietnamese)</option>
+                            <option value="en" selected>🇺🇸 Tiếng Anh (English)</option>
+                            <option value="zh-CN">🇨🇳 Tiếng Trung (Chinese)</option>
+                            <option value="ko">🇰🇷 Tiếng Hàn (Korean)</option>
+                            <option value="ja">🇯🇵 Tiếng Nhật (Japanese)</option>
+                        </select>
+                    </div>
+                </label>
+                
+                <!-- Chọn AI Engine dịch + Model -->
+                <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="color: #bbb; font-size: 0.85rem; white-space: nowrap; cursor: pointer;" onclick="const b = document.getElementById('aiModelInfoBox'); b.style.display = b.style.display === 'none' ? 'block' : 'none';" title="Bấm để xem giải thích các Model">
+                        🧠 AI Dịch <i class="fas fa-question-circle" style="color: #d4a5ff;"></i> :
+                    </span>
+                    <select id="aiTranslateEngine" class="form-select" style="width: auto; height: 32px; padding: 0 10px; font-size: 0.85rem; border-color: rgba(111,66,193,0.5); background: rgba(111,66,193,0.15); color: #d4a5ff;" onchange="toggleGroqKeyInput()">
+                        <option value="gemini" selected>✨ Gemini 2.0 Flash</option>
+                        <option value="groq">⚡ Groq (Cloud AI)</option>
+                        <option value="google">🔤 Google Translate (Miễn phí)</option>
+                    </select>
+                    <select id="groqModelSelect" class="form-select" style="display: none; width: auto; height: 32px; padding: 0 10px; font-size: 0.85rem; border-color: rgba(255,165,0,0.5); background: rgba(255,165,0,0.1); color: #ffb347;">
+                        <option value="llama-3.3-70b-versatile">🦙 Llama 3.3 70B (Đa ngôn ngữ)</option>
+                        <option value="meta-llama/llama-4-scout-17b-16e-instruct">🦙 Llama 4 Scout (Mới nhất)</option>
+                        <option value="qwen/qwen3-32b">🐉 Qwen 3 32B (Giỏi tiếng Á)</option>
+                    </select>
+                    <span id="groqKeyHint" style="display: none; font-size: 0.75rem; color: #d4a5ff;">
+                        (Key tại <b>Cấu hình API Key</b>)
+                    </span>
+                    <div id="aiRecommendHint" style="width: 100%; margin-top: 4px; font-size: 0.8rem; display: none;"></div>
+                    
+                    <div id="aiModelInfoBox" style="width: 100%; margin-top: 6px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px; font-size: 0.8rem; color: #ccc; border-left: 3px solid #6f42c1; display: none;">
+                        <div style="margin-bottom: 6px; color: #d4a5ff;"><i class="fas fa-book"></i> <b>Sách Lược Chọn Model AI:</b></div>
+                        <ul style="margin: 0; padding-left: 20px; line-height: 1.5;">
+                            <li style="margin-bottom: 6px;"><b style="color:#ffd700;">✨ Gemini 2.0 Flash:</b> Tư duy ngữ cảnh sâu, dịch tự nhiên các đoạn hội thoại phức tạp. Phù hợp mọi thể loại phim.</li>
+                            <li style="margin-bottom: 6px;"><b style="color:#4ade80;">🦙 Llama 3.3 70B:</b> Tốc độ cực nhanh. Xử lý xuất sắc thành ngữ, tiếng lóng Âu Mỹ. Tối ưu cho phim Hollywood.</li>
+                            <li style="margin-bottom: 6px;"><b style="color:#f87171;">🐉 Qwen 3 32B:</b> Am hiểu ngôn ngữ phương Đông. Dịch chuẩn xác Hán Việt, kiếm hiệp, cách xưng hô phim Châu Á (Trung, Hàn, Nhật).</li>
+                            <li><b style="color:#60a5fa;">🦙 Llama 4 Scout:</b> Model thể thức mới, nhạy bén bắt nhịp các câu thoại ngắn, tình huống nhanh.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="color: #bbb; font-size: 0.85rem; white-space: nowrap;">🎧 Engine Nghe:</span>
+                    <select id="aiTranscribeEngine" class="form-select" style="width: auto; height: 32px; padding: 0 10px; font-size: 0.85rem; border-color: rgba(0,200,150,0.5); background: rgba(0,200,150,0.12); color: #4aedc4;">
+                        <option value="groq_cloud" selected>☁️ Groq Cloud (Siêu Tốc — Miễn phí)</option>
+                        <option value="local">🖥️ Local GPU/CPU (Whisper cục bộ)</option>
+                    </select>
+                    <span style="color: #bbb; font-size: 0.85rem; white-space: nowrap; margin-left: 8px;">Nguồn phân tích:</span>
+                    <select id="aiSourceSelect" class="form-select" style="flex: 1; min-width: 160px; height: 32px; padding: 0 10px; font-size: 0.85rem; border-color: rgba(255,193,7,0.4); background: rgba(0,0,0,0.5); color: #fff;">
+                        <option value="">-- Tự động chọn (Ưu tiên Vietsub) --</option>
+                    </select>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                    <button type="button" class="btn btn-primary" onclick="event.stopPropagation(); event.preventDefault(); triggerAITranslation(event);" id="btnTriggerAI" style="flex: 1; white-space: nowrap; background: #6f42c1; border-color: #6f42c1; font-weight: bold;">
+                        <i class="fas fa-brain"></i> Chạy AI Dịch (Vào ngôn ngữ đang chọn phía trên)
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="stopAIStream()" id="btnStopAI" style="display: none; flex: 1; white-space: nowrap;">
+                        <i class="fas fa-pause-circle"></i> Dừng
+                    </button>
+                    <button type="button" class="btn" onclick="resumeAIStream()" id="btnResumeAI" style="display: none; flex: 1; white-space: nowrap; background: #198754; border-color: #198754; color: #fff; font-weight: bold;">
+                        <i class="fas fa-play-circle"></i> Tiếp tục
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="cancelAIStream()" id="btnCancelAI" style="display: none; flex: 1; white-space: nowrap; background: #6c2022; border-color: #6c2022;">
+                        <i class="fas fa-times-circle"></i> Hủy
+                    </button>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                    <input type="file" id="subtitleInputSupabase" accept=".vtt,.srt" style="display: none;" onchange="uploadSubtitleToSupabase(this)">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('subtitleInputSupabase').click()" style="white-space: nowrap; border-color: #6c757d;">
+                        <i class="fas fa-file-upload"></i> Hoặc upload VTT thủ công (Vào ngôn ngữ đang chọn phía trên)
+                    </button>
+                    <small class="text-muted" style="font-size: 0.8rem; flex: 1;">(Tự động lưu Storage)</small>
+                </div>
+
+                <!-- Nơi hiển thị các ô link phụ đề đã có (Dynamic Boxes) -->
+                <div id="dynamicSubtitlesContainer" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; border-top: 1px dashed rgba(255,193,7,0.3); padding-top: 12px;">
+                    <!-- JS sẽ inject các dòng input vào đây -->
+                </div>
+
+                <!-- Màn hình Terminal thời gian thực -->
+                <div id="aiLiveLogBox" style="display: none; height: 180px; background: #000; border: 1px solid #444; border-radius: 6px; padding: 10px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; margin-bottom: 12px; box-shadow: inset 0 0 10px rgba(0,0,0,0.8);">
+                    <div style="color: #28a745; margin-bottom: 5px;">root@ai-server:~$ Tiến trình phân tích âm thanh bắt đầu...</div>
+                    <div id="aiLiveLogContent" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="file" id="subtitleInputSupabase" accept=".vtt,.srt" style="display: none;" onchange="uploadSubtitleToSupabase(this)">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('subtitleInputSupabase').click()" style="white-space: nowrap;">
+                        <i class="fas fa-file-upload"></i> Hoặc upload file thủ công (.vtt)
+                    </button>
+                    <small class="text-muted" style="font-size: 0.8rem; flex: 1;">(Tự động lưu vào Supabase Storage)</small>
+                </div>
+            </div>
+            <!-- END PHỤ ĐỀ SONG NGỮ -->
+
+            <div style="display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 16px">
+              <div class="form-group">
+                <label class="form-label">Thời lượng</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div class="input-with-label" style="position: relative;">
+                    <input type="number" id="episodeDurationHour" class="form-input" placeholder="0" min="0" style="padding-right: 35px;">
+                    <span style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #888; pointer-events: none;">giờ</span>
+                  </div>
+                  <div class="input-with-label" style="position: relative;">
+                    <input type="number" id="episodeDurationMinute" class="form-input" placeholder="0" min="0" style="padding-right: 45px;">
+                    <span style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #888; pointer-events: none;">phút</span>
+                  </div>
+                </div>
+                <input type="hidden" id="episodeDuration" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Chất lượng</label>
+                <select class="form-select" id="episodeQuality">
+                    <option value="360p">360p</option>
+                    <option value="480p">480p</option>
+                    <option value="720p">720p</option>
+                    <option value="720p60">720p60</option>
+                    <option value="1080p">1080p</option>
+                    <option value="1080p60" selected>1080p60</option>
+                    <option value="2K">2K (1440p)</option>
+                    <option value="4K">4K (2160p)</option>
+                </select>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Sticky Bottom Bar (nút Lưu/Hủy cố định cuối màn hình) -->
+        <div class="inline-episode-sticky-bar" id="inlineEpisodeStickyBar">
+            <button type="button" class="btn btn-secondary" onclick="closeEpisodeModal()" style="padding: 10px 24px; font-weight: 600;">
+                <i class="fas fa-times"></i> Hủy
+            </button>
+            <button type="button" class="btn btn-primary" onclick="document.getElementById('episodeForm').requestSubmit()" style="padding: 10px 30px; font-weight: 700; font-size: 1.05rem; box-shadow: 0 4px 15px rgba(229, 9, 20, 0.4);">
+                <i class="fas fa-save"></i> Lưu Tập Phim
+            </button>
+        </div>
+      </div>
+
+      <!-- Trailers Panel -->
+      <div class="admin-panel" id="trailersPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title"><i class="fas fa-video"></i> Quản lý Trailer Video</h2>
+          <div class="header-actions">
+            <button class="btn btn-primary" onclick="if(typeof bulkScanTmdbTrailers === 'function') bulkScanTmdbTrailers();" style="background: linear-gradient(135deg, rgba(198, 40, 40, 0.15), rgba(136, 14, 79, 0.15)); border: 1px solid rgba(198, 40, 40, 0.35); color: #ef9a9a;">
+              <i class="fas fa-bolt"></i> Quét Trailer Hàng Loạt
+            </button>
+          </div>
+        </div>
+
+        <div class="movie-filter-grid">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              class="form-input"
+              id="adminSearchTrailer"
+              placeholder="Tìm kiếm phim..."
+              oninput="filterAdminTrailersDebounced()"
+            />
+          </div>
+          <select class="form-select" id="adminFilterTrailerStatus" onchange="filterAdminTrailers()">
+            <option value="">Tất cả trạng thái</option>
+            <option value="has_trailer">Đã có Trailer</option>
+            <option value="no_trailer">Trống Trailer</option>
+          </select>
+          <select class="form-select" id="adminSortTrailers" onchange="filterAdminTrailers()">
+            <option value="newest">Mới nhất</option>
+            <option value="oldest">Cũ nhất</option>
+          </select>
+        </div>
+
+        <!-- Thống kê Trailer -->
+        <div class="admin-movie-stats mb-3" style="display: flex; gap: 20px; font-size: 0.9rem; color: var(--text-muted);">
+            <div id="statTrailersTotal">Tổng phim: <i class="fas fa-spinner fa-spin"></i></div>
+            <div id="statTrailersHas" style="color: #4dabf7;">Đã có Trailer: 0</div>
+            <div id="statTrailersEmpty" style="color: #ff6b6b;">Trống Trailer: 0</div>
+        </div>
+
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Poster</th>
+              <th>Tên phim</th>
+              <th>Năm</th>
+              <th>Trạng thái Trailer</th>
+              <th>Trailer YouTube ID</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="adminTrailersTable">
+            <!-- Data load động -->
+          </tbody>
+        </table>
+        <div id="adminTrailerPagination" class="pagination-container"></div>
+      </div>
+
+      <!-- Categories Panel -->
+      <div class="admin-panel" id="categoriesPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Quản lý Thể Loại</h2>
+          <button class="btn btn-primary" onclick="openCategoryModal()">
+            <i class="fas fa-plus"></i> Thêm thể loại
+          </button>
+        </div>
+
+        <div class="search-filter mb-3">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              class="form-input"
+              id="adminSearchCategory"
+              placeholder="Tìm thể loại, slug, ID..."
+              oninput="renderAdminCategoriesDebounced()"
+            />
+          </div>
+        </div>
+
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Tên thể loại</th>
+              <th>Slug</th>
+              <th>Số phim</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="adminCategoriesTable">
+            <!-- Data sẽ được load động -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Countries Panel -->
+      <div class="admin-panel" id="countriesPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Quản lý Quốc Gia</h2>
+          <button class="btn btn-primary" onclick="openCountryModal()">
+            <i class="fas fa-plus"></i> Thêm Quốc Gia
+          </button>
+        </div>
+
+        <!-- Layout 2 cột: Bảng trái + Biểu đồ phải -->
+        <div class="country-panel-grid">
+          <!-- CỘT TRÁI: Bảng quốc gia -->
+          <div class="country-table-section">
+            <div class="search-filter mb-3">
+              <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input
+                  type="text"
+                  class="form-input"
+                  id="adminSearchCountry"
+                  placeholder="Tìm tên quốc gia, mã code..."
+                  oninput="renderAdminCountriesDebounced()"
+                />
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="admin-table" style="table-layout: fixed; width: 100%;">
+                <thead>
+                  <tr>
+                    <th style="width: 8%; text-align: center;">STT</th>
+                    <th style="width: 12%; text-align: center;">ID</th>
+                    <th style="width: 35%;">Tên Quốc Gia</th>
+                    <th style="width: 12%; text-align: center;">Code</th>
+                    <th style="width: 14%; text-align: center;">Số phim</th>
+                    <th style="width: 19%; text-align: center;">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="adminCountriesTable"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- CỘT PHẢI: Biểu đồ thống kê -->
+          <div class="country-chart-section">
+            <div class="chart-card">
+              <div class="chart-card-header">
+                <h3 style="margin: 0; font-size: 1.05rem;">
+                  <i class="fas fa-chart-bar" style="color: #4db8ff; margin-right: 6px;"></i>
+                  Top 10 phim xem nhiều nhất
+                </h3>
+              </div>
+
+              <!-- Tab lọc thời gian -->
+              <div class="chart-period-tabs">
+                <button class="chart-tab active" onclick="changeCountryStatsPeriod('all')" data-period="all">Tất cả</button>
+                <button class="chart-tab" onclick="changeCountryStatsPeriod('day')" data-period="day">Hôm nay</button>
+                <button class="chart-tab" onclick="changeCountryStatsPeriod('week')" data-period="week">Tuần</button>
+                <button class="chart-tab" onclick="changeCountryStatsPeriod('month')" data-period="month">Tháng</button>
+              </div>
+
+              <!-- Dropdown chọn quốc gia -->
+              <div style="padding: 0 16px 12px;">
+                <select class="form-select" id="countryStatsSelect" onchange="onCountryStatsSelectChange()" style="width: 100%; padding: 8px 12px; font-size: 0.9rem;">
+                  <option value="">🌐 Tất cả quốc gia</option>
+                  <!-- JS sẽ load động -->
+                </select>
+              </div>
+
+              <!-- Canvas biểu đồ -->
+              <div style="padding: 0 16px 16px; position: relative; min-height: 320px;">
+                <canvas id="countryStatsChart"></canvas>
+                <div id="countryChartEmpty" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #888;">
+                  <i class="fas fa-chart-bar" style="font-size: 2.5rem; margin-bottom: 10px; opacity: 0.3;"></i>
+                  <p style="margin: 0; font-size: 0.9rem;">Chưa có dữ liệu lượt xem</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actors Panel -->
+      <div class="admin-panel" id="actorsPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Quản lý Diễn Viên</h2>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-success" onclick="toggleActorApiImport()">
+              <i class="fas fa-cloud-download-alt"></i> Import từ API
+            </button>
+            <button class="btn btn-primary" onclick="openActorModal()">
+              <i class="fas fa-plus"></i> Thêm Diễn Viên
+            </button>
+          </div>
+        </div>
+
+        <!-- Khung Import Diễn Viên từ OPhim API -->
+        <div id="actorApiImportBox" style="display: none; background: rgba(81, 207, 102, 0.08); border: 1px dashed #51cf66; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+            <label class="form-label" style="color: #51cf66; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-users"></i> Import diễn viên & đạo diễn từ OPhim (TMDB)
+            </label>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" class="form-input" id="actorApiSlugInput" placeholder="Nhập slug phim (VD: tieng-yeu-nay-anh-dich-duoc-khong)" style="flex: 1;">
+                <button type="button" class="btn btn-success" onclick="fetchActorsFromAPI()" style="white-space: nowrap;">
+                    <i class="fas fa-search"></i> Quét diễn viên
+                </button>
+            </div>
+            <small class="text-muted" style="display: block; margin-top: 8px; font-size: 0.8rem;">
+                * Nhập slug phim từ OPhim. Hệ thống sẽ quét danh sách diễn viên và đạo diễn, so sánh với kho hiện tại, và tự động thêm những người chưa có.
+            </small>
+            <div id="actorApiImportResults" style="margin-top: 12px;"></div>
+        </div>
+
+        <!-- Khung Import Diễn Viên từ RapChieuPhim API -->
+        <div id="rapActorApiImportBox" style="display: none; background: rgba(255, 107, 107, 0.08); border: 1px dashed #ff6b6b; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+            <label class="form-label" style="color: #ff6b6b; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-film"></i> Import diễn viên từ RapChieuPhim.com
+            </label>
+            <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                <input type="text" class="form-input" id="rapApiKeyInput" placeholder="Nhập API Key (x-api-key)" style="flex: 1;">
+                <button type="button" class="btn btn-secondary" onclick="copyRapApiKey()" title="Sao chép Key" style="padding: 10px 15px;">
+                    <i class="fas fa-copy"></i>
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveRapApiKey()" title="Lưu Key" style="padding: 10px 15px;">
+                    <i class="fas fa-save"></i> Lưu Key
+                </button>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <input type="number" class="form-input" id="rapApiPageInput" placeholder="Trang (mặc định: 1)" style="width: 120px;" value="1" min="1">
+                <button type="button" class="btn" style="background: #ff6b6b; color: #fff; white-space: nowrap;" onclick="fetchActorsFromRapChieuPhim()">
+                    <i class="fas fa-download"></i> Import diễn viên
+                </button>
+            </div>
+            <small class="text-muted" style="display: block; margin-top: 8px; font-size: 0.8rem;">
+                * Nhập API Key từ rapchieuphim.com/api/key. Hệ thống sẽ lấy danh sách diễn viên và tự động thêm mới vào kho.
+            </small>
+            <div id="rapActorApiImportResults" style="margin-top: 12px;"></div>
+        </div>
+
+        <div class="search-filter mb-3">
+          <div class="search-box" style="flex: 1;">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              class="form-input"
+              id="adminSearchActor"
+              placeholder="Tìm tên diễn viên..."
+              oninput="renderAdminActorsDebounced()"
+            />
+          </div>
+          <select class="form-select" id="adminSortActor" onchange="currentActorPage=1; renderAdminActors()" style="width: 200px;">
+            <option value="newest">Mới nhất</option>
+            <option value="oldest">Cũ nhất</option>
+            <option value="az">Tên A-Z</option>
+            <option value="za">Tên Z-A</option>
+          </select>
+        </div>
+
+        <!-- Thanh Hành động hàng loạt (Bulk Actions) -->
+        <div id="actorBulkActionsBar" class="bulk-actions-bar">
+          <div class="bulk-info">
+            <span class="selected-count">Đã chọn: <strong id="selectedActorsCount">0</strong></span>
+            <button class="btn btn-sm btn-secondary" onclick="clearActorSelection()">Bỏ chọn</button>
+          </div>
+          <div class="bulk-buttons">
+            <button class="btn btn-sm btn-primary" onclick="openBulkUpdateModal('gender')">
+              <i class="fas fa-venus-mars"></i> Đổi Giới tính
+            </button>
+            <button class="btn btn-sm btn-primary" onclick="openBulkUpdateModal('country')">
+              <i class="fas fa-globe"></i> Đổi Nơi sống
+            </button>
+            <button class="btn btn-sm btn-danger" onclick="deleteSelectedActors()">
+              <i class="fas fa-trash-alt"></i> Xóa đã chọn
+            </button>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th style="width: 40px">
+                  <input type="checkbox" id="selectAllActors" onclick="toggleSelectAllActors(this.checked)" />
+                </th>
+                <th style="width: 50px">STT</th>
+                <th>Hình Ảnh</th>
+                <th>Tên</th>
+                <th>Vai trò</th>
+                <th>Giới tính</th>
+                <th>Ngày sinh</th>
+                <th>Nơi sống</th>
+                <th style="width: 120px">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="adminActorsTable"></tbody>
+          </table>
+        </div>
+
+        <!-- Pagination for Actors -->
+        <div id="adminActorPagination" class="pagination-container">
+          <!-- Phân trang sẽ được render động ở đây -->
+        </div>
+      </div>
+
+      <!-- Users Panel -->
+      <div class="admin-panel" id="usersPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Quản lý Người Dùng</h2>
+        </div>
+
+        <div class="search-filter mb-3">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              class="form-input"
+              id="adminSearchUsers"
+              placeholder="Tìm kiếm người dùng..."
+              oninput="filterAdminUsersDebounced()"
+            />
+          </div>
+          <select class="form-select" id="adminFilterRole" onchange="filterAdminUsers()">
+            <option value="">Tất cả vai trò</option>
+            <option value="admin">Admin</option>
+            <option value="editor">Editor</option>
+            <option value="user">User</option>
+          </select>
+        </div>
+
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Avatar</th>
+              <th>Email</th>
+              <th>Tên</th>
+              <th>Vai trò</th>
+              <th>Trạng thái</th>
+              <th>Gói (VIP)</th>
+              <th>Thời hạn</th>
+              <th>Ngày tạo</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="adminUsersTable"></tbody>
+        </table>
+        <div id="adminUserPagination" class="pagination-container"></div>
+      </div>
+
+      <!-- Comments Panel -->
+      <div class="admin-panel" id="commentsPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Quản lý Bình Luận</h2>
+        </div>
+
+        <div class="search-filter mb-3">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              class="form-input"
+              id="adminSearchComments"
+              placeholder="Tìm nội dung, người dùng, tên phim..."
+              oninput="filterAdminCommentsDebounced()"
+            />
+          </div>
+          <select class="form-select" id="adminFilterCommentRating" onchange="filterAdminComments()">
+            <option value="">Tất cả đánh giá</option>
+            <option value="10">10 Sao (Tuyệt đỉnh)</option>
+            <option value="9">9 Sao (Xuất sắc)</option>
+            <option value="8">8 Sao (Rất tốt)</option>
+            <option value="7">7 Sao (Tốt)</option>
+            <option value="6">6 Sao (Khá)</option>
+            <option value="5">5 Sao (Trung bình)</option>
+            <option value="4">4 Sao (Hơi tệ)</option>
+            <option value="3">3 Sao (Tệ)</option>
+            <option value="2">2 Sao (Rất tệ)</option>
+            <option value="1">1 Sao (Thảm họa)</option>
+          </select>
+        </div>
+
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Người dùng</th>
+              <th>Phim</th>
+              <th>Nội dung</th>
+              <th>Đánh giá</th>
+              <th>Thời gian</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="adminCommentsTable">
+            <!-- Data sẽ được load động -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Transactions Panel -->
+      <div class="admin-panel" id="transactionsPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Lịch Sử Giao Dịch</h2>
+        </div>
+
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>TX Hash</th>
+              <th>Người dùng</th>
+              <th>Phim</th>
+              <th>Số tiền</th>
+              <th>Trạng thái</th>
+              <th>Thời gian</th>
+            </tr>
+          </thead>
+          <tbody id="adminTransactionsTable">
+            <!-- Data sẽ được load động -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Notifications Management Panel -->
+      <div class="admin-panel" id="notificationsPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Quản lý Thông báo</h2>
+        </div>
+
+        <!-- Form gửi thông báo mới -->
+        <div class="admin-notif-send-box">
+          <h3 style="margin-bottom: 15px; font-size: 1.1rem;"><i class="fas fa-paper-plane" style="color: #4db8ff;"></i> Gửi thông báo mới</h3>
+          <div class="form-group">
+            <label class="form-label">Tiêu đề thông báo</label>
+            <input type="text" class="form-input" id="adminNotifTitle" placeholder="VD: Phim mới cập nhật tuần này..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nội dung chi tiết</label>
+            <textarea class="form-textarea" id="adminNotifMessage" placeholder="Nhập nội dung thông báo gửi tới tất cả người dùng..." style="min-height: 80px;"></textarea>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 150px;">
+              <label class="form-label">Loại thông báo</label>
+              <select class="form-select" id="adminNotifType">
+                <option value="system">🔔 Hệ thống</option>
+                <option value="new_movie">🎬 Phim mới</option>
+                <option value="promotion">🎁 Khuyến mãi</option>
+                <option value="maintenance">🔧 Bảo trì</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">&nbsp;</label>
+              <button class="btn btn-primary" onclick="adminSendNotifToAll()" style="white-space: nowrap;">
+                <i class="fas fa-paper-plane"></i> Gửi tới tất cả Users
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lập lịch thông báo tự động -->
+        <div class="admin-notif-schedule-box">
+          <h3 style="margin-bottom: 15px; font-size: 1.1rem;">
+            <i class="fas fa-clock" style="color: #ffc107;"></i> Lập lịch gửi thông báo tự động
+          </h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Tiêu đề thông báo</label>
+              <input type="text" class="form-input" id="schedNotifTitle" placeholder="VD: Phim hot cuối tuần..." />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Loại thông báo</label>
+              <select class="form-select" id="schedNotifType">
+                <option value="system">🔔 Hệ thống</option>
+                <option value="new_movie">🎬 Phim mới</option>
+                <option value="promotion">🎁 Khuyến mãi</option>
+                <option value="maintenance">🔧 Bảo trì</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nội dung chi tiết</label>
+            <textarea class="form-textarea" id="schedNotifMessage" placeholder="Nhập nội dung thông báo..." style="min-height: 60px;"></textarea>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">📅 Ngày gửi</label>
+              <input type="date" class="form-input" id="schedNotifDate" />
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">⏰ Giờ gửi</label>
+              <input type="time" class="form-input" id="schedNotifTime" />
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">🔄 Lặp lại</label>
+              <select class="form-select" id="schedNotifRepeat">
+                <option value="once">Một lần</option>
+                <option value="daily">Hàng ngày</option>
+                <option value="weekly">Hàng tuần</option>
+                <option value="monthly">Hàng tháng</option>
+              </select>
+            </div>
+            <div>
+              <button class="btn btn-warning" onclick="adminCreateScheduledNotif()" style="white-space: nowrap; height: 42px;">
+                <i class="fas fa-calendar-plus"></i> Tạo lịch
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bảng lịch hẹn đã tạo -->
+        <div style="margin-top: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h3 style="font-size: 1.05rem; margin: 0;">
+              <i class="fas fa-calendar-alt" style="color: #ffc107;"></i> Danh sách lịch hẹn
+              <span class="admin-notif-stat" style="margin-left: 8px; font-size: 0.8rem;">
+                <strong id="schedStatTotal">0</strong> lịch
+              </span>
+            </h3>
+            <button class="btn btn-danger btn-sm" onclick="adminDeleteAllScheduled()" style="font-size: 0.8rem;">
+              <i class="fas fa-trash-alt"></i> Xóa tất cả lịch
+            </button>
+          </div>
+          <div class="table-responsive">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Loại</th>
+                  <th>Tiêu đề</th>
+                  <th>Nội dung</th>
+                  <th>Ngày giờ gửi</th>
+                  <th>Lặp lại</th>
+                  <th>Trạng thái</th>
+                  <th style="min-width: 100px;">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="adminScheduledTable">
+                <!-- Data sẽ được load động -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Ngăn cách 2 phần -->
+        <hr style="border-color: rgba(255,255,255,0.08); margin: 30px 0 20px;">
+        <h3 style="font-size: 1.05rem; margin-bottom: 15px;">
+          <i class="fas fa-history" style="color: #4db8ff;"></i> Lịch sử thông báo đã gửi
+        </h3>
+
+        <!-- Bộ lọc -->
+        <div class="search-filter mb-3" style="margin-top: 25px;">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              class="form-input"
+              id="adminSearchNotif"
+              placeholder="Tìm tiêu đề, nội dung thông báo..."
+              oninput="filterAdminNotifications()"
+            />
+          </div>
+          <select class="form-select" id="adminFilterNotifType" onchange="filterAdminNotifications()">
+            <option value="">Tất cả loại</option>
+            <option value="system">🔔 Hệ thống</option>
+            <option value="new_movie">🎬 Phim mới</option>
+            <option value="promotion">🎁 Khuyến mãi</option>
+            <option value="maintenance">🔧 Bảo trì</option>
+            <option value="vip_approved">✅ VIP đã duyệt</option>
+            <option value="vip_request">⭐ Yêu cầu VIP</option>
+          </select>
+        </div>
+
+        <!-- Thống kê -->
+        <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+          <span class="admin-notif-stat"><i class="fas fa-list"></i> Tổng: <strong id="notifStatTotal">0</strong></span>
+          <span class="admin-notif-stat"><i class="fas fa-envelope"></i> Chưa đọc: <strong id="notifStatUnread" style="color: #ff6b6b;">0</strong></span>
+          <span class="admin-notif-stat"><i class="fas fa-envelope-open"></i> Đã đọc: <strong id="notifStatRead" style="color: #51cf66;">0</strong></span>
+        </div>
+
+        <!-- Nút hành động hàng loạt -->
+        <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+          <button class="btn btn-danger btn-sm" onclick="adminDeleteAllNotifications()">
+            <i class="fas fa-trash-alt"></i> Xóa tất cả thông báo
+          </button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Loại</th>
+                <th>Tiêu đề</th>
+                <th>Nội dung</th>
+                <th>Người nhận</th>
+                <th>Trạng thái</th>
+                <th>Thời gian</th>
+                <th style="min-width: 80px;">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="adminNotificationsTable">
+              <!-- Data sẽ được load động -->
+            </tbody>
+          </table>
+          <div id="adminNotifPagination" class="pagination-container"></div>
+        </div>
+      </div>
+
+      <!-- VIP Requests Panel -->
+      <div class="admin-panel" id="vipRequestsPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Yêu Cầu Nâng Cấp VIP</h2>
+        </div>
+
+        <div class="search-filter mb-3" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: center;">
+          <div class="search-box" style="flex: 1; min-width: 250px;">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              class="form-input"
+              id="adminSearchVip"
+              placeholder="Tìm kiếm theo Email người dùng..."
+              oninput="filterAdminVipRequestsDebounced()"
+            />
+          </div>
+          
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+             <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.9rem; margin-right: 5px;">Từ ngày:</label>
+                <input type="date" id="vipFilterStartDate" class="form-input" style="padding: 8px; width: auto;" onchange="filterAdminVipRequests()">
+             </div>
+             <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.9rem; margin-right: 5px;">Đến ngày:</label>
+                <input type="date" id="vipFilterEndDate" class="form-input" style="padding: 8px; width: auto;" onchange="filterAdminVipRequests()">
+             </div>
+             
+             <select class="form-select" id="vipSortOrder" onchange="filterAdminVipRequests()" style="min-width: 150px;">
+                <option value="desc">Mới nhất trước</option>
+                <option value="asc">Cũ nhất trước</option>
+             </select>
+
+             <select class="form-select" id="vipFilterStatus" onchange="filterAdminVipRequests()" style="min-width: 150px;">
+               <option value="pending">Đang chờ duyệt</option>
+               <option value="approved">Đã duyệt</option>
+               <option value="rejected">Đã từ chối</option>
+               <option value="">Tất cả</option>
+             </select>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Nội dung chuyển</th>
+                  <th>Gói Yêu Cầu</th>
+                  <th>Số Tiền</th>
+                  <th>Ảnh Biên Lai (Bill)</th>
+                  <th>Trạng thái</th>
+                  <th>Thời gian</th>
+                  <th style="min-width: 160px; text-align: center;">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="adminVipRequestsTable">
+                <!-- Data sẽ được load động -->
+              </tbody>
+            </table>
+          </div>
+          <div id="adminVipPagination" class="pagination-container"></div>
+      </div>
+
+      <!-- Error Reports Panel -->
+      <div class="admin-panel" id="errorReportsPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Báo Lỗi Phim & Hệ Thống</h2>
+        </div>
+
+        <div id="errorReportsSummary" style="display: flex; gap: 20px; margin-bottom: 20px;">
+            <div style="flex: 1; background: rgba(231, 76, 60, 0.1); border: 1px solid rgba(231, 76, 60, 0.3); padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 15px;">
+                <div style="width: 45px; height: 45px; background: #e74c3c; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #aaa;">Tập phim đang lỗi</div>
+                    <div style="font-size: 24px; font-weight: bold; color: #fff;" id="sumPendingErrors">0</div>
+                </div>
+            </div>
+            <div style="flex: 1; background: rgba(52, 152, 219, 0.1); border: 1px solid rgba(52, 152, 219, 0.3); padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 15px;">
+                <div style="width: 45px; height: 45px; background: #3498db; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff;">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #aaa;">Tổng lượt người báo</div>
+                    <div style="font-size: 24px; font-weight: bold; color: #fff;" id="sumTotalReports">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-filter mb-3" style="display: flex; gap: 15px; align-items: center;">
+          <div class="search-box" style="flex: 1;">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              class="form-input"
+              id="adminSearchError"
+              placeholder="Tìm kiếm theo tên phim, tập phim hoặc email người báo..."
+              oninput="filterErrorReportsDebounced()"
+            />
+          </div>
+          <select class="form-select" id="errorFilterType" onchange="filterErrorReports()" style="min-width: 150px;">
+            <option value="">Tất cả loại lỗi</option>
+            <option value="load_slow">Video giật lag / Load chậm</option>
+            <option value="broken_link">Không xem được / Bị lỗi Play</option>
+            <option value="subtitle_error">Lỗi phụ đề</option>
+            <option value="audio_error">Lỗi âm thanh</option>
+            <option value="wrong_movie">Sai phim / Sai tập</option>
+            <option value="other">Lỗi khác</option>
+          </select>
+          <select class="form-select" id="errorFilterStatus" onchange="filterErrorReports()" style="min-width: 150px;">
+            <option value="pending">Chưa xử lý (Pending)</option>
+            <option value="resolved">Đã xử lý (Resolved)</option>
+            <option value="">Tất cả trạng thái</option>
+          </select>
+        </div>
+
+        <div class="table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Người Báo</th>
+                <th style="text-align: center;">Số Lượt</th>
+                <th>Phim & Tập</th>
+                <th>Phân Loại</th>
+                <th>Mô Tả Lỗi</th>
+                <th>Thời Gian</th>
+                <th>Trạng Thái</th>
+                <th style="min-width: 140px; text-align: center;">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="errorReportsTable">
+              <!-- Data sẽ được load động -->
+            </tbody>
+          </table>
+        </div>
+        <div id="adminErrorReportPagination" class="pagination-container"></div>
+      </div>
+
+      <!-- Watch Party Rooms Panel -->
+      <div class="admin-panel" id="watchRoomsPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title">Quản lý Phòng Xem Chung</h2>
+          <div class="header-actions">
+            <button class="btn btn-secondary" onclick="toggleRoomLimitSettings()">
+              <i class="fas fa-cog"></i> Cấu hình
+            </button>
+            <button class="btn btn-primary" onclick="openCreateRoomModal()">
+              <i class="fas fa-plus"></i> Tạo phòng mới
+            </button>
+          </div>
+        </div>
+
+        <!-- Room Limit Settings (Hidden by default) -->
+        <div id="roomLimitSettings" class="admin-settings-card hidden mb-3" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 20px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label style="color: var(--text-muted); font-size: 0.9rem;">Giới hạn/User:</label>
+                    <input type="number" id="userRoomLimitInput" class="form-input" style="width: 70px;" min="1" value="3">
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label style="color: var(--text-muted); font-size: 0.9rem;">Tổng giới hạn hệ thống:</label>
+                    <input type="number" id="totalRoomLimitInput" class="form-input" style="width: 80px;" min="1" value="50">
+                </div>
+                <!-- Cấu hình tự xóa phòng sau N giờ -->
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label style="color: var(--text-muted); font-size: 0.9rem;" title="Phòng đã kết thúc sẽ bị xóa sau khoảng thời gian này">Tự xóa sau (giờ):</label>
+                    <input type="number" id="autoDeleteHoursInput" class="form-input" style="width: 70px;" min="1" value="6">
+                </div>
+                <button class="btn btn-sm btn-primary" onclick="saveUserRoomLimit()">Lưu cấu hình</button>
+            </div>
+            <small class="text-muted" style="display: block; margin-top: 5px;">* Giới hạn số lượng phòng tối đa một người dùng có thể tạo và tổng số phòng toàn hệ thống (Admin được miễn trừ). Phòng đã kết thúc sẽ tự động xóa sau khoảng thời gian quy định.</small>
+        </div>
+
+        <!-- Watch Party Statistics & Charts -->
+        <div class="admin-wp-overview mb-4" style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px;">
+            <!-- Left: Text Stats -->
+            <div class="admin-stats-grid" id="watchPartyStatsGrid" style="display: grid; grid-template-columns: 1fr; gap: 15px;">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(77, 171, 247, 0.1); color: #4dabf7;">
+                        <i class="fas fa-door-open"></i>
+                    </div>
+                    <div class="stat-details">
+                        <span class="stat-label">Tổng số phòng</span>
+                        <h3 class="stat-value" id="statTotalRooms">0</h3>
+                        <div class="stat-progress-container" style="height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 8px; overflow: hidden;">
+                            <div id="statRoomProgress" class="stat-progress-bar" style="width: 0%; height: 100%; background: #4dabf7; transition: width 0.5s ease;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(51, 207, 102, 0.1); color: #33cf66;">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-details">
+                        <span class="stat-label">Tổng người xem</span>
+                        <h3 class="stat-value" id="statTotalViewers">0</h3>
+                        <span class="stat-subtext">Đang trong các phòng</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(255, 146, 43, 0.1); color: #ff922b;">
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                    <div class="stat-details">
+                        <span class="stat-label">Tỷ lệ Công khai</span>
+                        <h3 class="stat-value" id="statPublicRatio">0%</h3>
+                        <span class="stat-subtext" id="statPublicCount">0 phòng</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Charts -->
+            <div class="admin-charts-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="stat-card chart-card" style="padding: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                    <span class="stat-label mb-2" style="font-size: 0.8rem;">Phân loại phòng</span>
+                    <div style="width: 100%; height: 140px; position: relative;">
+                        <canvas id="roomTypeChart"></canvas>
+                    </div>
+                </div>
+                <div class="stat-card chart-card" style="padding: 15px; display: flex; flex-direction: column;">
+                    <span class="stat-label mb-2" style="font-size: 0.8rem;">Top phim được xem nhiều</span>
+                    <div style="width: 100%; height: 140px; position: relative;">
+                        <canvas id="popularMoviesChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-filter-wrapper mb-3" style="display: flex; gap: 12px; flex-wrap: wrap; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px;">
+          <div class="search-box" style="flex: 2; min-width: 250px;">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              class="form-input"
+              id="adminSearchRooms"
+              placeholder="Tìm tên phòng, chủ phòng, tên phim..."
+              oninput="filterAdminWatchRoomsDebounced()"
+            />
+          </div>
+          
+          <div class="filter-group" style="flex: 1; min-width: 150px; display: flex; align-items: center; gap: 8px;">
+            <label style="font-size: 0.8rem; color: rgba(255,255,255,0.6); white-space: nowrap;"><i class="fas fa-filter"></i> Loại:</label>
+            <select id="adminFilterRoomType" class="form-input" style="padding: 6px 12px;" onchange="filterAdminWatchRooms()">
+              <option value="all">Tất cả phòng</option>
+              <option value="public">Công khai</option>
+              <option value="private">Riêng tư</option>
+            </select>
+          </div>
+
+          <div class="filter-group" style="flex: 1; min-width: 150px; display: flex; align-items: center; gap: 8px;">
+            <label style="font-size: 0.8rem; color: rgba(255,255,255,0.6); white-space: nowrap;"><i class="fas fa-sort-amount-down"></i> Xếp:</label>
+            <select id="adminSortRooms" class="form-input" style="padding: 6px 12px;" onchange="filterAdminWatchRooms()">
+              <option value="newest">Mới nhất</option>
+              <option value="oldest">Cũ nhất</option>
+              <option value="members">Đông người nhất</option>
+            </select>
+          </div>
+
+          <div class="filter-group" style="display: flex; align-items: center; justify-content: flex-end;">
+            <button class="btn btn-outline-danger" onclick="deleteAllAdminWatchRooms(event)" style="padding: 6px 15px; font-size: 0.8rem; white-space: nowrap;">
+              <i class="fas fa-trash-sweep"></i> Xóa tất cả
+            </button>
+          </div>
+        </div>
+
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th style="width: 60px;">Poster</th>
+              <th>Phòng (Tên)</th>
+              <th>Phim đang phát</th>
+              <th>Chủ phòng</th>
+              <th>Số người</th>
+              <th>Loại phòng</th>
+              <th>Lịch chiếu</th>
+              <th>Ngày tạo</th>
+              <th>Xóa Tự Động</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="adminWatchRoomsTable">
+            <!-- Dữ liệu được load động -->
+          </tbody>
+        </table>
+        <div id="adminRoomPagination" class="pagination-container"></div>
+      </div>
+
+      <!-- Visual Effects Panel -->
+      <div class="admin-panel" id="visualEffectsPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title"><i class="fas fa-magic"></i> Giao diện & Hiệu ứng</h2>
+          <span class="text-muted">Tùy chỉnh hiệu ứng visual và banner trang chủ</span>
+        </div>
+
+        <!-- PHẦN 1: Hiệu ứng Web -->
+        <div class="ve-section">
+          <h3 class="ve-section-title"><i class="fas fa-sparkles" style="color: #fcd535;"></i> Hiệu ứng trang chủ</h3>
+          <p class="text-muted" style="margin-bottom: 20px; font-size: 0.9rem;">Bật/tắt các hiệu ứng visual cho banner trang chủ. Hiệu ứng sẽ áp dụng ngay cho tất cả người dùng.</p>
+
+          <div class="ve-effects-grid">
+            <!-- Tuyết rơi -->
+            <div class="ve-effect-card" id="veCardSnow">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #74b9ff, #a29bfe);">
+                <i class="fas fa-snowflake"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Tuyết rơi ❄️</h4>
+                <p>Hiệu ứng tuyết rơi nhẹ nhàng trên banner trang chủ, phù hợp mùa đông hoặc sự kiện đặc biệt.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleSnow" onchange="toggleVisualEffect('snow', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Sao rơi -->
+            <div class="ve-effect-card" id="veCardStars">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #ffecd2, #fcb69f);">
+                <i class="fas fa-star"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Sao rơi ⭐</h4>
+                <p>Các ngôi sao lấp lánh bay qua banner, tạo cảm giác sang trọng và huyền bí.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleStars" onchange="toggleVisualEffect('stars', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Pháo hoa -->
+            <div class="ve-effect-card" id="veCardFirework">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #ff6b6b, #feca57);">
+                <i class="fas fa-fire"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Pháo hoa 🎆</h4>
+                <p>Hiệu ứng pháo hoa rực rỡ cho các dịp lễ, sự kiện lớn hoặc ra mắt phim hot.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleFirework" onchange="toggleVisualEffect('firework', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Bong bóng -->
+            <div class="ve-effect-card" id="veCardBubbles">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #48dbfb, #0abde3);">
+                <i class="fas fa-circle"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Bong bóng 🫧</h4>
+                <p>Bong bóng trong suốt bay lên nhẹ nhàng, tạo cảm giác thư giãn và sinh động.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleBubbles" onchange="toggleVisualEffect('bubbles', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Trái tim -->
+            <div class="ve-effect-card" id="veCardHearts">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #ff6b81, #ee5a24);">
+                <i class="fas fa-heart"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Trái tim 💖</h4>
+                <p>Những trái tim bay lên lãng mạn, thích hợp cho sự kiện Valentine hoặc phim tình cảm.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleHearts" onchange="toggleVisualEffect('hearts', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Lá rơi -->
+            <div class="ve-effect-card" id="veCardLeaves">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #f7971e, #ffd200);">
+                <i class="fas fa-leaf"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Lá rơi 🍂</h4>
+                <p>Lá vàng rơi nhẹ theo gió mùa thu, mang đến cảm giác hoài niệm và ấm áp.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleLeaves" onchange="toggleVisualEffect('leaves', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Mưa rơi -->
+            <div class="ve-effect-card" id="veCardRain">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #636e72, #2d3436);">
+                <i class="fas fa-cloud-rain"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Mưa rơi 🌧️</h4>
+                <p>Giọt mưa xiên rơi tạo bầu không khí u ám, huyền bí phù hợp phim kinh dị.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleRain" onchange="toggleVisualEffect('rain', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Confetti -->
+            <div class="ve-effect-card" id="veCardConfetti">
+              <div class="ve-effect-icon" style="background: linear-gradient(135deg, #e056fd, #686de0);">
+                <i class="fas fa-gift"></i>
+              </div>
+              <div class="ve-effect-info">
+                <h4>Confetti 🎊</h4>
+                <p>Giấy confetti nhiều màu bay tung, dùng cho sự kiện mừng hoặc lễ kỷ niệm.</p>
+              </div>
+              <label class="ve-toggle-switch">
+                <input type="checkbox" id="veToggleConfetti" onchange="toggleVisualEffect('confetti', this.checked)">
+                <span class="ve-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- PHẦN 2: Tùy chỉnh giao diện -->
+        <div class="ve-section" style="margin-top: 30px;">
+          <h3 class="ve-section-title"><i class="fas fa-palette" style="color: #a78bfa;"></i> Tùy chỉnh giao diện</h3>
+          <p class="text-muted" style="margin-bottom: 20px; font-size: 0.9rem;">Thay đổi màu sắc, font chữ và theme mặc định cho toàn bộ website.</p>
+
+          <div class="ve-customize-grid">
+            <!-- 1. Màu Accent -->
+            <div class="ve-customize-card">
+              <div class="ve-customize-header">
+                <i class="fas fa-fill-drip" style="color: var(--accent-primary);"></i>
+                <h4>Màu chủ đạo</h4>
+              </div>
+              <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 12px;">Màu accent chính sẽ áp dụng cho nút bấm, link, badge và các phần tử nổi bật.</p>
+              <div class="ve-color-presets" id="veColorPresets">
+                <button class="ve-color-btn active" data-color="#4db8ff" style="background:#4db8ff;" onclick="selectAccentColor('#4db8ff')" title="Xanh lơ (Mặc định)"></button>
+                <button class="ve-color-btn" data-color="#e50914" style="background:#e50914;" onclick="selectAccentColor('#e50914')" title="Đỏ Netflix"></button>
+                <button class="ve-color-btn" data-color="#a78bfa" style="background:#a78bfa;" onclick="selectAccentColor('#a78bfa')" title="Tím Lavender"></button>
+                <button class="ve-color-btn" data-color="#10b981" style="background:#10b981;" onclick="selectAccentColor('#10b981')" title="Xanh lá"></button>
+                <button class="ve-color-btn" data-color="#f59e0b" style="background:#f59e0b;" onclick="selectAccentColor('#f59e0b')" title="Vàng cam"></button>
+                <button class="ve-color-btn" data-color="#ec4899" style="background:#ec4899;" onclick="selectAccentColor('#ec4899')" title="Hồng"></button>
+                <button class="ve-color-btn" data-color="#06b6d4" style="background:#06b6d4;" onclick="selectAccentColor('#06b6d4')" title="Cyan"></button>
+                <button class="ve-color-btn" data-color="#ff6b35" style="background:#ff6b35;" onclick="selectAccentColor('#ff6b35')" title="Cam đất"></button>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+                <label class="text-muted" style="font-size:0.82rem; white-space:nowrap;">Tùy chọn:</label>
+                <input type="color" id="veCustomColor" value="#4db8ff" onchange="selectAccentColor(this.value)" style="width:36px;height:28px;border:none;cursor:pointer;border-radius:6px;">
+                <span class="text-muted" id="veCurrentColorCode" style="font-size:0.82rem;font-family:monospace;">#4db8ff</span>
+              </div>
+            </div>
+
+            <!-- 2. Font chữ -->
+            <div class="ve-customize-card">
+              <div class="ve-customize-header">
+                <i class="fas fa-font" style="color: #fbbf24;"></i>
+                <h4>Font chữ</h4>
+              </div>
+              <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 12px;">Chọn font chữ áp dụng cho toàn bộ website. Font sẽ được tải từ Google Fonts.</p>
+              <select id="veFontSelect" class="form-select ve-font-select" onchange="selectSiteFont(this.value)">
+                <option value="Inter" style="font-family: Inter;">Inter (Mặc định)</option>
+                <option value="Roboto" style="font-family: Roboto;">Roboto</option>
+                <option value="Outfit" style="font-family: Outfit;">Outfit</option>
+                <option value="Montserrat" style="font-family: Montserrat;">Montserrat</option>
+                <option value="Nunito" style="font-family: Nunito;">Nunito</option>
+                <option value="Poppins" style="font-family: Poppins;">Poppins</option>
+                <option value="Be Vietnam Pro" style="font-family: 'Be Vietnam Pro';">Be Vietnam Pro</option>
+                <option value="Quicksand" style="font-family: Quicksand;">Quicksand</option>
+              </select>
+              <div class="ve-font-preview" id="veFontPreview">
+                <span>Trạm Phim — Xem phim hay, kết nối cộng đồng</span>
+              </div>
+            </div>
+
+            <!-- 3. Theme mặc định -->
+            <div class="ve-customize-card">
+              <div class="ve-customize-header">
+                <i class="fas fa-moon" style="color: #818cf8;"></i>
+                <h4>Theme mặc định</h4>
+              </div>
+              <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 12px;">Chọn theme mặc định cho người dùng mới truy cập (chưa có cài đặt riêng).</p>
+              <div class="ve-theme-options">
+                <label class="ve-theme-option active" id="veThemeDark">
+                  <input type="radio" name="veDefaultTheme" value="dark" checked onchange="selectDefaultTheme('dark')">
+                  <div class="ve-theme-preview dark">
+                    <i class="fas fa-moon"></i>
+                    <span>Dark Mode</span>
+                  </div>
+                </label>
+                <label class="ve-theme-option" id="veThemeLight">
+                  <input type="radio" name="veDefaultTheme" value="light" onchange="selectDefaultTheme('light')">
+                  <div class="ve-theme-preview light">
+                    <i class="fas fa-sun"></i>
+                    <span>Light Mode</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Nút lưu -->
+          <div style="margin-top: 20px; text-align: right;">
+            <button class="btn btn-primary" onclick="saveAppearanceSettings()" id="veSaveBtn">
+              <i class="fas fa-save"></i> Lưu cài đặt giao diện
+            </button>
+          </div>
+        </div>
+
+        <!-- PHẦN 3: Thông báo chạy chữ (Marquee) -->
+        <div class="ve-section" style="margin-top: 30px;">
+          <h3 class="ve-section-title"><i class="fas fa-bullhorn" style="color: #f59e0b;"></i> Thông báo chạy chữ (Marquee)</h3>
+          <p class="text-muted" style="margin-bottom: 16px; font-size: 0.9rem;">Dòng chữ chạy ngang ở đầu trang chủ, dùng để thông báo sự kiện, phim mới, bảo trì...</p>
+
+          <div class="ve-marquee-controls">
+            <!-- Toggle + Tốc độ -->
+            <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:14px;">
+              <label class="ve-toggle-switch" style="margin:0;">
+                <input type="checkbox" id="veMarqueeEnabled" onchange="window._marqueeEnabled = this.checked">
+                <span class="ve-toggle-slider"></span>
+              </label>
+              <span style="font-weight:600;">Bật Marquee</span>
+
+              <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+                <label class="text-muted" style="font-size:0.82rem;">Tốc độ:</label>
+                <select id="veMarqueeSpeed" class="ve-font-select" style="width:auto; padding:6px 10px;" onchange="updateMarqueePreview()">
+                  <option value="slow">Chậm</option>
+                  <option value="normal" selected>Bình thường</option>
+                  <option value="fast">Nhanh</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Vị trí chữ: Nút chọn chế độ + Thanh kéo thả -->
+            <div style="margin-bottom:14px;">
+              <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:8px;">Vị trí chữ:</label>
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <!-- Nút chế độ -->
+                <button type="button" class="ve-align-btn active" data-align="scroll" onclick="setMarqueeAlign('scroll')" title="Chạy ngang">
+                  <i class="fas fa-arrows-alt-h"></i> Chạy
+                </button>
+                <button type="button" class="ve-align-btn" data-align="left" onclick="setMarqueeAlign('left')" title="Căn trái">
+                  <i class="fas fa-align-left"></i>
+                </button>
+                <button type="button" class="ve-align-btn" data-align="center" onclick="setMarqueeAlign('center')" title="Căn giữa">
+                  <i class="fas fa-align-center"></i>
+                </button>
+                <button type="button" class="ve-align-btn" data-align="right" onclick="setMarqueeAlign('right')" title="Căn phải">
+                  <i class="fas fa-align-right"></i>
+                </button>
+
+                <!-- Slider kéo thả vị trí (chỉ hiện khi không phải scroll) -->
+                <div id="veMarqueeSliderWrap" style="display:none; flex:1; min-width:120px; margin-left:12px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="text-muted" style="font-size:0.75rem;">⬅️</span>
+                    <input type="range" id="veMarqueePosition" min="0" max="100" value="50" 
+                      style="flex:1; accent-color:var(--accent-primary,#4db8ff); cursor:grab;"
+                      oninput="updateMarqueePositionFromSlider(this.value)">
+                    <span class="text-muted" style="font-size:0.75rem;">➡️</span>
+                    <span id="veMarqueePosLabel" style="font-size:0.78rem; color:var(--accent-primary,#4db8ff); font-weight:600; min-width:36px; text-align:center;">50%</span>
+                  </div>
+                </div>
+              </div>
+              <input type="hidden" id="veMarqueeAlign" value="scroll">
+              <input type="hidden" id="veMarqueePositionValue" value="50">
+
+              <!-- Slider chiều dọc -->
+              <div style="display:flex; align-items:center; gap:8px; margin-top:10px;">
+                <label class="text-muted" style="font-size:0.82rem; white-space:nowrap;">Chiều dọc:</label>
+                <span class="text-muted" style="font-size:0.75rem;">⬆️</span>
+                <input type="range" id="veMarqueeVOffset" min="-8" max="8" value="0" step="1"
+                  style="flex:1; max-width:200px; accent-color:var(--accent-primary,#4db8ff); cursor:grab;"
+                  oninput="updateMarqueeVOffset(this.value)">
+                <span class="text-muted" style="font-size:0.75rem;">⬇️</span>
+                <span id="veMarqueeVLabel" style="font-size:0.78rem; color:var(--accent-primary,#4db8ff); font-weight:600; min-width:36px; text-align:center;">0px</span>
+                <button type="button" onclick="document.getElementById('veMarqueeVOffset').value=0; updateMarqueeVOffset(0);"
+                  style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:var(--text-muted); border-radius:6px; padding:2px 8px; cursor:pointer; font-size:0.72rem;"
+                  title="Reset về giữa">↺</button>
+              </div>
+            </div>
+
+            <!-- Nội dung -->
+            <textarea id="veMarqueeText" class="ve-textarea" rows="2" placeholder="VD: 🎉 Phim mới ra mắt! | 🔧 Bảo trì lúc 2h sáng | 🎬 Xem ngay bộ phim hot nhất tuần" oninput="document.getElementById('veMarqueePreviewText').textContent = this.value || '🎉 Preview sẽ hiện ở đây...'"></textarea>
+
+            <!-- Màu sắc -->
+            <div style="display:flex; gap:16px; margin-top:10px; flex-wrap:wrap;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label class="text-muted" style="font-size:0.82rem;">Màu nền:</label>
+                <input type="color" id="veMarqueeBg" value="#1a1a2e" style="width:32px;height:24px;border:none;cursor:pointer;border-radius:4px;" oninput="updateMarqueePreview()">
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label class="text-muted" style="font-size:0.82rem;">Màu chữ:</label>
+                <input type="color" id="veMarqueeColor" value="#fbbf24" style="width:32px;height:24px;border:none;cursor:pointer;border-radius:4px;" oninput="updateMarqueePreview()">
+              </div>
+            </div>
+
+            <!-- Preview -->
+            <div class="ve-marquee-preview" id="veMarqueePreview" style="margin-top:14px;">
+              <div class="ve-marquee-inner" id="veMarqueePreviewText">🎉 Preview sẽ hiện ở đây...</div>
+            </div>
+
+            <button class="btn btn-primary" onclick="saveMarqueeSettings()" style="margin-top:14px;">
+              <i class="fas fa-save"></i> Lưu Marquee
+            </button>
+          </div>
+        </div>
+
+        <!-- PHẦN 4: Popup thông báo toàn site -->
+        <div class="ve-section" style="margin-top: 30px;">
+          <h3 class="ve-section-title"><i class="fas fa-window-maximize" style="color: #ec4899;"></i> Popup thông báo toàn site</h3>
+          <p class="text-muted" style="margin-bottom: 16px; font-size: 0.9rem;">Modal popup hiện theo tần suất tùy chỉnh. Dùng để giới thiệu tính năng mới, sự kiện, khuyến mãi...</p>
+
+          <div class="ve-popup-controls">
+            <!-- Toggle + Tần suất -->
+            <div style="display:flex; align-items:center; gap:16px; margin-bottom:14px; flex-wrap:wrap;">
+              <label class="ve-toggle-switch" style="margin:0;">
+                <input type="checkbox" id="vePopupEnabled" onchange="window._popupEnabled = this.checked">
+                <span class="ve-toggle-slider"></span>
+              </label>
+              <span style="font-weight:600;">Bật Popup</span>
+            </div>
+
+            <!-- Tần suất (radio - chọn 1) -->
+            <div style="margin-bottom:14px;">
+              <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:8px;">Tần suất hiển thị:</label>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freqEveryVisit" value="every_visit"> 🔄 Mỗi lần mở web
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freq30min" value="30min"> ⏱️ Lặp lại sau 30 phút
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freq1hour" value="1hour"> ⏰ Lặp lại sau 1 giờ
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freqOnceDay" value="once_day" checked> 📅 1 lần / ngày
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freqOnceWeek" value="once_week"> 📆 1 lần / tuần
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freqOnceOnly" value="once_only"> 🔒 1 lần duy nhất
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); font-size:0.88rem;">
+                  <input type="radio" name="popupFrequency" id="freqNewUser" value="new_user"> 👋 Chỉ user mới
+                </label>
+              </div>
+            </div>
+
+            <!-- Tiêu đề -->
+            <div style="margin-bottom:10px;">
+              <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Tiêu đề:</label>
+              <input type="text" id="vePopupTitle" class="ve-textarea" style="padding:10px 14px; height:auto;" placeholder="VD: 🎬 Chào mừng bạn đến Trạm Phim!">
+            </div>
+
+            <!-- Nội dung -->
+            <div style="margin-bottom:10px;">
+              <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Nội dung:</label>
+              <textarea id="vePopupContent" class="ve-textarea" rows="4" placeholder="VD: Trạm Phim đã cập nhật tính năng xem chung Watch Party! Mời bạn trải nghiệm ngay."></textarea>
+            </div>
+
+            <!-- Màu tiêu đề + Màu nội dung -->
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
+              <div style="flex:1; min-width:140px;">
+                <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Màu tiêu đề:</label>
+                <input type="color" id="vePopupTitleColor" value="#ffffff" style="width:100%; height:36px; border:none; border-radius:8px; cursor:pointer; background:transparent;" oninput="document.getElementById('vePopupTitle').style.color=this.value">
+              </div>
+              <div style="flex:1; min-width:140px;">
+                <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Màu nội dung:</label>
+                <input type="color" id="vePopupContentColor" value="#d9d9d9" style="width:100%; height:36px; border:none; border-radius:8px; cursor:pointer; background:transparent;" oninput="document.getElementById('vePopupContent').style.color=this.value">
+              </div>
+            </div>
+            <div style="margin-bottom:10px;">
+              <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Ảnh minh họa (tùy chọn):</label>
+              <input type="hidden" id="vePopupImage" value="">
+              
+              <!-- Preview ảnh (ẩn mặc định) -->
+              <div id="vePopupImagePreview" style="display:none; position:relative; margin-bottom:10px; border-radius:10px; overflow:hidden; max-width:400px;">
+                <img id="vePopupImagePreviewImg" src="" alt="Preview" style="width:100%; border-radius:10px; display:block;">
+                <button onclick="removePopupImage()" style="position:absolute; top:8px; right:8px; background:rgba(220,38,38,0.9); color:#fff; border:none; border-radius:50%; width:28px; height:28px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center;" title="Xóa ảnh">
+                  <i class="fas fa-trash-alt"></i>
+                </button>
+              </div>
+
+              <!-- Upload area -->
+              <div id="vePopupUploadArea" onclick="document.getElementById('vePopupFileInput').click()" 
+                   style="border:2px dashed rgba(255,255,255,0.15); border-radius:10px; padding:20px; text-align:center; cursor:pointer; transition:all 0.3s; background:rgba(255,255,255,0.02);"
+                   onmouseover="this.style.borderColor='var(--accent-primary, #4db8ff)'; this.style.background='rgba(77,184,255,0.05)'"
+                   onmouseout="this.style.borderColor='rgba(255,255,255,0.15)'; this.style.background='rgba(255,255,255,0.02)'">
+                <i class="fas fa-cloud-upload-alt" style="font-size:1.5rem; color:var(--accent-primary, #4db8ff); margin-bottom:6px;"></i>
+                <p style="margin:0; font-size:0.85rem; color:var(--text-muted);">Click để chọn ảnh hoặc nhập URL</p>
+                <p style="margin:4px 0 0; font-size:0.75rem; color:rgba(255,255,255,0.3);">PNG, JPG, GIF • Tối đa 5MB • Lưu trên Cloudflare R2</p>
+              </div>
+              <input type="file" id="vePopupFileInput" accept="image/*" style="display:none;" onchange="handlePopupImageUpload(this)">
+              
+              <!-- Hoặc nhập URL -->
+              <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+                <input type="text" id="vePopupImageUrl" class="ve-textarea" style="padding:8px 12px; height:auto; flex:1; font-size:0.82rem;" placeholder="Hoặc dán URL ảnh: https://example.com/banner.jpg" oninput="previewPopupImageUrl(this.value)">
+              </div>
+            </div>
+
+            <!-- Nút bấm -->
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
+              <div style="flex:1; min-width:150px;">
+                <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Text nút bấm:</label>
+                <input type="text" id="vePopupBtnText" class="ve-textarea" style="padding:10px 14px; height:auto;" placeholder="Khám phá ngay" value="Khám phá ngay">
+              </div>
+              <div style="flex:1; min-width:150px;">
+                <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Link nút (tùy chọn):</label>
+                <input type="text" id="vePopupBtnLink" class="ve-textarea" style="padding:10px 14px; height:auto;" placeholder="#/community">
+              </div>
+              <div style="min-width:100px;">
+                <label class="text-muted" style="font-size:0.82rem; display:block; margin-bottom:4px;">Màu chữ nút:</label>
+                <input type="color" id="vePopupBtnColor" value="#ffffff" style="width:100%; height:36px; border:none; border-radius:8px; cursor:pointer; background:transparent;" oninput="document.getElementById('vePopupBtnText').style.color=this.value">
+              </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="savePopupSettings()" style="margin-top:8px;">
+              <i class="fas fa-save"></i> Lưu Popup
+            </button>
+            <button class="btn" onclick="previewSitePopup()" style="margin-top:8px; margin-left:8px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15);">
+              <i class="fas fa-eye"></i> Xem trước
+            </button>
+          </div>
+        </div>
+
+        <!-- PHẦN 5: Banner quảng cáo -->
+        <div class="ve-section" style="margin-top: 30px;">
+          <h3 class="ve-section-title"><i class="fas fa-ad" style="color: #4db8ff;"></i> Banner quảng cáo</h3>
+          <div class="ve-banner-placeholder">
+            <i class="fas fa-photo-video"></i>
+            <h4>Tính năng đang phát triển</h4>
+            <p>Quản lý banner quảng cáo hiển thị trên trang chủ sẽ được cập nhật trong phiên bản tiếp theo.</p>
+            <span class="ve-coming-soon">Coming Soon</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contact Requests Panel -->
+      <div class="admin-panel" id="contactRequestsPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title"><i class="fas fa-envelope-open-text"></i> Yêu Cầu Liên Hệ</h2>
+          <div class="header-actions">
+            <button class="btn btn-secondary" onclick="loadContactRequests()">
+              <i class="fas fa-sync-alt"></i> Làm mới
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter -->
+        <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
+          <select class="form-select" id="filterContactStatus" onchange="filterContactRequests()" style="min-width:150px; padding:8px 12px;">
+            <option value="all">Tất cả trạng thái</option>
+            <option value="pending">Chưa xử lý</option>
+            <option value="resolved">Đã xử lý</option>
+          </select>
+          <select class="form-select" id="filterContactSubject" onchange="filterContactRequests()" style="min-width:150px; padding:8px 12px;">
+            <option value="all">Tất cả chủ đề</option>
+            <option value="bug">🐛 Báo lỗi</option>
+            <option value="account">👤 Tài khoản</option>
+            <option value="vip">👑 VIP</option>
+            <option value="copyright">©️ Bản quyền</option>
+            <option value="suggest">💡 Góp ý</option>
+            <option value="other">📋 Khác</option>
+          </select>
+        </div>
+
+        <!-- Table -->
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th style="width:50px;">STT</th>
+              <th>Người gửi</th>
+              <th>Email</th>
+              <th>Chủ đề</th>
+              <th>Nội dung</th>
+              <th>Ngày gửi</th>
+              <th>Trạng thái</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="adminContactTable">
+            <tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);">
+              <i class="fas fa-spinner fa-spin"></i> Nhấn "Làm mới" để tải dữ liệu...
+            </td></tr>
+          </tbody>
+        </table>
+      </div><!-- end contactRequestsPanel -->
+
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- API EXPLORER PANEL                          -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div class="admin-panel" id="apiExplorerPanel">
+        <div class="admin-panel-header">
+          <button class="admin-mobile-toggle" onclick="toggleSidebar()">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <h2 class="admin-panel-title"><i class="fas fa-plug" style="color:#00d2ff;"></i> Quản lý API Phim</h2>
+          <div class="header-actions">
+            <span class="text-muted" style="font-size:0.85rem;">Khám phá & kiểm tra dữ liệu từ các nguồn API phim</span>
+          </div>
+        </div>
+
+        <!-- PROVIDER + TOOLBAR -->
+        <div class="api-explorer-toolbar">
+          <!-- Chọn nguồn API -->
+          <div class="api-provider-selector">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <label class="api-label" style="margin-bottom: 0;"><i class="fas fa-database"></i> Nguồn API</label>
+              <button onclick="measureApiPings()" id="btnMeasurePing" class="btn btn-sm" title="Kiểm tra tốc độ kết nối API" style="padding: 4px 10px; border-radius: 6px; background: rgba(0,210,255,0.08); border: 1px solid rgba(0,210,255,0.2); color: #00d2ff; font-size: 0.72rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all 0.2s;">
+                <i class="fas fa-satellite-dish"></i> Đo Ping
+              </button>
+            </div>
+            <div class="api-provider-tabs" id="apiProviderTabs">
+              <!-- Render động bằng JS -->
+            </div>
+          </div>
+
+          <!-- Tìm kiếm Keyword API -->
+          <div class="api-filter-row" style="margin-bottom: 15px;">
+            <div class="api-filter-group" style="flex: 1;">
+              <label class="api-label">Tìm kiếm phim (Bỏ trống để xem danh sách mới nhất)</label>
+              <div class="api-search-wrapper" style="position: relative; display: flex; gap: 0;">
+                <div style="position: relative; flex: 1;">
+                  <input type="text" class="form-input" id="apiSearchKeyword" onkeypress="if(event.key === 'Enter') callApiList()" placeholder="Nhập tên phim cần tìm kiếm trực tiếp trên Nguồn API..." style="width: 100%; padding-left: 40px; padding-right: 15px; border-radius: 8px 0 0 8px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-right: none; color: #fff; height: 42px;">
+                  <i class="fas fa-search" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.4);"></i>
+                </div>
+                <button type="button" onclick="const _k=document.getElementById('apiSearchKeyword'); if(!_k||!_k.value.trim()){if(typeof showNotification==='function')showNotification('Vui lòng nhập tên phim để tìm kiếm!','warning');_k&&_k.focus();return;} callApiList();" style="display: inline-flex; align-items: center; gap: 6px; padding: 0 18px; height: 42px; border: none; border-radius: 0 8px 8px 0; background: linear-gradient(135deg, #00d2ff, #3a7bd5); color: #fff; font-weight: 600; font-size: 0.82rem; cursor: pointer; white-space: nowrap; transition: filter 0.2s;" onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter='brightness(1)'">
+                  <i class="fas fa-search"></i> Tìm kiếm
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bộ lọc tham số -->
+          <div class="api-filter-row" id="apiFilterRow">
+            <div class="api-filter-group">
+              <label class="api-label">Loại danh sách</label>
+              <select class="form-select api-select" id="apiTypeList">
+                <option value="phim-bo">Phim bộ</option>
+                <option value="phim-le">Phim lẻ</option>
+                <option value="tv-shows">TV Shows</option>
+                <option value="hoat-hinh">Hoạt hình</option>
+                <option value="phim-vietsub">Vietsub</option>
+                <option value="phim-thuyet-minh">Thuyết minh</option>
+                <option value="phim-long-tieng">Lồng tiếng</option>
+              </select>
+            </div>
+            <div class="api-filter-group">
+              <label class="api-label">Ngôn ngữ</label>
+              <select class="form-select api-select" id="apiSortLang">
+                <option value="">Tất cả</option>
+                <option value="vietsub">Vietsub</option>
+                <option value="thuyet-minh">Thuyết minh</option>
+                <option value="long-tieng">Lồng tiếng</option>
+              </select>
+            </div>
+            <div class="api-filter-group">
+              <label class="api-label">Năm</label>
+              <select class="form-select api-select" id="apiYear">
+                <option value="">Tất cả</option>
+                <!-- JS sẽ điền thêm năm -->
+              </select>
+            </div>
+            <div class="api-filter-group">
+              <label class="api-label">Số lượng</label>
+              <select class="form-select api-select" id="apiLimit">
+                <option value="12">12</option>
+                <option value="24" selected>24</option>
+                <option value="48">48</option>
+                <option value="64">64 (tối đa)</option>
+              </select>
+            </div>
+            <div class="api-filter-group">
+              <label class="api-label">Trang</label>
+              <input type="number" class="form-input api-input-sm" id="apiPage" value="1" min="1" />
+            </div>
+            <div class="api-filter-group api-filter-action">
+              <label class="api-label">&nbsp;</label>
+              <button class="btn btn-primary api-call-btn" onclick="const _s=document.getElementById('apiSearchKeyword'); if(_s) _s.value=''; callApiList();" id="btnCallApi">
+                <i class="fas fa-bolt"></i> Gọi API
+              </button>
+            </div>
+          </div>
+
+          <!-- Thống kê nhanh -->
+          <div class="api-stats-row" id="apiStatsRow" style="display:none;">
+            <div class="api-stat-item">
+              <i class="fas fa-film"></i>
+              <span>Trả về: <strong id="apiStatCount">0</strong> phim</span>
+            </div>
+            <div class="api-stat-item">
+              <i class="fas fa-book-open"></i>
+              <span>Tổng trang: <strong id="apiStatTotalPages">0</strong></span>
+            </div>
+            <div class="api-stat-item">
+              <i class="fas fa-list-ol"></i>
+              <span>Tổng phim: <strong id="apiStatTotalItems">0</strong></span>
+            </div>
+            <div class="api-stat-item" id="apiStatTime" style="margin-left:auto;">
+              <i class="fas fa-clock"></i>
+              <span>Thời gian: <strong id="apiResponseTime">0ms</strong></span>
+            </div>
+            <!-- Pagination nhanh -->
+            <div class="api-quick-page">
+              <button class="btn btn-sm" onclick="changeApiPage(-1)" id="btnApiPrev"><i class="fas fa-chevron-left"></i></button>
+              <span id="apiCurrentPage">1</span>
+              <button class="btn btn-sm" onclick="changeApiPage(1)" id="btnApiNext"><i class="fas fa-chevron-right"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TOOLBAR IMPORT PHIM -->
+        <!-- Hàng 1: Chọn tất cả + Toggle R2 + Cấu hình R2 -->
+        <div class="api-import-toolbar" id="apiImportToolbar" style="display:none;">
+          <div class="api-import-toolbar-left">
+            <label class="api-select-all-label">
+              <input type="checkbox" id="apiSelectAllMovies" onchange="selectAllApiMovies(this.checked)" />
+              <span>Chọn tất cả</span>
+            </label>
+          </div>
+          <div class="api-import-toolbar-right" style="flex-wrap: wrap; justify-content: flex-end;">
+            
+            <!-- ====== DÒNG 1: AUTO SYNC & IMPORT ====== -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); width: 100%; gap: 8px; margin-bottom: 4px;">
+              <!-- Nút Toggle Auto-Sync tập mới -->
+              <div id="autoSyncToggleWrap" style="display:flex;align-items:center;gap:6px;background:rgba(0,210,255,0.06);border:1px solid rgba(0,210,255,0.15);border-radius:8px;padding:5px 10px;flex-wrap:wrap;">
+                <i class="fas fa-sync-alt" style="font-size:0.8rem;color:#00d2ff;"></i>
+                <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">Auto-Sync tập:</span>
+                <button id="btnToggleAutoSync" onclick="toggleAutoSyncFeature()"
+                  style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:20px;border:none;cursor:pointer;transition:all 0.2s;">
+                </button>
+                <!-- Cài giờ cooldown -->
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-left:4px;">Mỗi</span>
+                <input type="number" id="autoSyncIntervalInput" min="1" max="72" value="6"
+                  style="width:46px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Số giờ giữa các lần sync" />
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">giờ</span>
+
+                <!-- Cài ngày theo dõi -->
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-left:4px;">Theo dõi</span>
+                <input type="number" id="autoSyncGracePeriodInput" min="1" max="30" value="3"
+                  style="width:46px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Số ngày ngóng chờ các tập phim có Nguồn Dự Phòng sau khi ra" />
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">ngày</span>
+
+                <button onclick="saveAutoSyncInterval()" title="Lưu cài đặt cấu hình Auto-Sync"
+                  style="font-size:0.7rem;padding:2px 8px;border-radius:6px;border:none;cursor:pointer;background:rgba(0,210,255,0.15);color:#00d2ff;font-weight:600;">
+                  Lưu
+                </button>
+                <span id="autoSyncLastInfo" style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap;"></span>
+              </div>
+
+              <!-- Nút Toggle Auto-Import phim mới -->
+              <div id="autoImportToggleWrap" style="display:flex;align-items:center;gap:6px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:8px;padding:5px 10px;flex-wrap:wrap;">
+                <i class="fas fa-film" style="font-size:0.8rem;color:#a78bfa;"></i>
+                <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">Auto-Import phim:</span>
+                <button id="btnToggleAutoImport" onclick="toggleAutoImportFeature()"
+                  style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:20px;border:none;cursor:pointer;transition:all 0.2s;">
+                </button>
+                <!-- Cài giờ cooldown -->
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-left:4px;">Mỗi</span>
+                <input type="number" id="autoImportIntervalInput" min="1" max="72" value="6"
+                  style="width:46px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Số giờ giữa các lần import" />
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">giờ</span>
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-left:4px;">Năm</span>
+                <input type="number" id="autoImportYearInput" min="1900" max="2100"
+                  style="width:55px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Năm phát hành phim cần lấy" />
+                <!-- Giới hạn phim/lần -->
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-left:4px;">Max</span>
+                <input type="number" id="autoImportMaxInput" min="1" max="50" value="10"
+                  style="width:46px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Tối đa số phim import mỗi lần" />
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">phim</span>
+                <script>document.getElementById('autoImportYearInput').value = new Date().getFullYear();</script>
+                <button onclick="saveAutoImportSettings()" title="Lưu cài đặt Auto-Import"
+                  style="font-size:0.7rem;padding:2px 8px;border-radius:6px;border:none;cursor:pointer;background:rgba(167,139,250,0.15);color:#a78bfa;font-weight:600;">
+                  Lưu
+                </button>
+                <span id="autoImportLastInfo" style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap;"></span>
+              </div>
+
+              <!-- Lọc quốc gia -->
+              <div id="excludeCountryWrap" style="display:flex;align-items:center;gap:6px;background:rgba(255,107,107,0.06);border:1px solid rgba(255,107,107,0.15);border-radius:8px;padding:5px 10px;flex-wrap:wrap;">
+                <i class="fas fa-ban" style="font-size:0.8rem;color:#ff6b6b;"></i>
+                <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">Chặn Q.Gia:</span>
+                <button id="btnToggleExcludeCountry" onclick="toggleExcludeCountryFeature()"
+                  style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:20px;border:none;cursor:pointer;transition:all 0.2s;">
+                  OFF
+                </button>
+
+                <!-- Vùng chứa các thẻ (chip) quốc gia bị chặn -->
+                <div id="excludeCountryTags" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+                  <!-- Auto-generated chips will appear here -->
+                </div>
+
+                <!-- Input để thêm quốc gia mới -->
+                <div style="display:flex;align-items:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;overflow:hidden;margin-left:4px;">
+                  <select id="excludeCountryInput"
+                    style="width:90px;padding:2px 4px;font-size:0.72rem;border:none;background:transparent;color:var(--text-primary);outline:none;cursor:pointer;">
+                    <option value="" disabled selected>Chọn...</option>
+                    <option value="Việt Nam" style="color:#000;">Việt Nam</option>
+                    <option value="Trung Quốc" style="color:#000;">Trung Quốc</option>
+                    <option value="Hàn Quốc" style="color:#000;">Hàn Quốc</option>
+                    <option value="Nhật Bản" style="color:#000;">Nhật Bản</option>
+                    <option value="Thái Lan" style="color:#000;">Thái Lan</option>
+                    <option value="Đài Loan" style="color:#000;">Đài Loan</option>
+                    <option value="Hồng Kông" style="color:#000;">Hồng Kông</option>
+                    <option value="Ấn Độ" style="color:#000;">Ấn Độ</option>
+                    <option value="Mỹ" style="color:#000;">Mỹ</option>
+                    <option value="Anh" style="color:#000;">Anh</option>
+                    <option value="Pháp" style="color:#000;">Pháp</option>
+                    <option value="Âu Mỹ" style="color:#000;">Âu Mỹ</option>
+                  </select>
+                  <button onclick="addExcludeCountryTag()" title="Thêm quốc gia"
+                    style="font-size:0.7rem;padding:2px 6px;border:none;border-left:1px solid rgba(255,255,255,0.1);cursor:pointer;background:rgba(255,255,255,0.1);color:#fff;">
+                    <i class="fas fa-plus"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- ====== AUTO-FILL PANEL ====== -->
+              <div id="autoFillWrap" style="display:flex;align-items:center;gap:6px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15);border-radius:8px;padding:5px 10px;flex-wrap:wrap;width:100%;">
+                <i class="fas fa-rocket" style="font-size:0.8rem;color:#22c55e;"></i>
+                <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">Auto-Fill:</span>
+                
+                <!-- Input mục tiêu -->
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">Thêm mới</span>
+                <input type="number" id="autoFillTargetInput" min="1" max="500" value="50"
+                  style="width:55px;padding:1px 6px;font-size:0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);text-align:center;"
+                  title="Số phim MỚI cần import (không tính phim đã có)" />
+                <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">phim</span>
+                <button onclick="saveAutoFillTarget()" title="Lưu số lượng phim"
+                  style="font-size:0.7rem;padding:2px 8px;border-radius:6px;border:none;cursor:pointer;background:rgba(34,197,94,0.15);color:#22c55e;font-weight:600;">
+                  Lưu
+                </button>
+
+                <!-- Nút Bắt đầu -->
+                <button id="btnStartAutoFill" onclick="startAutoFill()"
+                  style="font-size:0.72rem;font-weight:700;padding:4px 12px;border-radius:8px;border:none;cursor:pointer;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;white-space:nowrap;transition:all 0.2s;">
+                  <i class="fas fa-play"></i> Bắt đầu
+                </button>
+
+                <!-- Nút Tạm dừng -->
+                <button id="btnPauseAutoFill" onclick="pauseAutoFill()" style="display:none;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;border:1px solid rgba(251,191,36,0.5);background:rgba(251,191,36,0.1);color:#fbbf24;white-space:nowrap;">
+                  <i class="fas fa-pause"></i> Tạm dừng
+                </button>
+
+                <!-- Nút Hủy -->
+                <button id="btnCancelAutoFill" onclick="cancelAutoFill()" style="display:none;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;border:1px solid rgba(248,113,113,0.5);background:rgba(248,113,113,0.1);color:#f87171;white-space:nowrap;">
+                  <i class="fas fa-times-circle"></i> Hủy
+                </button>
+
+                <!-- Progress -->
+                <div id="autoFillProgressWrap" style="display:none;flex:1;min-width:180px;align-items:center;gap:6px;">
+                  <div style="flex:1;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;">
+                    <div id="autoFillProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#4ade80);border-radius:3px;transition:width 0.3s;"></div>
+                  </div>
+                  <span id="autoFillProgressText" style="font-size:0.7rem;color:#4ade80;white-space:nowrap;font-weight:600;">0/0</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- ====== DÒNG 2: CÁC NÚT ACTION ====== -->
+            <div style="display: flex; gap: 10px; align-items: center; justify-content: flex-end; width: 100%; flex-wrap: wrap;">
+              <!-- Nút lọc chỉ phim chưa có trong DB -->
+            <button id="btnFilterNewOnly" onclick="toggleNewOnlyFilter()"
+              title="Ẩn phim đã có trong database, chỉ hiện phim mới"
+              style="font-size:0.72rem;font-weight:700;padding:4px 11px;border-radius:8px;cursor:pointer;border:1px solid rgba(167,139,250,0.4);background:rgba(167,139,250,0.08);color:#a78bfa;white-space:nowrap;transition:all 0.2s;">
+              <i class="fas fa-filter"></i> Chỉ phim mới
+            </button>
+
+            <!-- 🧪 NÚT TEST - XÓA SAU KHI TEST XONG -->
+            <button id="btnTestSyncLoop" onclick="toggleTestSyncLoop()"
+              title="TEST: Sync ngay + lặp mỗi 5 phút (bấm lại để dừng)"
+              style="font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;border:1px dashed #ff922b;cursor:pointer;background:rgba(255,146,43,0.12);color:#ff922b;white-space:nowrap;">
+              🧪 Test Sync
+            </button>
+
+            <!-- Nút Test Auto-Import phim mới -->
+            <button id="btnTestAutoImport" onclick="testAutoImportNow()"
+              title="Test quét và import phim mới ngay lập tức (bỏ qua cooldown)"
+              style="font-size:0.72rem;font-weight:700;padding:4px 11px;border-radius:8px;cursor:pointer;border:1px dashed #a78bfa;background:rgba(167,139,250,0.1);color:#a78bfa;white-space:nowrap;transition:all 0.2s;">
+              <i class="fas fa-magic"></i> Test Import
+            </button>
+
+            <!-- Nút Tạm dừng / Hủy (ẩn mặc định, hiện khi test chạy) -->
+            <div id="testControlsWrap" style="display:none;align-items:center;gap:4px;">
+              <button id="btnTestPause" onclick="testPauseToggle()"
+                style="font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;border:1px solid rgba(251,191,36,0.5);background:rgba(251,191,36,0.1);color:#fbbf24;white-space:nowrap;">
+                <i class="fas fa-pause"></i> Tạm dừng
+              </button>
+              <button id="btnTestCancel" onclick="testCancelNow()"
+                style="font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;border:1px solid rgba(248,113,113,0.5);background:rgba(248,113,113,0.1);color:#f87171;white-space:nowrap;">
+                <i class="fas fa-times-circle"></i> Hủy
+              </button>
+            </div>
+
+            <!-- NÚT QUÉT ĐA NGUỒN (Bulk Scan) -->
+            <button id="btnBulkScanSources" onclick="bulkScanAllMoviesSources()"
+              title="Quét tất cả phim hiện có trên web, bổ sung nguồn từ mọi API"
+              style="font-size:0.72rem;font-weight:700;padding:4px 11px;border-radius:8px;cursor:pointer;border:1px solid rgba(16,185,129,0.4);background:rgba(16,185,129,0.1);color:#10b981;white-space:nowrap;transition:all 0.2s;">
+              <i class="fas fa-satellite-dish"></i> Quét Đa Nguồn
+            </button>
+            <button id="btnAbortBulkScan" onclick="abortBulkScan()"
+              style="display:none;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,107,107,0.3);cursor:pointer;background:rgba(255,107,107,0.12);color:#ff6b6b;white-space:nowrap;">
+              <i class="fas fa-stop-circle"></i> Dừng quét
+            </button>
+
+            <!-- NÚT SỬA SERVER RỖNG -->
+            <button id="btnFixEmptyServers" onclick="fixEmptyServerNames()"
+              title="Sửa tất cả tập phim có server rỗng hoặc sai → Detect lại đúng chuẩn"
+              style="font-size:0.72rem;font-weight:700;padding:4px 11px;border-radius:8px;cursor:pointer;border:1px solid rgba(59,130,246,0.4);background:rgba(59,130,246,0.1);color:#3b82f6;white-space:nowrap;transition:all 0.2s;">
+              <i class="fas fa-wrench"></i> Fix Server rỗng
+            </button>
+
+            <button class="btn btn-sm api-r2-toggle-btn active" id="btnToggleR2Mode" onclick="toggleImportR2Mode()" title="Bật/tắt upload ảnh lên Cloudflare R2">
+              <i class="fas fa-cloud-upload-alt"></i> Ảnh: Cloudflare R2
+            </button>
+
+            </div> <!-- Kết thúc DÒNG 2 -->
+
+          </div>
+
+        </div>
+
+
+        <!-- Hàng 2: Bulk Actions (hiện khi có phim được chọn) -->
+        <div class="api-bulk-actions-bar" id="apiBulkActionsBar" style="display:none;">
+          <span class="api-bulk-info">
+            <i class="fas fa-check-square"></i>
+            Đã chọn: <strong id="apiBulkSelectedCount">0</strong> phim
+          </span>
+          <div class="api-bulk-buttons">
+            <button class="btn btn-sm" id="btnBulkImport" onclick="importBulkMoviesFromApi()" style="background:linear-gradient(135deg,#00b4d8,#0077b6);color:#fff;font-weight:700;">
+              <i class="fas fa-file-import"></i> Import đã chọn (0)
+            </button>
+            <button class="btn btn-sm" id="btnAbortImport" onclick="abortBulkImport()" style="display:none;background:rgba(255,107,107,0.15);color:#ff6b6b;border:1px solid rgba(255,107,107,0.3);">
+              <i class="fas fa-stop-circle"></i> Dừng
+            </button>
+            <button class="btn btn-sm" onclick="selectAllApiMovies(false)" style="background:rgba(255,255,255,0.06);color:var(--text-muted);border:1px solid rgba(255,255,255,0.1);">
+              Bỏ chọn
+            </button>
+          </div>
+        </div>
+
+        <!-- Progress Bar Import -->
+        <div class="api-import-progress-container" id="apiImportProgressContainer" style="display:none;">
+          <div class="api-import-progress-bar-wrap">
+            <div class="api-import-progress-bar" id="apiImportProgressBar" style="width:0%"></div>
+          </div>
+          <div class="api-import-progress-label" id="apiImportProgressLabel">0/0 · Đang chờ...</div>
+        </div>
+
+        <!-- KẾT QUẢ: TABS -->
+        <div class="api-result-section">
+          <div class="api-result-tabs">
+            <button class="api-tab-btn active" data-tab="grid" onclick="switchApiTab('grid')">
+              <i class="fas fa-th-large"></i> Danh sách
+            </button>
+            <button class="api-tab-btn" data-tab="json" onclick="switchApiTab('json')">
+              <i class="fas fa-code"></i> JSON Raw
+            </button>
+          </div>
+
+          <!-- Tab: Grid Card -->
+          <div class="api-tab-content active" id="apiTabGrid">
+            <!-- Panel Log Tiến Trình Import -->
+            <div id="importProgressPanel" style="display:none; margin-bottom: 16px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; backdrop-filter: blur(8px);">
+              <div style="display:flex; align-items:center; justify-content:space-between; padding: 10px 16px; background: rgba(59,130,246,0.15); border-bottom: 1px solid rgba(255,255,255,0.06);">
+                <span style="font-weight:700; font-size:0.82rem; color:#60a5fa; display:flex; align-items:center; gap:8px;">
+                  <i class="fas fa-terminal"></i> Tiến trình Import
+                  <span id="importProgressSpinner" style="display:none;"><i class="fas fa-spinner fa-spin" style="color:#60a5fa;"></i></span>
+                </span>
+                <div style="display:flex; gap:6px;">
+                  <button onclick="document.getElementById('importLogBody').style.display = document.getElementById('importLogBody').style.display==='none'?'block':'none';" style="background:none;border:none;color:rgba(255,255,255,0.5);cursor:pointer;font-size:0.75rem;padding:2px 6px;" title="Thu gọn / Mở rộng">
+                    <i class="fas fa-chevron-up"></i>
+                  </button>
+                  <button onclick="document.getElementById('importProgressPanel').style.display='none';" style="background:none;border:none;color:rgba(255,255,255,0.4);cursor:pointer;font-size:0.8rem;padding:2px 6px;" title="Đóng">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+              </div>
+              <div id="importLogBody" style="max-height: 220px; overflow-y: auto; padding: 8px 12px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.72rem; line-height: 1.7;">
+                <!-- Log entries sẽ được JS inject vào đây -->
+              </div>
+            </div>
+
+            <div id="apiMovieGrid" class="api-movie-grid">
+              <!-- Trạng thái rỗng ban đầu -->
+              <div class="api-empty-state" id="apiEmptyState">
+                <div class="api-empty-icon">
+                  <i class="fas fa-plug"></i>
+                </div>
+                <h3>Chưa có dữ liệu</h3>
+                <p>Chọn bộ lọc và nhấn <strong>Gọi API</strong> để xem dữ liệu từ nguồn phim.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: JSON Viewer -->
+          <div class="api-tab-content" id="apiTabJson">
+            <div class="api-json-toolbar">
+              <span class="text-muted" style="font-size:0.85rem;"><i class="fas fa-info-circle"></i> Dữ liệu JSON thô trả về từ API</span>
+              <button class="btn btn-sm btn-secondary" onclick="copyApiJson()" id="btnCopyJson">
+                <i class="fas fa-copy"></i> Copy JSON
+              </button>
+            </div>
+            <pre class="api-json-viewer" id="apiJsonViewer"><span style="color:var(--text-muted); font-size:0.95rem;">// Gọi API để xem dữ liệu JSON...</span></pre>
+          </div>
+        </div>
+
+      </div><!-- end apiExplorerPanel -->
+
+    </div><!-- end admin-content -->
+  </div><!-- end admin-layout -->
+</div><!-- end adminPage -->
+
+<!-- Modal cấu hình R2 Worker URL -->
+<div class="api-r2-modal-overlay" id="apiR2ConfigModal" onclick="closeR2ConfigModal()">
+  <div class="api-r2-modal" onclick="event.stopPropagation()">
+    <div class="api-r2-modal-header">
+      <h3><i class="fas fa-cloud-upload-alt" style="color:#00d2ff;"></i> Cấu hình Cloudflare R2 Worker</h3>
+      <button onclick="closeR2ConfigModal()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1rem;"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="api-r2-modal-body">
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">Nhập URL của Cloudflare Worker dùng để upload ảnh lên R2. Worker phải có endpoint <code>/upload-from-url</code>.</p>
+      <label class="form-label" style="font-size:0.8rem;">R2 Worker URL</label>
+      <input type="url" id="r2WorkerUrlInput" class="form-input" placeholder="https://r2-uploader.your-worker.workers.dev" style="margin-bottom:16px;font-family:monospace;font-size:0.85rem;" />
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-secondary" onclick="closeR2ConfigModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="saveR2WorkerUrl()"><i class="fas fa-save"></i> Lưu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal cấu hình Telegram Bot Webhook -->
+<div class="api-r2-modal-overlay" id="apiTelegramConfigModal" onclick="closeTelegramConfigModal()">
+  <div class="api-r2-modal" onclick="event.stopPropagation()">
+    <div class="api-r2-modal-header">
+      <h3><i class="fab fa-telegram-plane" style="color:#34d399;"></i> Cấu hình Telegram Bot</h3>
+      <button onclick="closeTelegramConfigModal()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1rem;"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="api-r2-modal-body">
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">Nhập Bot Token và Chat ID để nhận thông báo tự động sau mỗi đợt Auto-Import.</p>
+      
+      <label class="form-label" style="font-size:0.8rem;">Bot Token (Lấy từ @BotFather)</label>
+      <input type="text" id="telegramBotTokenInput" class="form-input" placeholder="VD: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" style="margin-bottom:12px;font-family:monospace;font-size:0.85rem;" />
+      
+      <label class="form-label" style="font-size:0.8rem;">Chat ID (Lấy từ @getmyid_bot)</label>
+      <input type="text" id="telegramChatIdInput" class="form-input" placeholder="VD: 123456789" style="margin-bottom:16px;font-family:monospace;font-size:0.85rem;" />
+      
+      <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;">
+        <button class="btn btn-sm" onclick="testTelegramConfig()" style="background:rgba(52,211,153,0.1);color:#34d399;font-weight:600;padding:6px 12px;display:flex;align-items:center;gap:6px;border:none;border-radius:4px;cursor:pointer;">
+          <i class="fas fa-paper-plane"></i> Test Gửi
+        </button>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-secondary" onclick="closeTelegramConfigModal()">Hủy</button>
+          <button class="btn btn-primary" onclick="saveTelegramConfig()"><i class="fas fa-save"></i> Lưu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DRAWER: Chi tiết phim (nằm ngoài adminPage để tránh will-change stacking context) -->
+<div class="api-detail-overlay" id="apiDetailOverlay" onclick="closeApiDetail()"></div>
+<div class="api-detail-drawer" id="apiDetailDrawer">
+  <div class="api-detail-header">
+    <h3 id="apiDetailTitle">Chi tiết phim</h3>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <!-- Nút Import vào DB -->
+      <button class="btn btn-sm api-detail-import-btn" id="btnDetailImport" onclick="importCurrentDetailMovie()" title="Import phim này vào database Supabase">
+        <i class="fas fa-cloud-upload-alt"></i> Lưu vào DB
+      </button>
+      <button class="btn btn-sm" id="btnDetailJson" onclick="toggleDetailJson()" style="background:rgba(255,255,255,0.08); font-size:0.8rem;">
+        <i class="fas fa-code"></i> JSON
+      </button>
+      <button class="api-detail-close" onclick="closeApiDetail()"><i class="fas fa-times"></i></button>
+    </div>
+  </div>
+
+  <div class="api-detail-body" id="apiDetailBody">
+    <div style="text-align:center; padding:60px 20px; color:var(--text-muted);">
+      <i class="fas fa-mouse-pointer fa-2x"></i>
+      <p style="margin-top:12px;">Click vào một bộ phim để xem chi tiết</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- Modal Thêm/Sửa Diễn Viên -->
+<div class="modal-overlay no-click-outside" id="actorModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="actorModalTitle">Thêm Diễn Viên Mới</h3>
+      <button class="modal-close" onclick="closeModal('actorModal')">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="actorForm" onsubmit="handleActorSubmit(event)">
+        <input type="hidden" id="actorId" />
+        
+        <div class="form-group" style="text-align: center; margin-bottom: 20px;" id="actorAvatarPreviewWrapper">
+          <img id="actorAvatarPreview" src="https://ui-avatars.com/api/?name=Actor&background=random&color=fff&size=120" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.1); margin-bottom: 15px;" alt="Avatar Preview">
+        </div>
+
+        <div class="form-group" style="position: relative;">
+          <label class="form-label">Tên <span style="color:red">*</span></label>
+          <input
+            type="text"
+            class="form-input"
+            id="actorName"
+            required
+            placeholder="Nhập tên (VD: Tom Cruise, Christopher Nolan)"
+            oninput="updateActorPreviewDebounced(); checkActorDuplicateDebounced(this.value);"
+            autocomplete="off"
+          />
+          <div id="actorDuplicateSuggestions" class="suggestions-list"></div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">Link Ảnh / Avatar (Tùy chọn)</label>
+          <div class="input-with-action" style="display: flex; gap: 8px;">
+            <input
+              type="url"
+              class="form-input"
+              id="actorAvatar"
+              placeholder="https://..."
+              style="flex: 1;"
+              oninput="updateActorPreview()"
+            />
+            <button type="button" class="btn btn-secondary btn-upload" onclick="document.getElementById('actorAvatarUpload').click()" style="white-space: nowrap;">
+              <i class="fas fa-upload"></i> Tải lên
+            </button>
+            <input type="file" id="actorAvatarUpload" accept="image/*" style="display: none;" onchange="uploadMovieImage(this, 'actorAvatar', 'actorAvatarPreviewWrapper')">
+          </div>
+          <small class="text-muted" style="display: block; margin-top: 5px;">Mặc định dùng ảnh tự sinh từ tên nếu để trống.</small>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Tên gọi khác <small style="opacity:0.6">(ngăn cách bằng dấu phẩy)</small></label>
+          <input
+            type="text"
+            class="form-input"
+            id="actorAltNames"
+            placeholder="VD: 김선호, Kim Seonho, Kim Sun Ho"
+          />
+          <small class="text-muted" style="display: block; margin-top: 5px;">Tên tiếng Hàn, tiếng Trung, hoặc biệt danh khác. Giúp tìm nhanh khi thêm phim.</small>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+          <div class="form-group">
+            <label class="form-label">Vai trò</label>
+            <select class="form-select" id="actorRole">
+              <option value="actor">Diễn viên</option>
+              <option value="director">Đạo diễn</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Giới tính</label>
+            <select class="form-select" id="actorGender">
+              <option value="">Không rõ</option>
+              <option value="Nam">Nam</option>
+              <option value="Nữ">Nữ</option>
+            </select>
+          </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+          <div class="form-group">
+            <label class="form-label">Ngày sinh</label>
+            <input type="date" class="form-input" id="actorDob" />
+          </div>
+          <div class="form-group" style="position: relative;">
+            <label class="form-label">Quốc gia / Nơi sống</label>
+            <input 
+              type="text" 
+              class="form-input" 
+              id="actorCountry" 
+              placeholder="VD: Hàn Quốc, Mỹ, Việt Nam..." 
+              autocomplete="off"
+              oninput="handleCountryInput(this.value)"
+              onfocus="handleCountryInput(this.value)"
+              onkeydown="handleCountryKeydown(event)"
+            />
+            <div id="actorCountrySuggestions" class="suggestions-list"></div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Giới thiệu ngắn gọn</label>
+          <textarea
+            class="form-textarea"
+            id="actorBio"
+            rows="3"
+            placeholder="Thông tin về diễn viên này..."
+          ></textarea>
+        </div>
+
+        <div class="form-actions" style="margin-top: 25px; display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('actorModal')">
+            Hủy
+          </button>
+          <button type="submit" class="btn btn-primary">Lưu</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Cập nhật hàng loạt Diễn viên -->
+<div class="modal-overlay no-click-outside" id="bulkUpdateActorModal">
+  <div class="modal" style="max-width: 450px;">
+    <div class="modal-header">
+      <h3 id="bulkUpdateModalTitle">Cập nhật hàng loạt</h3>
+      <button class="modal-close" onclick="closeModal('bulkUpdateActorModal')">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="bulkUpdateActorForm" onsubmit="handleBulkUpdateSubmit(event)">
+        <input type="hidden" id="bulkUpdateField" />
+        
+        <div id="bulkGenderField" class="form-group hidden">
+          <label class="form-label">Chọn giới tính mới:</label>
+          <select class="form-select" id="bulkActorGender">
+            <option value="">Không rõ</option>
+            <option value="Nam">Nam</option>
+            <option value="Nữ">Nữ</option>
+          </select>
+        </div>
+
+        <div id="bulkCountryField" class="form-group hidden" style="position: relative;">
+          <label class="form-label">Nhập nơi sống mới:</label>
+          <input 
+            type="text" 
+            class="form-input" 
+            id="bulkActorCountry" 
+            placeholder="VD: Hàn Quốc, Mỹ..." 
+            autocomplete="off"
+            oninput="handleBulkCountryInputDebounced(this.value)"
+            onfocus="handleBulkCountryInput(this.value)"
+          />
+          <div id="bulkActorCountrySuggestions" class="suggestions-list"></div>
+        </div>
+
+        <div class="form-actions" style="margin-top: 25px; display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('bulkUpdateActorModal')">
+            Hủy
+          </button>
+          <button type="submit" class="btn btn-primary">Cập nhật (<span id="bulkUpdateCount">0</span>)</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<!-- Modal So sánh & Cập nhật Diễn viên từ API -->
+<div class="modal-overlay no-click-outside" id="actorImportCompareModal">
+  <div class="modal" style="max-width: 850px; width: 95%;">
+    <div class="modal-header">
+      <h3>So sánh & Bổ sung dữ liệu Diễn viên</h3>
+      <button class="modal-close" onclick="closeModal('actorImportCompareModal')">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="modal-body" style="padding: 0;">
+      <div id="compareSummary" style="padding: 15px 20px; background: rgba(77, 171, 247, 0.1); border-bottom: 1px solid var(--border-color); font-size: 0.9rem;">
+        Phát hiện <strong id="compareCount">0</strong> diễn viên có thông tin đầy đủ hơn từ API. Admin hãy kiểm tra và duyệt cập nhật.
+      </div>
+      
+      <div class="compare-container" style="max-height: 60vh; overflow-y: auto;">
+        <table class="admin-table compare-table">
+          <thead>
+            <tr>
+              <th style="width: 150px;">Trường dữ liệu</th>
+              <th>Hiện tại (Database)</th>
+              <th>Mới (Từ API)</th>
+            </tr>
+          </thead>
+          <tbody id="actorCompareList">
+            <!-- Dữ liệu so sánh render tại đây -->
+          </tbody>
+        </table>
+      </div>
+
+      <div class="compare-navigation" style="display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-top: 1px solid var(--border-color);">
+        <div class="compare-info">
+            Đang xem: <strong id="compareCurrentIndex">1</strong> / <span id="compareTotal">0</span>
+        </div>
+        <div class="compare-actions" style="display: flex; gap: 10px;">
+          <button type="button" class="btn btn-secondary" id="btnPrevCompare" onclick="navigateCompare(-1)">
+            <i class="fas fa-chevron-left"></i> Trước
+          </button>
+          <button type="button" class="btn btn-secondary" id="btnNextCompare" onclick="navigateCompare(1)">
+            Tiếp <i class="fas fa-chevron-right"></i>
+          </button>
+          <button type="button" class="btn btn-primary" onclick="applyCurrentActorUpdate()" style="background: #51cf66;">
+            <i class="fas fa-check"></i> Duyệt cập nhật này
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="padding: 15px 20px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('actorImportCompareModal')">Đóng</button>
+        <button type="button" class="btn btn-primary" onclick="applyAllActorUpdates()" style="background: var(--accent-primary);">
+            <i class="fas fa-file-import"></i> Duyệt cập nhật tất cả (<span id="compareTotalAll">0</span>)
+        </button>
+    </div>
+  </div>
+</div>
+<!-- Trailer Edit Modal -->
+<div class="modal-overlay" id="trailerEditModal" onclick="closeModal('trailerEditModal')">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3><i class="fas fa-edit"></i> Chỉnh sửa Trailer</h3>
+            <button class="modal-close" onclick="closeModal('trailerEditModal')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <p id="trailerEditMovieName" style="font-weight: 600; margin-bottom: 15px;"></p>
+            <div class="form-group">
+                <label class="form-label">YouTube Video ID hoặc Tên Phim</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" class="form-input" id="trailerEditInput" placeholder="VD: dQw4w9WgXcQ" oninput="previewAdminTrailer()">
+                    <button class="btn btn-secondary" onclick="autoFetchAdminTrailer()" title="Tự động tìm kiếm qua TMDb/Invidious">
+                        <i class="fas fa-search"></i> Tìm Tự Động
+                    </button>
+                </div>
+                <small class="text-muted" style="display: block; margin-top: 5px;">Hệ thống sẽ lấy tự động bằng API, nhưng bạn có thể dán tay mã video Youtube vào đây.</small>
+            </div>
+            
+            <div id="trailerEditPreview" style="margin-top: 15px; display: none;">
+                <label class="form-label">Xem trước:</label>
+                <iframe id="trailerEditIframe" width="100%" height="200" src="" frameborder="0" allowfullscreen style="border-radius: 8px; border: 1px solid var(--border-color);"></iframe>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <input type="hidden" id="trailerEditMovieId">
+            <input type="hidden" id="trailerEditMovieTitle">
+            <input type="hidden" id="trailerEditMovieYear">
+            <button class="btn btn-secondary" onclick="closeModal('trailerEditModal')">Hủy</button>
+            <button class="btn btn-danger" onclick="deleteAdminTrailer()" id="btnDeleteTrailer" style="display: none;">Xóa Trailer</button>
+            <button class="btn btn-primary" onclick="saveAdminTrailer()">Lưu Trailer</button>
+        </div>
+    </div>
+</div>
+<!-- Modal Xem ảnh Bill Lớn -->
+<div class="modal-overlay" id="billViewportModal" onclick="closeModal('billViewportModal')">
+  <div class="modal bill-viewport-modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Chi tiết ảnh xác nhận</h3>
+      <button class="modal-close" onclick="closeModal('billViewportModal')">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="modal-body bill-viewport-body">
+      <img id="billViewportImage" src="" alt="Bill Image" />
+    </div>
+  </div>
+</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Bulk OpenSubtitles Auto-Sync -->
+<div class="modal-overlay" id="bulkOpenSubtitlesModal" onclick="closeModal('bulkOpenSubtitlesModal')">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width: 650px; width: 95%;">
+    <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;">
+      <h3><i class="fas fa-cogs" style="color: #17a2b8; margin-right: 8px;"></i> Tải Phụ Đề Hàng Loạt (Auto-Sync)</h3>
+      <button type="button" class="modal-close" onclick="closeModal('bulkOpenSubtitlesModal')">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="modal-body" style="padding-bottom: 20px;">
+      <div style="background: rgba(23, 162, 184, 0.08); border: 1px dashed rgba(23, 162, 184, 0.4); padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.85rem; color: #a1dffb; line-height: 1.5;">
+        <i class="fas fa-info-circle"></i> Công cụ Auto-Sync sẽ duyệt qua các tập đang hiển thị, tự động lấy số theo <strong>Mùa (Season)</strong> và <strong>Ngôn ngữ</strong> để tải phụ đề Top 1 về, chuyển VTT, và Up đè vào SQL.
+      </div>
+
+      <div class="form-group" style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <div style="flex: 2; min-width: 200px;">
+            <label class="form-label">Tên Phim (Keywords):</label>
+            <input type="text" class="form-input" id="bulkOsSearchQuery" placeholder="Tên phim..." readonly style="opacity: 0.8;">
+        </div>
+        <div style="flex: 1; min-width: 100px;">
+            <label class="form-label" style="color: #ffc107;">Mùa (Season):</label>
+            <input type="number" class="form-input" id="bulkOsSeasonNum" value="1" min="1" placeholder="VD: 1">
+        </div>
+        <div style="flex: 1; min-width: 120px;">
+            <label class="form-label">Ngôn ngữ:</label>
+            <select id="bulkOsLang" class="form-select">
+                <option value="vi">🇻🇳 Tiếng Việt</option>
+                <option value="en">🇺🇸 Tiếng Anh</option>
+                <option value="zh-CN">🇨🇳 Tiếng Trung</option>
+                <option value="ko">🇰🇷 Tiếng Hàn</option>
+                <option value="ja">🇯🇵 Tiếng Nhật</option>
+            </select>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 20px;">
+          <button type="button" class="btn btn-primary btn-lg" id="btnStartBulkOsSync" style="font-size: 1.1rem; padding: 10px 24px; border-radius: 8px;" onclick="startBulkOpenSubtitlesSync()">
+              <i class="fas fa-play"></i> BẮT ĐẦU CHẠY AUTO MAPPING
+          </button>
+      </div>
+
+      <!-- Logs UI -->
+      <div id="bulkOsProgressContainer" style="display: none;">
+          <h4 style="font-size: 0.95rem; margin-bottom: 8px; color: #fff;">Tiến độ quét: (<span id="bulkOsProgressText">0/0</span>)</h4>
+          <div style="width: 100%; background: rgba(255,255,255,0.1); border-radius: 6px; height: 16px; margin-bottom: 15px; overflow: hidden;">
+              <div id="bulkOsProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #17a2b8, #4ecdc4); transition: width 0.3s ease;"></div>
+          </div>
+
+          <div id="bulkOsLogsTerminal" style="background: rgba(0,0,0,0.4); border: 1px inset rgba(255,255,255,0.05); border-radius: 6px; padding: 12px; font-family: monospace; font-size: 0.8rem; color: #aaa; max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;">
+              <!-- Logs will be appended here -->
+              <div><span>></span> Sẵn sàng kích hoạt lệnh API...</div>
+          </div>
+      </div>
+      
+    </div>
+  </div>
+</div>
