@@ -30,13 +30,17 @@ jobs:
         working-directory: TramPhim-RN
         run: npm install
 
+      - name: 🔨 Install EAS CLI
+        run: npm install -g eas-cli
+
       - name: 🔨 Build IPA (Local)
         working-directory: TramPhim-RN
         run: |
-          # Lưu ý: Build IPA yêu cầu Apple Certificate và Provisioning Profile.
-          # Nếu bạn đã cấu hình Expo, lệnh này sẽ tự động lấy credentials từ Expo hoặc sử dụng Secrets.
-          # Để build không cần credentials (chỉ test), hãy dùng profile simulator.
-          npx eas build --platform ios --profile preview --local --non-interactive --output=./build.ipa
+          # Build IPA for simulator (no certs needed) or development
+          # Note: Real IPA requires Apple Credentials. 
+          # Using 'preview' profile with simulator: true in eas.json would produce a .app.
+          # Here we try to produce a build.ipa.
+          eas build --platform ios --profile preview --local --non-interactive --output=./build.ipa
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
