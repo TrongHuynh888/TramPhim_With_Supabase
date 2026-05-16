@@ -27,6 +27,12 @@ jobs:
       - name: 🔨 Install EAS CLI
         run: npm install -g eas-cli
 
+      - name: 🔗 Ensure EAS project
+        working-directory: TramPhim-RN
+        run: eas init --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
       - name: 🔨 Build IPA (Local)
         working-directory: TramPhim-RN
         run: |
