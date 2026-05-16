@@ -66,7 +66,7 @@
   bottom: 80px;
   left: 80px;
   z-index: 2;
-  max-width: 550px;
+  max-width: 50%;
   opacity: 0;
   transform: translateY(30px);
   transition: opacity 0.6s 0.3s, transform 0.6s 0.3s;
@@ -128,9 +128,9 @@
 }
 
 .banner-quality {
-  background: rgba(77, 184, 255, 0.2) !important;
-  border-color: rgba(77, 184, 255, 0.5) !important;
-  color: #4db8ff !important;
+  background: color-mix(in srgb, var(--accent-primary) 20%, transparent) !important;
+  border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent) !important;
+  color: var(--accent-primary) !important;
   font-weight: 600;
   text-transform: uppercase;
 }
@@ -332,6 +332,11 @@
   margin: 0;
   position: relative;
   z-index: 10;
+  background: var(--bg-primary); /* Đảm bảo nền liền mạch giữa các section */
+}
+/* PC: Nâng section lên khi có popup hover — tránh bị section khác che */
+.section:has(.movie-card-wrapper:hover) {
+  z-index: 100;
 }
 
 .section-header {
@@ -363,6 +368,66 @@
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: var(--spacing-lg);
   padding: var(--spacing-lg) 40px; /* Thêm padding 2 bên để không sát lề */
+}
+
+/* Phim Nổi Bật — Wrapper cuộn ngang */
+.featured-scroll-wrapper {
+  overflow-x: auto;
+  overflow-y: clip; /* FIX: dùng clip thay hidden để popup không bị cắt dọc */
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Ẩn thanh cuộn Firefox */
+  cursor: grab;
+  /* Padding trên/dưới tạo khoảng trống cho popup hiển thị đầy đủ */
+  /* Tăng padding-top lên 180px để popup không bị cắt mí trên */
+  padding: 180px 40px 220px;
+  margin-top: -180px;
+  margin-bottom: -220px;
+}
+.featured-scroll-wrapper:active {
+  cursor: grabbing;
+}
+.featured-scroll-wrapper::-webkit-scrollbar {
+  display: none; /* Ẩn thanh cuộn Chrome/Safari */
+}
+/* Grid phim bên trong — flex 1 hàng, overflow visible cho popup */
+#featuredMovies {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: var(--spacing-lg);
+  overflow: visible !important;
+  padding: 0 !important;
+}
+/* Thẻ phim: dùng --card-width từ JS, fallback 200px */
+#featuredMovies > .movie-card-wrapper {
+  flex: 0 0 var(--card-width, 200px);
+  min-width: var(--card-width, 200px);
+}
+
+/* Phim Mới Cập Nhật — PC: Grid tĩnh auto-fill, 2 hàng lấp đầy viewport */
+#newMovies {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)) !important;
+  grid-template-rows: auto auto !important; /* Đúng 2 hàng explicit */
+  grid-auto-flow: row !important;
+  gap: var(--spacing-lg) !important;
+  overflow: visible !important; /* Cho phép popups nhô ra, JS sẽ xóa hàng thừa */
+  max-height: none !important;
+  padding-bottom: 10px !important;
+}
+
+/* Ẩn thanh cuộn trên PC (không cần nữa) */
+#newMovies::-webkit-scrollbar {
+  display: none;
+}
+#newMovies::-webkit-scrollbar-track {
+  background: transparent;
+}
+#newMovies::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+#newMovies::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
 }
 
 /* Grid danh sách thể loại (New) */
@@ -538,7 +603,7 @@
   width: 70px;
   height: 70px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #007aff, #4db8ff);
+  background: var(--accent-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -596,7 +661,7 @@
 }
 
 .video-locked .btn-unlock {
-  background: linear-gradient(135deg, #007aff, #4db8ff);
+  background: var(--accent-gradient);
   border: none;
   padding: 10px 28px;
   font-size: 14px;
@@ -834,11 +899,19 @@
 
 /* Tự động ẩn khi không hoạt động (JS thêm class user-inactive) */
 .video-container.user-inactive .custom-video-controls,
+.video-container.user-inactive .wp-controls-bar {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Center overlay: chỉ ẩn visual, KHÔNG dùng pointer-events:none
+   để touch event vẫn bubbling lên container → showControls() hoạt động đúng */
 .video-container.user-inactive .center-controls-overlay,
-.video-container.user-inactive .wp-controls-bar,
 .video-container.user-inactive .wp-center-overlay {
     opacity: 0 !important;
     pointer-events: none !important;
+    /* Đảm bảo không chặn touch trên video bên dưới */
+    z-index: 0 !important;
 }
 
 .video-container.hide-cursor {
@@ -893,6 +966,10 @@
     cursor: pointer;
     z-index: 3;
     margin: 0;
+    padding: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
 }
 
 /* Tooltip */
@@ -1155,9 +1232,35 @@
 
 /* Responsive Mobile */
 @media (max-width: 768px) {
-    .center-controls-overlay { gap: 25px; }
-    .play-btn-large { width: 55px; height: 55px; font-size: 22px; }
-    .skip-btn { width: 38px; height: 38px; font-size: 15px; }
+    .center-controls-overlay { gap: 15px; } /* Thu khoảng cách nút tua giữa màn hình */
+    .play-btn-large { width: 50px; height: 50px; font-size: 20px; }
+    .skip-btn { width: 34px; height: 34px; font-size: 14px; }
+    
+    /* Thu gọn thanh điều khiển phía dưới */
+    .custom-video-controls {
+        padding: 10px 8px 5px; /* Giảm padding trên dưới */
+        gap: 5px; /* Giảm gap giữa time, slider và toolbar */
+    }
+    .controls-left, .controls-right, .controls-center {
+        gap: 8px; /* Các icon gần lại */
+    }
+    .control-btn {
+        width: 25px; /* Rút diện tích nút */
+        height: 25px;
+        font-size: 15px; /* Thay vì 18px */
+    }
+    .control-btn.skip-btn-small {
+        width: 32px; /* Tua 10s có text+svg nên rộng hơn chút */
+    }
+    .skip-label {
+        font-size: 10px !important; /* Gọn chữ 10s lại */
+    }
+    .time-display, .time-current, .time-duration {
+        font-size: 11px; /* Nhỏ gọn thời gian text */
+    }
+    .volume-container {
+        width: 25px; /* Box volume cũng cần thu tương tự nút control-btn */
+    }
 }
 /* --- CENTER CONTROLS OVERLAY END --- */
 
@@ -1427,7 +1530,8 @@
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
   padding: var(--spacing-xxl) var(--spacing-xl);
-  margin-top: var(--spacing-xxl);
+  padding-top: calc(var(--spacing-xxl) + var(--spacing-xxl)); /* Thay margin-top bằng padding-top */
+  margin-top: 0; /* Xóa margin-top để không lộ nền body */
 }
 .footer-content {
   display: grid;
@@ -1669,12 +1773,18 @@
 /* ----------------------------------
    5. COUNTRY SECTIONS (PHÂN LOẠI QUỐC GIA) 
    ---------------------------------- */
+/* Container chung - phủ nền đồng nhất để không lộ khoảng hở sáng */
+#countrySections {
+  background: var(--bg-primary);
+  padding: 10px 0;
+}
+
 .country-section {
   display: flex;
-  margin: var(--spacing-xxl) 40px;
+  margin: 0 40px 20px 40px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 20px;
-  overflow: visible !important; /* Force hiển thị tràn khung */
+  overflow: visible !important;
   border: 1px solid rgba(255, 255, 255, 0.05);
   min-height: 320px;
   position: relative;
@@ -1777,6 +1887,10 @@
   transition: all 0.3s ease;
   position: relative;
   z-index: 10;
+  background: var(--bg-primary); /* Nền đồng màu che hở sáng */
+  border: 1px solid rgba(255, 255, 255, 0.08); /* Viền mỏng */
+  border-radius: 14px;
+  padding: 8px 8px 12px;
 }
 
 .movie-card-landscape:hover {
@@ -1791,7 +1905,7 @@
   position: relative;
   background-size: cover;
   background-position: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: none;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
@@ -1799,7 +1913,10 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
+  background: linear-gradient(to top, rgba(0,0,0,0.6), transparent 50%);
+  box-shadow: inset 0 0 30px 10px rgba(0, 0, 0, 0.5); /* Vignette sậm rìa */
+  border-radius: 12px;
+  pointer-events: none;
 }
 
 .movie-card-landscape:hover .landscape-img-container {
@@ -1842,6 +1959,16 @@
   font-weight: 700;
   color: #fff;
   z-index: 2;
+}
+
+/* Phim bộ hoàn tất — xanh dương gradient để phân biệt với "Full" phim lẻ */
+.landscape-badge-completed {
+  background: linear-gradient(135deg, rgba(52, 152, 219, 0.9), rgba(41, 128, 185, 0.95));
+}
+
+/* Phim bộ đang chiếu — cam gradient */
+.landscape-badge-ongoing {
+  background: linear-gradient(135deg, rgba(243, 156, 18, 0.9), rgba(230, 126, 34, 0.95));
 }
 
 /* Sidebar decoration */
@@ -2113,17 +2240,18 @@
    ============================================================ */
 .player-episode-panel {
   position: absolute;
-  top: 0;
+  top: 0; /* Nằm sát đỉnh video */
+  bottom: 105px; /* Dừng trên thanh controls, bằng mí hình ảnh video */
   right: -320px; /* Ẩn ngoài màn hình */
   width: 300px;
   max-width: 80vw;
-  height: 100%;
   background: rgba(15, 15, 20, 0.96);
   z-index: 10001;
   display: flex;
   flex-direction: column;
   transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-left: 1px solid rgba(255,255,255,0.1);
+  border-radius: 0 0 0 12px;
   backdrop-filter: blur(10px);
 }
 
@@ -2206,9 +2334,40 @@
   font-weight: 600;
 }
 
-.ep-panel-item .ep-panel-num {
-  font-weight: 700;
-  min-width: 32px;
+.ep-panel-item .ep-panel-img-wrapper {
+  position: relative;
+  width: 90px;
+  height: 50px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--bg-tertiary, #1f1f2e);
+}
+
+.ep-panel-item .ep-panel-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.ep-panel-item:hover .ep-panel-img {
+  transform: scale(1.05);
+}
+
+.ep-panel-item .ep-panel-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ep-panel-item .ep-panel-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ============================================================
@@ -2487,9 +2646,11 @@ body.has-pseudo-fullscreen::-webkit-scrollbar {
 .video-container.pseudo-fullscreen .player-episode-panel {
   position: fixed !important;
   top: 0 !important;
+  bottom: 55px !important;
   right: -320px !important;
-  height: 100dvh !important;
+  height: auto !important;
   z-index: 100000 !important;
+  border-radius: 0 0 0 12px !important;
 }
 .video-container.pseudo-fullscreen .player-episode-panel.open {
   right: 0 !important;
@@ -2666,10 +2827,20 @@ body.has-pseudo-fullscreen::-webkit-scrollbar {
   }
   .player-episode-panel {
     width: 260px;
+    bottom: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0;
+  }
+  .video-container.pseudo-fullscreen .player-episode-panel {
+    bottom: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
   }
   .ep-panel-item {
-    font-size: 13px;
-    padding: 8px 10px;
+    font-size: 14px;
+    padding: 12px 10px;
   }
 }
 
@@ -3066,5 +3237,464 @@ body.has-pseudo-fullscreen::-webkit-scrollbar {
         width: 300px;
         bottom: 80px; /* Tránh menu dưới nếu có */
         right: 15px;
+    }
+}
+
+/* ============================================
+   LIGHT MODE — LAYOUT OVERRIDES
+   Fix tương phản cho tất cả element trên nền sáng
+   ============================================ */
+
+/* --- Navbar / Header --- */
+[data-theme="light"] .nav-icon {
+  color: var(--text-primary);
+}
+[data-theme="light"] .nav-icon:hover {
+  color: var(--accent-primary);
+}
+[data-theme="light"] .hamburger-btn span {
+  background: var(--text-primary);
+}
+
+/* --- Section Titles & Headers --- */
+[data-theme="light"] .section-title {
+  color: var(--text-primary);
+}
+[data-theme="light"] .view-all-link,
+[data-theme="light"] .btn-view-all {
+  color: var(--accent-primary);
+}
+[data-theme="light"] .view-all-link:hover,
+[data-theme="light"] .btn-view-all:hover {
+  color: var(--accent-secondary);
+}
+
+/* --- Movie Card (Grid) --- */
+[data-theme="light"] .movie-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
+/* Light mode: Tiêu đề phim đổi accent, giảm text-shadow để nhìn rõ */
+[data-theme="light"] .movie-card-static .card-title {
+  color: var(--accent-primary) !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+[data-theme="light"] .movie-card-static .card-meta {
+  color: #fff !important;
+}
+
+/* --- Banner / Hero --- */
+/* LƯU Ý: Banner luôn có gradient overlay tối → text giữ trắng cả ở Light Mode */
+[data-theme="light"] .banner-meta span {
+  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* --- Country Sections --- */
+[data-theme="light"] .country-section {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: var(--border-color);
+}
+[data-theme="light"] .country-sidebar {
+  border-right-color: var(--border-color);
+}
+[data-theme="light"] .country-sidebar h2 {
+  color: var(--text-primary);
+}
+[data-theme="light"] .country-sidebar p {
+  color: var(--text-secondary);
+}
+
+/* --- Movie Detail Page --- */
+[data-theme="light"] .movie-info h1 {
+  color: var(--text-primary);
+}
+[data-theme="light"] .movie-description {
+  color: var(--text-secondary);
+}
+[data-theme="light"] .detail-back-btn {
+  border-color: rgba(0, 0, 0, 0.2);
+  color: var(--text-secondary);
+}
+[data-theme="light"] .detail-back-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+}
+
+/* --- Footer --- */
+[data-theme="light"] .footer {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+}
+[data-theme="light"] .footer h4,
+[data-theme="light"] .footer-title {
+  color: var(--text-primary);
+}
+[data-theme="light"] .footer p,
+[data-theme="light"] .footer a,
+[data-theme="light"] .footer-link,
+[data-theme="light"] .footer-desc {
+  color: var(--text-secondary);
+}
+[data-theme="light"] .footer a:hover,
+[data-theme="light"] .footer-link:hover {
+  color: var(--accent-primary);
+}
+[data-theme="light"] .footer-bottom {
+  border-top-color: var(--border-color);
+  color: var(--text-muted);
+}
+
+/* --- Video Controls --- */
+[data-theme="light"] .video-locked .unlock-text {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+/* --- Sidebar Mobile Menu --- */
+[data-theme="light"] .mobile-menu-overlay {
+  background: rgba(0, 0, 0, 0.4);
+}
+[data-theme="light"] .mobile-menu {
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+}
+[data-theme="light"] .mobile-menu-item {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-color);
+}
+[data-theme="light"] .mobile-menu-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* --- Notification Dropdown --- */
+[data-theme="light"] .notif-delete-btn {
+  color: var(--text-muted);
+}
+
+/* --- Mini Player --- */
+[data-theme="light"] .mini-player-container {
+  border-color: var(--border-color);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* --- Movie Popup (Netflix style) --- */
+[data-theme="light"] .movie-popup-nfx .popup-body {
+  background: var(--bg-secondary);
+}
+
+/* --- Site Popup (Thông báo toàn site) --- */
+[data-theme="light"] .site-popup-card {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+[data-theme="light"] .site-popup-title {
+  color: var(--text-primary);
+  text-shadow: none;
+}
+[data-theme="light"] .site-popup-text {
+  color: var(--text-secondary);
+  text-shadow: none;
+}
+[data-theme="light"] .site-popup-close {
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+[data-theme="light"] .site-popup-close:hover {
+  background: rgba(255, 0, 0, 0.15);
+  color: #e50914;
+}
+
+/* --- Tabs & Filters --- */
+[data-theme="light"] .filter-btn,
+[data-theme="light"] .tab-btn {
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+}
+[data-theme="light"] .filter-btn:hover,
+[data-theme="light"] .tab-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
+}
+[data-theme="light"] .filter-btn.active,
+[data-theme="light"] .tab-btn.active {
+  color: #fff;
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+/* --- Generic text/bg fixes --- */
+[data-theme="light"] .text-muted {
+  color: var(--text-muted);
+}
+[data-theme="light"] .btn-outline {
+  border-color: rgba(0, 0, 0, 0.2);
+  color: var(--text-primary);
+}
+[data-theme="light"] .btn-outline:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* --- Dropdown user --- */
+[data-theme="light"] .user-dropdown {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+}
+[data-theme="light"] .dropdown-header {
+  background: var(--bg-tertiary);
+  border-bottom-color: var(--border-color);
+}
+[data-theme="light"] .dropdown-item {
+  color: var(--text-primary);
+}
+[data-theme="light"] .dropdown-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .dropdown-item.logout:hover {
+  color: #ff4444;
+}
+[data-theme="light"] .dropdown-role {
+  color: var(--text-muted);
+  border-color: var(--border-color);
+}
+
+/* --- Hot Movies Widget / Sidebar Widget --- */
+[data-theme="light"] .sidebar-widget {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+[data-theme="light"] .sidebar-widget-title {
+  color: var(--text-primary);
+}
+[data-theme="light"] .hot-movie-item {
+  border-bottom-color: var(--border-color);
+}
+[data-theme="light"] .hot-movie-title {
+  color: var(--text-primary);
+}
+[data-theme="light"] .hot-movie-meta {
+  color: var(--text-muted);
+}
+
+/* --- Episode list --- */
+[data-theme="light"] .episode-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+[data-theme="light"] .episode-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .episode-btn.active {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+}
+
+/* --- Pagination --- */
+[data-theme="light"] .pagination-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+[data-theme="light"] .pagination-btn.active {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+/* --- Search Page --- */
+[data-theme="light"] .search-input {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+[data-theme="light"] .search-input::placeholder {
+  color: var(--text-muted);
+}
+[data-theme="light"] .search-result-count {
+  color: var(--text-secondary);
+}
+
+/* --- Marquee --- */
+[data-theme="light"] .site-marquee-bar {
+  background: linear-gradient(90deg, #e9ebee, #d8dadf, #e9ebee);
+  border-top-color: var(--border-color);
+  border-bottom-color: var(--border-color);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+[data-theme="light"] .site-marquee-inner {
+  color: #d97706;
+  text-shadow: none;
+}
+[data-theme="light"] .site-marquee-close {
+  background: rgba(0, 0, 0, 0.3) !important;
+  color: #fff !important;
+}
+[data-theme="light"] .site-marquee-close:hover {
+  background: rgba(0, 0, 0, 0.5) !important;
+  color: #fff !important;
+}
+
+/* --- SUBTITLE (CC) MENU --- */
+.subtitle-popup-menu {
+    position: absolute;
+    bottom: 40px;
+    right: 0;
+    width: 250px;
+    background: rgba(20, 20, 20, 0.95);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
+    overflow: hidden;
+    z-index: 100;
+}
+
+.subtitle-menu-header {
+    padding: 12px 15px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255,255,255,0.02);
+}
+
+.smt-title {
+    font-weight: bold;
+    color: #fff;
+    font-size: 14px;
+}
+
+.smt-mode-switch {
+    display: flex;
+    background: rgba(0,0,0,0.5);
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.smt-mode-btn {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.smt-mode-btn.active {
+    background: var(--accent-primary, #e50914);
+    color: #fff;
+    font-weight: bold;
+}
+
+.subtitle-lang-list {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 5px 0;
+}
+
+.smt-lang-item {
+    padding: 10px 15px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: #eee;
+    transition: background 0.2s;
+}
+
+.smt-lang-item:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.smt-lang-item.active {
+    color: var(--accent-primary, #e50914);
+}
+
+.smt-lang-item.active::after {
+    content: '\f00c';
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+}
+.cc-btn-active {
+    color: var(--accent-primary, #e50914) !important;
+}
+
+.smt-lang-prefix {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--accent-primary, #e50914);
+    border: 1px solid var(--accent-primary, #e50914);
+    border-radius: 3px;
+    padding: 1px 4px;
+    margin-right: 6px;
+    letter-spacing: 0.5px;
+}
+.smt-lang-item.disabled-track {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.smt-lang-item.disabled-track:hover {
+    background: transparent;
+}
+
+
+/* --- SUBTITLE STYLE MENU --- */
+.sub-style-menu {
+    width: 260px !important;
+}
+
+.sub-style-row {
+    padding: 10px 15px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: #eee;
+    transition: background 0.2s;
+}
+
+.sub-style-row:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.sub-style-preview {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #aaa;
+    font-size: 12px;
+}
+
+.sub-color-dot {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    border: 1px solid rgba(255,255,255,0.3);
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.submenu-item .sub-color-dot {
+    margin-right: 8px;
+}
+
+@media (max-width: 768px) {
+    .sub-style-menu {
+        width: 220px !important;
+    }
+    .sub-style-row {
+        padding: 8px 12px;
+        font-size: 12px;
     }
 }

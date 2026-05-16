@@ -1,7 +1,15 @@
 /**
  * SERIES MOVIES PAGE LOGIC
  * Overrides standard functions to filter for series movies only.
+ * Có phân trang: 60 phim/trang
  */
+
+// Số phim mỗi trang và trang hiện tại
+const SERIES_PER_PAGE = 60;
+let seriesCurrentPage = 1;
+
+// Lưu dữ liệu đã lọc để dùng khi chuyển trang (không cần filter lại)
+let seriesFilteredData = [];
 
 window.renderSeriesMoviesPage = function() {
     console.log("🎬 Rendering Series Movies Page...");
@@ -15,7 +23,8 @@ window.renderSeriesMoviesPage = function() {
     // 1. Populate filters if empty
     populateSeriesFilters(source);
 
-    // 2. Apply filters (Initial render)
+    // 2. Apply filters (Initial render) - reset về trang 1
+    seriesCurrentPage = 1;
     filterSeriesMovies();
 };
 
@@ -76,7 +85,7 @@ window.filterSeriesMovies = function() {
     const genreStr = document.getElementById("inputSeriesCategory")?.value.trim() || "";
     const countryStr = document.getElementById("inputSeriesCountry")?.value.trim() || "";
     const yearStr = document.getElementById("inputSeriesYear")?.value.trim() || "";
-    const searchVal = document.getElementById("searchSeries")?.value.toLowerCase().trim() || "";
+    const searchVal = removeDiacritics(document.getElementById("searchSeries")?.value || "");
 
     // Chuẩn hóa bộ lọc: Loại bỏ "Tất cả..."
     const genres = genreStr.split(',').map(s => s.trim()).filter(s => s && !s.includes("Tất cả"));
@@ -88,15 +97,15 @@ window.filterSeriesMovies = function() {
     let source = (typeof allMovies !== 'undefined') ? allMovies : [];
     if (!Array.isArray(source)) source = [];
     
-    // Filter
-    const filteredData = source.map(m => {
+    // Filter toàn bộ
+    seriesFilteredData = source.map(m => {
         // 1. Phải là Phim Bộ
         if (m.type !== 'series') return null;
 
         // 2. Ô tìm kiếm (Luôn là AND)
         if (searchVal) {
-            const titleMatch = (m.title || "").toLowerCase().includes(searchVal);
-            const castMatch = m.cast && m.cast.toLowerCase().includes(searchVal);
+            const titleMatch = removeDiacritics(m.title || "").includes(searchVal);
+            const castMatch = m.cast && removeDiacritics(m.cast).includes(searchVal);
             if (!(titleMatch || castMatch)) return null;
         }
 
@@ -120,13 +129,12 @@ window.filterSeriesMovies = function() {
             }
             
             const matchedGenres = genres.filter(g => movieCatNames.includes(g.toLowerCase()));
-            if (matchedGenres.length === 0) return null; // Không khớp thể loại nào trong danh sách chọn -> Loại
+            if (matchedGenres.length === 0) return null; // Không khớp thể loại nào -> Loại
             matchedGenres.forEach(cat => matchedTags.push({ type: 'category', icon: 'tag', label: cat }));
         }
         
         // 4. Kiểm tra Quốc gia (AND)
         if (countries.length > 0) {
-            // Lấy tên quốc gia thực tế từ ID nếu cần
             let movieCountryName = m.country || "";
             const foundCountry = (typeof allCountries !== 'undefined') ? allCountries.find(c => c.id === m.country_id || c.name === m.country) : null;
             if (foundCountry) movieCountryName = foundCountry.name;
@@ -146,19 +154,107 @@ window.filterSeriesMovies = function() {
         return { movie: m, matchedTags };
     }).filter(Boolean);
 
-    console.log(`✅ [Phim Bộ] Tìm thấy ${filteredData.length} phim thỏa mãn.`);
+    console.log(`✅ [Phim Bộ] Tìm thấy ${seriesFilteredData.length} phim thỏa mãn.`);
 
-    // Render
-    if (filteredData.length === 0) {
-        container.innerHTML = '<p class="text-center text-muted">Không tìm thấy phim phù hợp.</p>';
-    } else {
-        container.innerHTML = filteredData.map(item => createMovieCard(item.movie, item.matchedTags)).join("");
-    }
-    
-    // Hiển thị tóm tắt kết quả (Categories, Countries, Years)
+    // Khi filter mới -> reset về trang 1
+    seriesCurrentPage = 1;
+
+    // Render trang hiện tại
+    _renderSeriesPage();
+
+    // Hiển thị tóm tắt kết quả
     if (typeof updateFilterSummary === 'function') {
         updateFilterSummary(genres, countries, years, source.filter(m => m.type === 'series'), "seriesFilterResultSummary");
     }
+};
+
+/** Render phim theo trang hiện tại và vẽ lại pagination */
+function _renderSeriesPage() {
+    const container = document.getElementById("seriesMoviesGrid");
+    if (!container) return;
+
+    const total = seriesFilteredData.length;
+    const totalPages = Math.ceil(total / SERIES_PER_PAGE);
+
+    // Đảm bảo trang hợp lệ
+    if (seriesCurrentPage < 1) seriesCurrentPage = 1;
+    if (seriesCurrentPage > totalPages) seriesCurrentPage = totalPages || 1;
+
+    const start = (seriesCurrentPage - 1) * SERIES_PER_PAGE;
+    const end = start + SERIES_PER_PAGE;
+    const pageData = seriesFilteredData.slice(start, end);
+
+    // Render grid
+    if (total === 0) {
+        container.innerHTML = '<p class="text-center text-muted">Không tìm thấy phim phù hợp.</p>';
+    } else {
+        container.innerHTML = pageData.map(item => createMovieCard(item.movie, item.matchedTags)).join("");
+    }
+
+    // Render pagination UI
+    _renderSeriesPagination(total, totalPages);
+
+    // Cuộn lên đầu grid khi chuyển trang
+    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/** Vẽ UI phân trang cho Phim Bộ */
+function _renderSeriesPagination(total, totalPages) {
+    let paginationEl = document.getElementById("seriesMoviesPagination");
+    if (!paginationEl) return;
+
+    if (total === 0 || totalPages <= 1) {
+        paginationEl.innerHTML = '';
+        paginationEl.style.display = 'none';
+        return;
+    }
+
+    paginationEl.style.display = 'flex';
+
+    const page = seriesCurrentPage;
+    const start = (page - 1) * SERIES_PER_PAGE + 1;
+    const end = Math.min(page * SERIES_PER_PAGE, total);
+
+    // Tạo danh sách số trang hiển thị (hiện tối đa 5 trang xung quanh trang hiện tại)
+    let pages = [];
+    for (let i = Math.max(1, page - 2); i <= Math.min(totalPages, page + 2); i++) {
+        pages.push(i);
+    }
+
+    paginationEl.innerHTML = `
+        <span class="pagination-info">Hiển thị ${start}–${end} / ${total} phim bộ</span>
+        <div class="pagination-controls">
+            <button class="btn-page" onclick="changeSeriesPage(1)" ${page === 1 ? 'disabled' : ''} title="Trang đầu">
+                <i class="fas fa-angle-double-left"></i>
+            </button>
+            <button class="btn-page" onclick="changeSeriesPage(${page - 1})" ${page === 1 ? 'disabled' : ''} title="Trang trước">
+                <i class="fas fa-angle-left"></i>
+            </button>
+            ${pages.map(p => `
+                <button class="btn-page ${p === page ? 'active' : ''}" onclick="changeSeriesPage(${p})">${p}</button>
+            `).join('')}
+            <button class="btn-page" onclick="changeSeriesPage(${page + 1})" ${page === totalPages ? 'disabled' : ''} title="Trang sau">
+                <i class="fas fa-angle-right"></i>
+            </button>
+            <button class="btn-page" onclick="changeSeriesPage(${totalPages})" ${page === totalPages ? 'disabled' : ''} title="Trang cuối">
+                <i class="fas fa-angle-double-right"></i>
+            </button>
+        </div>
+        <div class="pagination-jump">
+            <span>Đến trang</span>
+            <input type="number" min="1" max="${totalPages}" value="${page}" id="seriesPaginationJump" class="jump-input"
+                onkeydown="if(event.key==='Enter') changeSeriesPage(parseInt(this.value))">
+            <button class="btn-jump" onclick="changeSeriesPage(parseInt(document.getElementById('seriesPaginationJump').value))">→</button>
+        </div>
+    `;
+}
+
+/** Chuyển trang Phim Bộ */
+window.changeSeriesPage = function(page) {
+    const totalPages = Math.ceil(seriesFilteredData.length / SERIES_PER_PAGE);
+    if (isNaN(page) || page < 1 || page > totalPages) return;
+    seriesCurrentPage = page;
+    _renderSeriesPage();
 };
 
 // Deprecated old search function (redirect to new filter)

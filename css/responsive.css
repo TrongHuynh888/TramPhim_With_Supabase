@@ -85,6 +85,40 @@ body.watch-party-active #watchPartyPage {
 
 /* 1. TABLET (iPad) */
 @media (max-width: 1366px) {
+  /* Chỉnh logo Tablet */
+  .nav-logo {
+    flex-shrink: 0 !important;
+    margin-right: 15px !important;
+  }
+  .brand-text-column {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+  .brand-text-new {
+    font-size: 22px !important;
+  }
+  .brand-slogan {
+    font-size: 10px !important;
+    white-space: nowrap !important;
+  }
+  
+  @media (max-width: 1024px) {
+    .brand-slogan {
+      display: block !important;
+      font-size: 8px !important;
+      margin-top: 0px !important;
+    }
+    .brand-text-new {
+      font-size: 16px !important;
+    }
+    .brand-logo-container {
+      gap: 4px !important;
+    }
+    .brand-train-icon {
+      font-size: 26px !important;
+    }
+  }
+
   .nav-container,
   .section,
   .footer-content {
@@ -92,22 +126,64 @@ body.watch-party-active #watchPartyPage {
     padding-right: 20px !important;
   }
 
+  /* FIX: Xóa vệt hở sáng giữa các section trên Tablet */
+  #homePage {
+    background: var(--bg-primary) !important;
+  }
+  #homePage .section {
+    background: var(--bg-primary) !important;
+  }
+  #countrySections {
+    background: var(--bg-primary) !important;
+    padding: 20px 0 !important; /* Thay thế margin của .country-section */
+  }
+  #countrySections .country-section {
+    margin-top: 0 !important;
+    margin-bottom: 20px !important;
+  }
+  .footer {
+    background: var(--bg-secondary) !important;
+    margin-top: 0 !important; /* Xóa khoảng hở sáng */
+    padding-top: 30px !important;
+  }
+  #mainContent {
+    background: var(--bg-primary) !important;
+  }
+
   /* Banner Slider Tablet */
   .hero-banner {
-    aspect-ratio: 16 / 9 !important;
-    max-height: 70vh !important;
+    aspect-ratio: unset !important; /* FIX SAFARI IPAD BUG tính toán sai vị trí con absolute */
+    height: 65vh !important;
+    max-height: 600px !important;
     margin-top: 80px !important;
+    background-color: var(--bg-primary) !important;
   }
   .banner-content {
-    left: 30px !important;
-    bottom: 60px !important;
-    max-width: 500px !important;
+    left: 40px !important;
+    bottom: 80px !important; /* Kéo lên cao hơn tránh bị cắt nội dung ở dưới lề */
+    max-width: 60vw !important; /* Đảm bảo không bị tràn chữ giới hạn ở 60% màn */
   }
   .banner-title {
-    font-size: clamp(24px, 3.5vw, 40px) !important;
+    font-size: clamp(22px, 3vw, 36px) !important;
+  }
+  .banner-desc {
+    -webkit-line-clamp: 2 !important; /* Giới hạn chỉ hiển thị 2 dòng mô tả */
+    line-clamp: 2 !important;
+    margin-bottom: 12px !important;
+  }
+  .banner-dots {
+    left: 40px !important; /* Thẳng hàng ngang với banner nội dung */
+    bottom: 30px !important; /* Tránh sát dưới cùng màn hình */
   }
   .banner-thumbs {
     display: none !important; /* Ẩn thumbnails trên tablet */
+  }
+
+  /* Khoảng hở cuối Phim Nổi Bật bằng khoảng hở đầu khi cuộn */
+  #featuredMovies::after {
+    content: '';
+    flex: 0 0 20px;
+    min-height: 1px;
   }
 
   /* --- FIX POPUP DÀNH CHO CẢ MOBILE (<768PX) & TABLET (769-1366PX) --- */
@@ -118,34 +194,35 @@ body.watch-party-active #watchPartyPage {
 
     /* Class kích hoạt popup khi chạm */
     .movie-card-wrapper.active-mobile {
-      z-index: 1500 !important; /* Hạ xuống dưới Navbar (2000) để không che Menu */
+      z-index: 2000 !important; /* Đủ cao để nổi trên mọi thẻ phim khác */
       position: relative;
     }
 
     .movie-card-wrapper.active-mobile .movie-popup-nfx {
-      display: block !important;
+      display: flex !important;
+      flex-direction: column !important;
       visibility: visible !important;
       opacity: 1 !important;
       pointer-events: auto !important;
       position: absolute;
-      top: 50%; /* Căn giữa dọc để đè đều lên xuống */
-      left: 50%;
-      transform: translate(-50%, -50%) scale(1.05) !important; /* Scale nhẹ lại cho đỡ thô */
+      top: 50%;  /* Căn giữa dọc trên thẻ phim */
+      left: 50%; /* Căn giữa ngang trên thẻ phim */
+      transform: translate(-50%, -50%) !important; /* Tràn đều 4 phía */
 
       /* Kích thước Tablet & Mobile (Mobile sẽ bị override ở dưới) */
       width: 330px !important; 
       max-width: 90vw !important;
-      max-height: 90vh !important;
-      z-index: 950 !important;
-      /* 👇 KHỬ BÓNG ĐỔ THEO YÊU CẦU: Đặt về none để tránh hiện bóng đen dưới đáy */
-      box-shadow: none !important;
+      height: auto !important;
+      max-height: 80vh !important; /* Giới hạn chiều cao tối đa, chống tràn màn hình dọc */
+      min-height: auto !important;
+      z-index: 2001 !important; /* Cao hơn wrapper để nổi lên trên */
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
       border: 1px solid var(--accent-primary);
       background: #1f1f2e !important;
       color: #fff !important;
-      border-radius: 12px !important; /* ÉP BO GÓC CHUẨN: Đảm bảo đồng bộ cho tất cả popup */
-      overflow: hidden !important; /* QUAN TRỌNG: Để ảnh header bo theo khung không bị tràn cạnh */
-      opacity: 1 !important;
-      visibility: visible !important;
+      border-radius: 12px !important;
+      overflow: hidden !important;
+      overflow-y: auto !important; /* Cho phép cuộn dọc bên trong nếu nội dung dài */
     }
 
     /* ẨN THẺ PHIM GỐC KHI POPUP ACTIVE ĐỂ TRÁNH LỘ CẠNH */
@@ -161,17 +238,22 @@ body.watch-party-active #watchPartyPage {
         z-index: 3000 !important;
     }
 
-    /* FIX STACKING CONTEXT & OVERFLOW: Nâng section chứa popup lên cao nhất và không cắt popup */
+    /* FIX STACKING CONTEXT & OVERFLOW: Nâng section chứa popup lên cao nhất */
     .section-active-popup {
         z-index: 1600 !important;
         position: relative !important;
-        overflow: visible !important; /* Quan trọng: Không cắt popup nếu nó tràn ra ngoài card */
+        overflow: visible !important;
     }
+
+    /* Overflow cho scroll containers khi popup active được xử lý bằng JS (không dùng :has để tránh scroll reset) */
+
+
 
 
     /* Font chữ Popup Tablet */
     .movie-card-wrapper.active-mobile .popup-header-img {
-      height: 200px !important; /* Tăng chiều cao ảnh trên tablet để khoe background đẹp */
+      height: 150px !important; /* Giảm từ 200px → 150px để popup tablet không bị kéo dài */
+      flex-shrink: 0 !important; /* Không co ảnh khi nội dung nhiều */
     }
     .movie-card-wrapper.active-mobile .popup-body {
       padding: 15px 20px !important; /* Nới lỏng padding cho thoáng */
@@ -180,7 +262,7 @@ body.watch-party-active #watchPartyPage {
       font-size: 18px !important; /* Cân đối lại cỡ chữ tiêu đề */
       margin-bottom: 8px !important;
       line-height: 1.2 !important;
-      color: #ffeb3b !important;
+      color: var(--accent-primary) !important; /* Màu chủ đạo web */
       font-weight: 700 !important;
     }
     .movie-card-wrapper.active-mobile .popup-actions {
@@ -217,7 +299,7 @@ body.watch-party-active #watchPartyPage {
     
     .movie-card-wrapper.active-mobile .marquee-content span {
        white-space: nowrap !important;
-       color: #0fceeb !important;
+       color: var(--accent-primary) !important; /* Màu chủ đạo web */
     }
     
     /* Trên Tablet, không cần fade mờ vì chữ đã hiển thị đủ */
@@ -249,11 +331,15 @@ body.watch-party-active #watchPartyPage {
 
     /* --- TABLET: LANDSCAPE MOVIE CARD POPUP (16:9) --- */
     .movie-card-landscape.active-mobile .movie-popup-nfx {
+        display: flex !important;
+        flex-direction: column !important;
+        height: auto !important;
+        min-height: auto !important;
         width: 340px !important; /* Thu nhỏ mạnh mẽ hơn nữa để vừa khít tuyệt đối với 3 nút */
     }
     .movie-card-landscape.active-mobile .popup-title-main {
         font-size: 20px !important;
-        color: #ffeb3b !important;
+        color: var(--accent-primary) !important; /* Màu chủ đạo web */
     }
     .movie-card-landscape.active-mobile .popup-genres-text {
         font-size: 14px !important;
@@ -290,19 +376,18 @@ body.watch-party-active #watchPartyPage {
     }
     
     /* --- SMART POSITIONING (XỬ LÝ TRÀN MÀN HÌNH) --- */
-    /* 1. Mở sang phải (Khi thẻ ở lề trái) */
+    /* 1. Thẻ ở lề TRÁI → popup neo trái card, dịch ra khoảng hở bên trái */
     .movie-card-wrapper.active-mobile.popup-align-left .movie-popup-nfx {
-        left: 15px !important; /* TĂNG LÊN 15PX: Đảm bảo khoảng cách an toàn tuyệt đối với lề trái */
-        transform: translateY(-50%) scale(1) !important; /* KHỬ SCALE 1.05: Tránh việc nở ra lấn ngược vào lề */
-        transform-origin: left center;
+        left: 0 !important;
+        right: auto !important;
+        transform: translate(-30px, -50%) !important; /* Tràn ra khoảng hở trái 30px */
     }
 
-    /* 2. Mở sang trái (Khi thẻ ở lề phải) */
+    /* 2. Thẻ ở lề PHẢI → popup neo phải card, dịch ra khoảng hở bên phải */
     .movie-card-wrapper.active-mobile.popup-align-right .movie-popup-nfx {
         left: auto !important;
-        right: 15px !important; /* TĂNG LÊN 15PX để cân xứng */
-        transform: translateY(-50%) scale(1) !important;
-        transform-origin: right center;
+        right: 0 !important;
+        transform: translate(30px, -50%) !important; /* Tràn ra khoảng hở phải 30px */
     }
     
     .movie-card-wrapper.active-mobile .popup-genres-row {
@@ -403,7 +488,7 @@ body.watch-party-active #watchPartyPage {
   /* --- A. HEADER (FINAL: FIX LỖI CHỒNG ICON) --- */
   .nav-container {
     padding: 5px 8px !important;
-    gap: 4px;
+    gap: 6px;
     height: 70px;
     z-index: 2000;
     justify-content: space-between !important;
@@ -417,6 +502,30 @@ body.watch-party-active #watchPartyPage {
     background: var(--bg-primary) !important;
   }
 
+  /* FIX: Xóa vệt hở sáng giữa banner và các section */
+  #homePage {
+    background: var(--bg-primary) !important;
+  }
+  #homePage .section {
+    background: var(--bg-primary) !important;
+  }
+  #countrySections {
+    background: var(--bg-primary) !important;
+    padding: 20px 0 !important; /* Thay thế margin của .country-section */
+  }
+  #countrySections .country-section {
+    margin-top: 0 !important;
+    margin-bottom: 15px !important;
+  }
+  .footer {
+    background: var(--bg-secondary) !important;
+    margin-top: 0 !important; /* Xóa khoảng hở sáng */
+    padding-top: 20px !important;
+  }
+  #mainContent {
+    background: var(--bg-primary) !important;
+  }
+
   /* 1. Logo */
   .nav-logo {
     display: flex !important;
@@ -424,7 +533,8 @@ body.watch-party-active #watchPartyPage {
     gap: 4px;
     flex: 1; /* Tự động chiếm khoảng trống thừa */
     min-width: 0;
-    margin-right: 5px;
+    max-width: none !important; /* Override max-content từ global → logo dãn hết chỗ trống */
+    margin-right: 2px;
     justify-content: flex-start !important;
   }
   .nav-logo .logo-img {
@@ -432,6 +542,20 @@ body.watch-party-active #watchPartyPage {
     width: auto;
     object-fit: contain;
     max-width: 150px;
+  }
+  .brand-slogan {
+    display: block !important;
+    font-size: 7.5px !important;
+    margin-top: 1px !important;
+  }
+  .brand-text-new {
+    font-size: 15px !important;
+  }
+  .brand-train-icon {
+    font-size: 22px !important;
+  }
+  .brand-icon-wrapper {
+    margin-right: 2px !important;
   }
 
   /* 2. Nhóm nút bên phải (Chứa tất cả icon) */
@@ -471,7 +595,7 @@ body.watch-party-active #watchPartyPage {
   .nav-utilities {
     display: flex !important;
     align-items: center !important;
-    gap: 8px !important;
+    gap: 6px !important;
     flex-shrink: 0 !important;
   }
 
@@ -480,10 +604,11 @@ body.watch-party-active #watchPartyPage {
     display: flex !important;
     align-items: center !important;
     flex-direction: row !important;
-    gap: 8px !important;
+    gap: 6px !important;
     margin: 0 !important;
   }
 
+  /* Wallet button chưa kết nối: icon tròn nhỏ như cũ */
   .wallet-btn,
   #connectWalletBtn,
   .theme-toggle,
@@ -519,6 +644,41 @@ body.watch-party-active #watchPartyPage {
     display: none !important;
   }
 
+  /* === WALLET ĐÃ KẾT NỐI: Pill badge trực quan === */
+  .wallet-btn.connected {
+    width: auto !important;
+    height: 30px !important;
+    padding: 0 10px 0 8px !important;
+    border-radius: 20px !important;
+    background: var(--accent-gradient) !important;
+    border: 1px solid rgba(77, 184, 255, 0.4) !important;
+    box-shadow: 0 2px 10px rgba(0, 122, 255, 0.35) !important;
+    gap: 5px !important;
+    font-size: 11px !important;
+    color: #fff !important;
+    max-width: 110px !important;
+    overflow: hidden !important;
+  }
+  .wallet-btn.connected i {
+    font-size: 11px !important;
+    color: #fff !important;
+    flex-shrink: 0 !important;
+  }
+  /* Hiện lại span địa chỉ ví khi connected */
+  .wallet-btn.connected span,
+  .wallet-btn.connected .wallet-btn-text {
+    display: inline-block !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    color: #fff !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 75px !important;
+    letter-spacing: 0.2px !important;
+  }
+
+
   /* Notification wrapper mobile */
   .notification-wrapper {
     margin-right: 0 !important;
@@ -548,23 +708,25 @@ body.watch-party-active #watchPartyPage {
   }
   
   /* 4. LOGIC XỬ LÝ NÚT ĐĂNG NHẬP */
-  /* Mobile: Nút login luôn hiện dạng icon tròn (kể cả khi đã đăng nhập) */
+  /* Mobile: Nút login hiện dạng icon tròn (Ẩn đi khi đã đăng nhập qua class .hidden) */
   #loginBtn {
     width: 32px !important;
     height: 32px !important;
     padding: 0 !important;
     border-radius: 50% !important;
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #007aff 0%, #4db8ff 100%) !important;
+    background: linear-gradient(135deg, var(--accent-secondary) 0%, var(--accent-primary) 100%) !important;
     box-shadow: 0 2px 10px rgba(0, 122, 255, 0.4);
     border: none !important;
     min-width: unset !important;
     order: -1;
+  }
+  #loginBtn:not(.hidden) {
+    display: flex !important;
+  }
+  #loginBtn.hidden {
+    display: none !important;
   }
   #loginBtn i {
     font-size: 14px !important;
@@ -583,7 +745,7 @@ body.watch-party-active #watchPartyPage {
     height: 32px !important;
     border-radius: 50% !important;
     overflow: hidden;
-    border: 1.5px solid #4db8ff !important;
+    border: 1.5px solid var(--accent-primary) !important;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -650,7 +812,7 @@ body.watch-party-active #watchPartyPage {
     left: 0 !important;
     width: 0 !important;
     height: 2px !important;
-    background: linear-gradient(90deg, #007aff, #4db8ff) !important;
+    background: linear-gradient(90deg, var(--accent-secondary), var(--accent-primary)) !important;
     transform: none !important;
     transition: width 0.3s !important;
   }
@@ -669,10 +831,10 @@ body.watch-party-active #watchPartyPage {
     width: 24px;
     text-align: center;
     flex-shrink: 0;
-    color: var(--accent-primary, #4db8ff);
+    color: var(--accent-primary, var(--accent-primary));
   }
   .nav-menu .nav-link.active i {
-    color: #4db8ff;
+    color: var(--accent-primary);
   }
 
   /* --- B. BANNER SLIDER RESPONSIVE (MOBILE) --- */
@@ -680,6 +842,7 @@ body.watch-party-active #watchPartyPage {
     aspect-ratio: 16 / 9 !important;
     max-height: 50vh !important;
     margin-top: 60px !important;
+    background-color: var(--bg-primary) !important; /* Chống hở sáng dưới banner */
   }
   .banner-content {
     bottom: 50px !important;
@@ -891,8 +1054,8 @@ body.watch-party-active #watchPartyPage {
 
   .rating-input {
     display: flex !important;
-    flex-wrap: wrap !important; /* Cho phép xuống dòng */
-    align-items: flex-start !important;
+    flex-wrap: wrap !important; /* Vẫn cho label xuống dòng */
+    align-items: center !important;
     gap: 6px !important;
     margin-bottom: 12px !important;
   }
@@ -900,29 +1063,30 @@ body.watch-party-active #watchPartyPage {
   .rating-input label {
     width: 100%;
     display: block !important;
-    margin-bottom: 6px !important;
+    margin-bottom: 4px !important;
     font-size: 13px !important;
   }
 
   .rating-stars {
     display: flex !important;
-    flex-wrap: wrap !important; /* Cho phép sao xuống dòng */
-    gap: 3px !important;
-    order: 3; /* Để sao nằm dưới label */
+    flex-wrap: nowrap !important; /* Không rớt sao xuống dòng */
+    gap: 5px !important;
+    order: 3; /* Sao dưới label */
+    align-items: center;
   }
 
   .rating-stars i {
-    font-size: 18px !important;
+    font-size: 20px !important; /* Sao nhỉnh hơn xíu cho dễ chạm */
     margin: 0 !important;
   }
 
   .rating-value {
-    font-size: 13px !important;
-    margin-left: 0 !important;
+    font-size: 14px !important;
+    margin-left: 8px !important; /* Khoảng cách với sao cuối cùng */
     white-space: nowrap;
     order: 4;
-    width: 100%;
-    margin-top: 6px;
+    width: auto !important; /* Cho phép đứng chung hàng ngang với sao */
+    margin-top: 0 !important; /* Bỏ margin-top đẩy dòng */
   }
 
   .comment-form .form-group {
@@ -935,11 +1099,85 @@ body.watch-party-active #watchPartyPage {
     padding: 8px !important;
   }
 
+  /* --- Phim Nổi Bật: Mobile/Tablet cuộn ngang --- */
+  .featured-scroll-wrapper {
+    padding: 10px 10px 15px !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .featured-scroll-wrapper::-webkit-scrollbar {
+    display: none;
+  }
+  #featuredMovies {
+    gap: 12px !important;
+  }
+  /* Cố định kích thước card phim nổi bật trên mobile */
+  /* Card bằng kích thước trang Phim Lẻ/Bộ (2 cột) nhưng vẫn cuộn ngang */
+  #featuredMovies > .movie-card-wrapper {
+    flex: 0 0 calc(50% - 6px) !important;
+    min-width: calc(50% - 6px) !important;
+    max-width: calc(50% - 6px) !important;
+  }
+
+  /* --- Phim Mới Cập Nhật: Mobile/Tablet cuộn ngang --- */
+  /* Clip section cha để card không nhú ra mép phải — giống featured-scroll-wrapper */
+  #newMovies {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 12px !important;
+    padding: 10px 0 15px !important; /* Bỏ padding trái/phải — để section cha quản lý */
+    margin: 0 10px !important; /* Dùng margin thay padding để calc(50%) tính đúng viewport */
+    max-height: none !important;
+    scrollbar-width: none;
+  }
+  #newMovies::-webkit-scrollbar {
+    display: none; /* Chrome/Safari ẩn thanh cuộn */
+  }
+  /* Card bằng kích thước trang Phim Lẻ/Bộ (2 cột) nhưng vẫn cuộn ngang */
+  #newMovies > .movie-card-wrapper {
+    flex: 0 0 calc(50% - 6px); /* Kích thước bằng layout 2 cột */
+    scroll-snap-align: start;
+    max-width: calc(50% - 6px);
+  }
+
   /* --- D. LƯỚI PHIM (2 CỘT TRÊN MOBILE CHO DỄ NHÌN) --- */
   .movie-grid {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 15px !important;
     padding: 0 10px !important;
+  }
+
+  /* --- COUNTRY MOVIES ROW: Giữ flex cuộn ngang trên Mobile --- */
+  .country-movies-row {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch;
+    gap: 12px !important;
+    padding: 15px 10px 120px !important;
+    margin-top: 0 !important;
+    margin-bottom: -90px !important;
+    margin-left: 0 !important;
+    width: 100% !important;
+    scrollbar-width: none;
+  }
+  .country-movies-row::-webkit-scrollbar {
+    display: none;
+  }
+  /* Thẻ phim ngang mobile: cố định kích thước cuộn ngang */
+  .country-movies-row .movie-card-landscape {
+    flex: 0 0 200px !important;
+    min-width: 200px !important;
+    max-width: 200px !important;
   }
   .card-body {
     padding: 10px 8px !important;
@@ -972,6 +1210,7 @@ body.watch-party-active #watchPartyPage {
   .movie-card-wrapper.active-mobile {
     z-index: 5000 !important;
     position: relative;
+    overflow: visible !important; /* FIX SAFARI CLIP BUG */
   }
 
   .movie-card-wrapper.active-mobile .movie-popup-nfx {
@@ -979,16 +1218,19 @@ body.watch-party-active #watchPartyPage {
     visibility: visible !important;
     opacity: 1 !important;
     position: absolute;
-    top: 20px; /* Hạ thấp vừa phải (từ 40px) để không quá thấp cũng không quá cao */
+    top: 50%; /* Căn giữa dọc trên thẻ phim */
     left: 50%;
-    transform: translateX(-50%); /* Scale 1.15 được kế thừa từ rule global mobile phía dưới */
+    transform: translate(-50%, -50%) !important; /* Căn giữa cả ngang + dọc */
 
-    /* 👇 GIẢM KÍCH THƯỚC POPUP THEO YÊU CẦU */
-    width: 200px !important; /* Giảm từ 225px xuống 200px */
+    /* 👇 KÍCH THƯỚC POPUP GỌN GÀNG - đủ rộng để không cắt text */
+    width: 220px !important;
+    max-width: 90vw !important;
     height: auto;
     z-index: 5001;
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.95);
     border: 1px solid var(--accent-primary);
+    border-radius: 12px !important;
+    overflow: hidden !important;
     /* 👇 QUAN TRỌNG: Ép nền màu tối để chữ trắng luôn nổi bật */
     background: #1f1f2e !important;
     color: #fff !important;
@@ -1004,15 +1246,15 @@ body.watch-party-active #watchPartyPage {
 
   /* Font chữ Popup nhỏ lại */
   .movie-card-wrapper.active-mobile .popup-header-img {
-    height: 110px !important;
+    height: 90px !important; /* Thu gọn ảnh header */
   }
   .movie-card-wrapper.active-mobile .popup-body {
-    padding: 8px !important;
+    padding: 6px 8px !important; /* Giảm padding cho gọn */
   }
   .movie-card-wrapper.active-mobile .popup-title-new {
-    font-size: 13px !important;
-    margin-bottom: 4px !important;
-    line-height: 1.3 !important;
+    font-size: 12px !important;
+    margin-bottom: 3px !important;
+    line-height: 1.2 !important;
   }
   .movie-card-wrapper.active-mobile .popup-meta-row {
     font-size: 9px;
@@ -1033,14 +1275,14 @@ body.watch-party-active #watchPartyPage {
     display: flex !important;
   }
   .movie-card-wrapper.active-mobile .btn-popup-play {
-    font-size: 11px !important;
-    padding: 5px 10px;
-    height: 28px;
+    font-size: 10px !important;
+    padding: 4px 8px;
+    height: 24px;
   }
   .movie-card-wrapper.active-mobile .btn-popup-icon {
-    width: 28px;
-    height: 28px;
-    font-size: 10px;
+    width: 24px;
+    height: 24px;
+    font-size: 9px;
   }
 
   /* Ẩn bớt thông tin không cần thiết trên mobile cho gọn */
@@ -1049,49 +1291,76 @@ body.watch-party-active #watchPartyPage {
     display: none;
   }
 
+
   /* --- MOBILE: LANDSCAPE MOVIE CARD POPUP (16:9) --- */
   .movie-card-landscape.active-mobile .movie-popup-nfx {
-      width: 260px !important; /* Nới rộng đủ chỗ cho 3 nút trên 1 hàng ngang */
+      width: 250px !important;
       max-width: 95vw !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
   }
   .movie-card-landscape.active-mobile .popup-header-img {
-      height: 100px !important; /* Thu gọn chiều cao ảnh header landscape cho cân đối */
+      height: 90px !important;
+  }
+  .movie-card-landscape.active-mobile .popup-header-img img {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
   }
   .movie-card-landscape.active-mobile .landscape-img-container {
-      height: 80px !important; /* Thu nhỏ container ảnh nền của thẻ gốc khi active */
+      height: 80px !important;
+  }
+  .movie-card-landscape.active-mobile .popup-body {
+      padding: 8px 10px !important;
   }
   .movie-card-landscape.active-mobile .popup-title-main {
-      font-size: 16px !important; 
-      color: #ffeb3b !important;
+      font-size: 14px !important; 
+      color: var(--accent-primary) !important;
       font-weight: 800 !important;
-      margin-bottom: 8px;
+      margin-bottom: 5px;
       line-height: 1.3;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+  }
+  .movie-card-landscape.active-mobile .popup-subtitle-orig {
+      font-size: 11px !important;
+      margin-bottom: 4px !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
   }
   
-  /* ĐÉP CÁC NÚT VÀO MỘT HÀNG NGANG TƯƠNG TỰ BÊN KIA */
+  /* Nút trên 1 hàng ngang */
   .movie-card-landscape.active-mobile .popup-actions {
       flex-wrap: nowrap !important;
-      gap: 4px !important;
+      gap: 5px !important;
       margin-top: 8px !important;
   }
   
   .movie-card-landscape.active-mobile .btn-play-pink {
       font-size: 11px !important;
-      padding: 6px 10px !important;
+      padding: 5px 10px !important;
       white-space: nowrap !important;
   }
   .movie-card-landscape.active-mobile .btn-action-glass {
-      padding: 6px 8px !important;
+      padding: 5px 8px !important;
       font-size: 11px !important;
       white-space: nowrap !important;
   }
   .movie-card-landscape.active-mobile .meta-badges-row {
       gap: 5px !important;
-      margin-bottom: 8px !important;
+      margin-bottom: 6px !important;
+      margin-top: 6px !important;
   }
   .movie-card-landscape.active-mobile .badge-item {
-      font-size: 9px !important;
+      font-size: 10px !important;
       padding: 2px 6px !important;
+  }
+  .movie-card-landscape.active-mobile .popup-genres-text {
+      font-size: 11px !important;
+      color: #ccc !important;
   }
 
   /* --- POPUP PHIM THÔNG MINH (SMART POSITIONING) --- */
@@ -1404,7 +1673,7 @@ body.watch-party-active #watchPartyPage {
   /* 4. KHÔI PHỤC NÚT TO "NÂNG CẤP NGAY" (Màu đỏ) */
   [data-theme="light"] .user-dropdown button.w-full,
   [data-theme="light"] .user-dropdown .btn-block {
-    background: linear-gradient(135deg, #007aff 0%, #4db8ff 100%) !important;
+    background: linear-gradient(135deg, var(--accent-secondary) 0%, var(--accent-primary) 100%) !important;
     color: #ffffff !important;
     box-shadow: 0 4px 15px rgba(0, 122, 255, 0.3) !important;
     border: none !important;
@@ -1483,6 +1752,75 @@ body.watch-party-active #watchPartyPage {
     background-color: #1f1f2e !important;
     color: #ffffff !important;
   }
+
+  /* --- THU GỌN POPUP USER DROPDOWN TRÊN MOBILE/TABLET --- */
+  /* Giảm chiều rộng popup */
+  .user-dropdown {
+    width: 260px !important;
+    right: -10px !important;
+  }
+
+  /* Thu gọn header (Avatar + Tên) */
+  .user-dropdown .dropdown-header {
+    padding: 12px 14px !important;
+    gap: 10px !important;
+  }
+  .user-dropdown #dropdownAvatar {
+    width: 38px !important;
+    height: 38px !important;
+  }
+  .user-dropdown .dropdown-user-info strong {
+    font-size: 14px !important;
+  }
+  .user-dropdown .dropdown-role {
+    font-size: 9px !important;
+    padding: 1px 3px !important;
+  }
+
+  /* Thu gọn phần Nâng cấp */
+  .user-dropdown .dropdown-upgrade {
+    padding: 10px !important;
+    margin: 8px 10px !important;
+    border-radius: 6px !important;
+  }
+  .user-dropdown .dropdown-upgrade p {
+    font-size: 12px !important;
+    margin: 0 !important;
+    line-height: 1.3 !important;
+  }
+  .user-dropdown .btn-upgrade {
+    padding: 7px 12px !important;
+    font-size: 11px !important;
+    margin-top: 8px !important;
+  }
+
+  /* Thu gọn danh sách menu items */
+  .user-dropdown .dropdown-list {
+    padding: 0 8px 8px !important;
+  }
+  .user-dropdown .dropdown-item {
+    padding: 8px 10px !important;
+    gap: 10px !important;
+    font-size: 13px !important;
+  }
+  .user-dropdown .dropdown-item i {
+    font-size: 14px !important;
+    width: 18px !important;
+    text-align: center;
+  }
+  .user-dropdown .dropdown-item.logout {
+    margin-top: 6px !important;
+    padding-top: 10px !important;
+  }
+
+  /* Thu gọn nút Nạp và số dư */
+  .user-dropdown .balance-badge {
+    font-size: 12px !important;
+  }
+  .user-dropdown .btn-deposit {
+    padding: 3px 10px !important;
+    font-size: 10px !important;
+  }
 }
 
 /* Làm gọn hiển thị bình luận trên mobile */
@@ -1555,7 +1893,7 @@ body.watch-party-active #watchPartyPage {
 
 /* 4. Đổi màu các Icon trong thống kê sang màu Xanh cho đẹp */
 [data-theme="light"] .stats-box i {
-  color: #4db8ff !important;
+  color: var(--accent-primary) !important;
 }
 
 /* 5. Tiện thể sửa luôn màu tiêu đề Footer (Khám Phá, Hỗ Trợ...) sang đen */
@@ -1848,34 +2186,29 @@ body[data-theme="light"] .chat-msg .author {
     /* Header - NẰM ĐẦU TIÊN trong .room-main (flex column) */
     .room-header-bar {
       display: flex !important;
-      flex-wrap: wrap !important;
-      justify-content: center !important;
+      flex-wrap: nowrap !important;      /* BẮT BUỘC 1 hàng - không wrap */
+      justify-content: flex-start !important;
       align-items: center !important;
       background: var(--bg-secondary) !important;
-      padding: 6px 10px !important;
+      padding: 0 6px !important;
       margin: 0 !important;
       border-radius: 0 !important;
       width: 100% !important;
-      order: -1 !important; /* Luôn đứng đầu trong flex */
+      height: 48px !important;           /* Cố định 1 hàng */
+      min-height: 48px !important;
+      overflow: hidden !important;       /* Tuyệt đối không tràn */
+      order: -1 !important;
       z-index: 100 !important;
       position: relative !important;
-      min-height: 40px !important;
       flex-shrink: 0 !important;
     }
     #roomTitleDisplay {
-      width: 100% !important;
-      text-align: center !important;
-      order: -1 !important;
-      font-weight: 700 !important;
-      margin-bottom: 4px !important;
-      font-size: 14px !important;
-      color: var(--text-primary) !important;
-      display: block !important;
+      /* Header mới dùng .rh-center → ẩn element cũ để không render dư */
+      display: none !important;
     }
     .room-meta {
-      display: flex !important;
-      gap: 8px !important;
-      justify-content: center !important;
+      /* Ẩn: header mới dùng .rh-right zone thay thế */
+      display: none !important;
     }
 
     /* Video Dọc */
@@ -1981,19 +2314,24 @@ body[data-theme="light"] .chat-msg .author {
       background: rgba(124, 58, 237, 0.1) !important;
     }
     #chatMessages,
+    #commChatMessages,
     #memberList {
       flex: 1 !important;
       overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch !important; /* Mượt ngang/dọc cho iOS */
+      overscroll-behavior-y: contain !important; /* Chống cuộn dội ngược lây lan lên body trên iOS */
       padding: 10px !important;
       min-height: 0 !important; /* Quan trọng: cho phép co lại trong flex */
+      padding-bottom: 20px !important; /* Tạo thêm khoảng trống ở cuối phòng hờ */
     }
-    /* Ô nhập tin nhắn - CỐ ĐỊNH DƯớI MÀN HÌNH MOBILE */
-    .chat-input-area {
+    /* Ô nhập tin nhắn - CỐ ĐỊNH DƯỚI MÀN HÌNH MOBILE */
+    .chat-input-area,
+    .comm-chat-input-area {
       position: fixed !important;
       bottom: 0 !important;
       left: 0 !important;
       right: 0 !important;
-      padding: 8px 10px !important;
+      padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 10px)) 10px !important;
       background: var(--bg-secondary) !important;
       border-top: 1px solid var(--border-color) !important;
       z-index: 9500 !important;
@@ -2179,7 +2517,8 @@ body[data-theme="light"] .chat-msg .author {
       display: flex !important;
       align-items: center !important;
     }
-    #chatMessages {
+    #chatMessages,
+    #commChatMessages {
       font-size: 11px !important;
       flex: 1 !important;
       overflow-y: auto !important;
@@ -2187,9 +2526,10 @@ body[data-theme="light"] .chat-msg .author {
     }
 
     /* Chat input - TRONG SIDEBAR, KHÔNG FIXED */
-    .chat-input-area {
+    .chat-input-area,
+    .comm-chat-input-area {
       position: static !important;
-      padding: 8px !important;
+      padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 15px)) 10px !important;
       background: var(--bg-secondary) !important;
       border-top: 1px solid var(--border-color) !important;
       flex-shrink: 0 !important;
@@ -2255,6 +2595,415 @@ body[data-theme="light"] .chat-msg .author {
    Lý do: Tương tự mobile, không tự bật fullscreen khi xoay ngang.
    ============================================================ */
 
+/* ============================================================
+   FIX: MOBILE LANDSCAPE — THẺ PHIM & POPUP KHI XOAY NGANG
+   Khi xoay ngang, chiều rộng tăng > 768px nên rơi vào rule tablet.
+   Dùng max-height để nhận diện mobile xoay ngang (chiều cao nhỏ).
+   ============================================================ */
+@media (max-height: 500px) and (orientation: landscape) {
+
+  /* --- 1. BANNER LANDSCAPE: BỎ ASPECT-RATIO, SET HEIGHT CHO VỪA MÀN HÌNH --- */
+  .hero-banner {
+    aspect-ratio: unset !important;
+    height: 80vh !important;       /* ~246px trên 307px viewport */
+    max-height: 80vh !important;
+    margin-top: 55px !important;
+    overflow: hidden !important;
+  }
+  /* Thu gọn vị trí nội dung banner — tránh bị cắt trên/dưới */
+  .banner-content {
+    bottom: 12px !important;
+    left: 20px !important;
+    max-width: 60% !important;
+  }
+  .banner-title {
+    font-size: 16px !important;
+    margin-bottom: 4px !important;
+    line-height: 1.2 !important;
+    -webkit-line-clamp: 2 !important;
+    line-clamp: 2 !important;
+  }
+  .banner-subtitle {
+    font-size: 11px !important;
+    margin-bottom: 4px !important;
+  }
+  .banner-desc {
+    display: none !important;        /* Ẩn mô tả để tiết kiệm không gian */
+  }
+  .banner-genres {
+    font-size: 11px !important;
+    margin-bottom: 5px !important;
+  }
+  .banner-meta {
+    gap: 5px !important;
+    margin-bottom: 6px !important;
+  }
+  .banner-meta span {
+    font-size: 11px !important;
+    padding: 2px 6px !important;
+  }
+  .banner-actions {
+    gap: 8px !important;
+  }
+  .btn-banner-play {
+    padding: 7px 14px !important;
+    font-size: 12px !important;
+    gap: 6px !important;
+  }
+  .btn-banner-icon {
+    width: 34px !important;
+    height: 34px !important;
+    font-size: 14px !important;
+  }
+  /* Dots chỉ báo slide */
+  .banner-dots {
+    bottom: 5px !important;
+    left: 20px !important;
+    gap: 5px !important;
+  }
+  .banner-dot {
+    width: 7px !important;
+    height: 7px !important;
+  }
+  .banner-dot.active {
+    width: 20px !important;
+  }
+  /* Ảnh thumbnail góc phải — ẩn trên landscape nhỏ */
+  .banner-thumbs {
+    display: none !important;
+  }
+
+  /* --- 2. MOVIE GRID: AUTO-FILL ~170px → 4+ cột lấp đầy viewport --- */
+  .movie-grid {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)) !important;
+    gap: 12px !important;
+    padding: 0 10px !important;
+  }
+
+  /* --- 3. FEATURED MOVIES: Card 170px cố định (scroll ngang) --- */
+  /* Giảm padding wrapper cho gọn trên landscape */
+  .featured-scroll-wrapper {
+    padding: 10px 10px 15px !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+  }
+  #featuredMovies {
+    gap: 12px !important;
+  }
+  #featuredMovies > .movie-card-wrapper {
+    flex: 0 0 170px !important;
+    min-width: 170px !important;
+    max-width: 170px !important;
+  }
+
+  /* --- 4. NEW MOVIES: ÉP THÀNH FLEX SCROLL NGANG (vì viewport > 768px nên rule mobile ko match) --- */
+  #newMovies {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scroll-snap-type: x mandatory !important;
+    -webkit-overflow-scrolling: touch;
+    gap: 12px !important;
+    padding: 10px 10px 15px !important;
+    max-height: none !important;
+    scrollbar-width: none;
+    grid-template-columns: none !important;
+    grid-template-rows: none !important;
+  }
+  #newMovies::-webkit-scrollbar {
+    display: none;
+  }
+  #newMovies > .movie-card-wrapper {
+    flex: 0 0 170px !important;
+    min-width: 170px !important;
+    max-width: 170px !important;
+    scroll-snap-align: start;
+  }
+
+  /* --- 5. COUNTRY MOVIES ROW: Card 200px --- */
+  .country-movies-row .movie-card-landscape {
+    flex: 0 0 200px !important;
+    min-width: 200px !important;
+    max-width: 200px !important;
+  }
+
+  /* ============================================
+     6. POPUP: THU GỌN TRIỆT ĐỂ CHO LANDSCAPE
+     Viewport height rất nhỏ (~300-500px) nên popup
+     phải cực kỳ gọn, không được tràn ra ngoài.
+     ============================================ */
+
+  /* --- 6A. POPUP THẺ PHIM DỌC (portrait card) --- */
+  /* Override base popup: ép co lại vừa nội dung, không kéo dài */
+  .movie-popup-nfx {
+    height: fit-content !important;
+    min-height: unset !important;
+    justify-content: flex-start !important;
+    max-height: calc(100vh - 70px) !important;
+    overflow-y: auto !important;
+    scrollbar-width: none !important; /* Firefox: ẩn thanh cuộn */
+  }
+  .movie-popup-nfx::-webkit-scrollbar {
+    display: none !important; /* Chrome/Safari: ẩn thanh cuộn */
+  }
+  .movie-card-wrapper.active-mobile .movie-popup-nfx {
+    width: 220px !important;
+    height: fit-content !important;
+    min-height: unset !important;
+    max-height: calc(100vh - 70px) !important; /* Trừ header */
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    justify-content: flex-start !important; /* Không center → tránh khoảng trống dưới */
+  }
+  .movie-card-wrapper.active-mobile .popup-header-img {
+    height: 50px !important; /* Thu gọn mạnh ảnh header */
+  }
+  .movie-card-wrapper.active-mobile .popup-body {
+    padding: 4px 6px !important;
+  }
+  .movie-card-wrapper.active-mobile .popup-title-new {
+    font-size: 11px !important;
+    margin-bottom: 2px !important;
+    line-height: 1.2 !important;
+  }
+  .movie-card-wrapper.active-mobile .popup-meta-row {
+    font-size: 8px !important;
+    gap: 3px !important;
+    margin-bottom: 2px !important;
+  }
+  .movie-card-wrapper.active-mobile .popup-actions {
+    margin-bottom: 3px !important;
+    margin-top: 2px !important;
+    gap: 3px !important;
+  }
+  .movie-card-wrapper.active-mobile .btn-popup-play {
+    font-size: 9px !important;
+    padding: 2px 6px !important;
+    height: 20px !important;
+  }
+  .movie-card-wrapper.active-mobile .btn-popup-icon {
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 8px !important;
+  }
+  /* Ẩn bớt thông tin phụ để popup gọn hơn */
+  .movie-card-wrapper.active-mobile .popup-genres-row {
+    display: none !important;
+  }
+
+  /* --- 6B. POPUP THẺ PHIM NGANG (landscape card) --- */
+  .movie-card-landscape.active-mobile .movie-popup-nfx {
+    width: 230px !important;
+    height: fit-content !important;
+    min-height: unset !important;
+    max-height: calc(100vh - 70px) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    justify-content: flex-start !important;
+  }
+  .movie-card-landscape.active-mobile .popup-header-img {
+    height: 50px !important;
+  }
+  .movie-card-landscape.active-mobile .popup-body {
+    padding: 4px 7px !important;
+  }
+  .movie-card-landscape.active-mobile .popup-title-main {
+    font-size: 11px !important;
+    margin-bottom: 2px !important;
+  }
+  .movie-card-landscape.active-mobile .popup-subtitle-orig {
+    font-size: 9px !important;
+    margin-bottom: 2px !important;
+  }
+  .movie-card-landscape.active-mobile .popup-actions {
+    gap: 3px !important;
+    margin-top: 3px !important;
+  }
+  .movie-card-landscape.active-mobile .btn-play-pink {
+    font-size: 9px !important;
+    padding: 3px 6px !important;
+  }
+  .movie-card-landscape.active-mobile .btn-action-glass {
+    font-size: 9px !important;
+    padding: 3px 5px !important;
+  }
+  .movie-card-landscape.active-mobile .badge-item {
+    font-size: 8px !important;
+    padding: 1px 4px !important;
+  }
+  .movie-card-landscape.active-mobile .meta-badges-row {
+    gap: 3px !important;
+    margin-bottom: 3px !important;
+    margin-top: 3px !important;
+  }
+  .movie-card-landscape.active-mobile .popup-genres-text {
+    font-size: 9px !important;
+  }
+
+  /* --- 6C. POPUP BODY-LEVEL (khi popup được đẩy ra body) --- */
+  .popup-body-level {
+    height: fit-content !important;
+    min-height: unset !important;
+    max-height: calc(100vh - 70px) !important;
+    overflow-y: auto !important;
+    justify-content: flex-start !important;
+  }
+  .popup-body-level .popup-header-img {
+    height: 50px !important;
+  }
+  .popup-body-level .popup-body {
+    padding: 4px 7px !important;
+  }
+  .popup-body-level .popup-title-new {
+    font-size: 10px !important;
+    margin-bottom: 2px !important;
+  }
+  .popup-body-level .popup-actions {
+    margin-bottom: 3px !important;
+    gap: 3px !important;
+  }
+  .popup-body-level .btn-popup-play {
+    font-size: 9px !important;
+    padding: 2px 6px !important;
+    height: 20px !important;
+  }
+  .popup-body-level .btn-popup-icon {
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 8px !important;
+  }
+
+  /* --- 6E. POPUP MOBILE LANDSCAPE (phone xoay ngang): Tối ưu cho viewport thấp --- */
+  /* Popup được đẩy ra body với position: fixed, viewport height ~300-500px */
+  .popup-landscape-mobile {
+    max-height: 88vh !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    scrollbar-width: none !important;
+  }
+  .popup-landscape-mobile::-webkit-scrollbar {
+    display: none !important;
+  }
+  /* Thu gọn ảnh header — hiện vừa đủ */
+  .popup-landscape-mobile .popup-header-img {
+    height: 60px !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
+  }
+  /* Body: padding thoáng hơn */
+  .popup-landscape-mobile .popup-body {
+    padding: 8px 10px !important;
+  }
+  /* Tiêu đề rõ ràng */
+  .popup-landscape-mobile .popup-title-new {
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    margin-bottom: 4px !important;
+    line-height: 1.3 !important;
+    color: var(--accent-primary) !important;
+  }
+  /* Các nút hành động: dễ bấm */
+  .popup-landscape-mobile .popup-actions {
+    margin-bottom: 5px !important;
+    margin-top: 2px !important;
+    gap: 5px !important;
+    flex-wrap: nowrap !important;
+  }
+  .popup-landscape-mobile .btn-popup-play {
+    font-size: 11px !important;
+    padding: 5px 10px !important;
+    height: 28px !important;
+    white-space: nowrap !important;
+  }
+  .popup-landscape-mobile .btn-popup-icon {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
+    flex-shrink: 0 !important;
+  }
+  /* Meta info: hiển thị gọn 1 hàng */
+  .popup-landscape-mobile .popup-meta-row {
+    font-size: 10px !important;
+    gap: 5px !important;
+    margin-bottom: 3px !important;
+    flex-wrap: nowrap !important;
+    overflow: hidden !important;
+  }
+  /* Thể loại/quốc gia: hiện 1 dòng gọn */
+  .popup-landscape-mobile .popup-genres-row {
+    font-size: 10px !important;
+    margin-top: 2px !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+  }
+  /* Chỉ hiện 1 dòng marquee, ẩn bản sao */
+  .popup-landscape-mobile .marquee-duplicate {
+    display: none !important;
+  }
+
+  /* --- 6D. POPUP LANDSCAPE COMPACT --- */
+  .popup-body-landscape {
+    height: fit-content !important;
+    min-height: unset !important;
+    max-height: calc(100vh - 70px) !important;
+    overflow-y: auto !important;
+    justify-content: flex-start !important;
+  }
+  .popup-body-landscape .popup-header-img {
+    height: 50px !important;
+  }
+  .popup-body-landscape .popup-body {
+    padding: 4px 6px !important;
+  }
+  .popup-body-landscape .popup-title-main {
+    font-size: 11px !important;
+    margin-bottom: 2px !important;
+  }
+  .popup-body-landscape .popup-actions {
+    margin-top: 2px !important;
+    margin-bottom: 2px !important;
+    gap: 3px !important;
+  }
+  .popup-body-landscape .btn-play-pink {
+    font-size: 9px !important;
+    padding: 2px 5px !important;
+  }
+  .popup-body-landscape .btn-action-glass {
+    font-size: 9px !important;
+    padding: 2px 4px !important;
+  }
+
+  /* --- 7. THẺ PHIM: GIỮ FONT NHƯ MOBILE DỌC --- */
+  .card-title {
+    font-size: 14px !important;
+    margin-bottom: 4px !important;
+    line-height: 1.4 !important;
+  }
+  .card-meta {
+    font-size: 11px !important;
+  }
+  .card-body {
+    padding: 10px 8px !important;
+  }
+
+  /* --- 8. PAGE PADDING --- */
+  .page {
+    padding-top: 70px !important;
+  }
+
+  /* --- 9. FOOTER GỌN --- */
+  .footer {
+    padding: 15px 0 10px !important;
+  }
+  .footer-content {
+    gap: 10px !important;
+  }
+}
 
 /* --- FINAL FIX: PADDING CHO TRANG PHIM LẺ & PHIM BỘ (Tránh bị Menu che) --- */
 
@@ -2354,4 +3103,563 @@ body[data-theme="light"] .chat-msg .author {
   .timeline-year {
     font-size: 1.2rem !important;
   }
+}
+
+/* ============================================
+   RESPONSIVE: CỘNG ĐỒNG (COMMUNITY PAGE)
+   ============================================ */
+
+/* TABLET (iPad, <1024px) */
+@media (max-width: 1024px) {
+  .community-wrapper {
+    grid-template-columns: 200px 1fr !important; /* Thu nhỏ sidebar trái */
+  }
+  .comm-chat-layout {
+    grid-template-columns: 250px 1fr !important;
+  }
+  /* Tablet dọc (portrait): dùng slide-view thay vì grid */
+  @media (orientation: portrait) {
+    .comm-chat-layout {
+      display: flex !important;
+      flex-direction: column !important;
+      grid-template-columns: none !important;
+      overflow-x: hidden !important;
+    }
+    .comm-sidebar-toggle-btn {
+      display: none !important;
+    }
+    .comm-chat-sidebar.collapsed {
+      width: 100% !important;
+      min-width: unset !important;
+    }
+    .comm-chat-layout.sidebar-collapsed {
+      grid-template-columns: none !important;
+    }
+  }
+  .comm-chat-info-sidebar {
+    /* Panel 1/3 bên phải khung chat */
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: auto !important;
+    width: 33% !important;
+    min-width: 280px !important;
+    height: 100% !important;
+    z-index: 500 !important;
+    border-radius: 0 !important;
+    overflow-y: auto !important;
+    background: var(--bg-secondary) !important;
+    border-left: 1px solid var(--border-color) !important;
+    box-shadow: -4px 0 15px rgba(0, 0, 0, 0.2) !important;
+    padding-top: 0 !important;
+  }
+  .comm-chat-layout.info-hidden .comm-chat-info-sidebar {
+    display: none !important;
+  }
+}
+
+/* MOBILE (<768px) */
+@media (max-width: 768px) {
+  /* === FIX: Dòng thông báo nằm ngay dưới menu trên mobile === */
+  .notification-container {
+    position: fixed !important;
+    top: 85px !important; /* Sát dưới navbar mobile (80px + 5px gap) */
+    right: 10px !important;
+    left: 10px !important;
+    width: calc(100% - 20px) !important;
+    z-index: 10000 !important; /* Trên mọi nội dung */
+  }
+  .notification {
+    min-width: unset !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    font-size: 0.85rem !important;
+    padding: 10px 14px !important;
+    box-sizing: border-box !important;
+  }
+
+  .community-wrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: calc(100vh - 80px) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 8px 10px !important;
+    gap: 10px !important;
+  }
+  
+  /* === THANH MENU NGANG MOBILE === */
+  .comm-left-sidebar {
+    flex-direction: row !important; /* Chuyển nav bar sang ngang */
+    overflow-x: auto !important;
+    padding: 8px 12px !important;
+    border-radius: 10px !important;
+    margin-bottom: 0 !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 0 !important;
+    flex-shrink: 0 !important;
+  }
+  /* Ẩn brand (nút toggle + text "Cộng Đồng") trên mobile */
+  .comm-left-brand {
+    display: none !important;
+  }
+  .comm-nav-item {
+    padding: 10px 16px !important;
+    border-radius: 10px !important;
+    justify-content: center !important;
+    flex: 1 !important;
+  }
+  .comm-nav-item i {
+    font-size: 1.15rem !important;
+  }
+  .comm-nav-item span {
+    display: none !important; /* Ẩn chữ, chỉ để icon */
+  }
+  .comm-section-title, .comm-tags-list {
+    display: none !important; /* Ẩn thẻ tags */
+  }
+
+  /* === FEED VIEW: 1 CỘT, ẨN RIGHT SIDEBAR === */
+  #commFeedView {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: none !important;
+    gap: 12px !important;
+    overflow-y: visible !important;
+    height: auto !important;
+  }
+  .comm-right-sidebar {
+    display: none !important; /* Ẩn sidebar phải trên mobile */
+  }
+  .comm-main-feed {
+    overflow-y: visible !important;
+    padding-right: 0 !important;
+  }
+
+  /* === THẺ PHIM GỌN HƠN TRÊN MOBILE === */
+  .comm-post-movie-ref {
+    flex-direction: row !important;
+  }
+  .comm-post-movie-ref > img {
+    width: 70px !important;
+    min-height: 100px !important;
+    max-height: 120px !important;
+  }
+  .comm-post-movie-info {
+    padding: 8px 10px !important;
+    gap: 3px !important;
+  }
+  .comm-post-movie-title {
+    font-size: 0.85rem !important;
+  }
+  .comm-post-movie-meta {
+    gap: 3px !important;
+  }
+  .comm-movie-tag-badge {
+    font-size: 0.65rem !important;
+    padding: 1px 5px !important;
+  }
+  /* Ảnh cờ quốc gia mobile - nhỏ gọn hơn */
+  .comm-movie-tag-badge img {
+    width: 14px !important;
+    height: 10px !important;
+    max-width: 14px !important;
+    max-height: 10px !important;
+    min-width: 14px !important;
+    object-fit: cover !important;
+    flex-shrink: 0 !important;
+  }
+  .comm-movie-episodes-badge {
+    font-size: 0.65rem !important;
+    padding: 1px 5px !important;
+  }
+  .comm-post-movie-desc {
+    font-size: 0.75rem !important;
+    -webkit-line-clamp: 2 !important;
+    line-clamp: 2 !important;
+  }
+  .comm-movie-watch-btn {
+    padding: 4px 10px !important;
+    font-size: 0.72rem !important;
+  }
+
+  /* === POST CARD GỌN HƠN === */
+  .comm-post-card {
+    padding: 14px !important;
+    gap: 10px !important;
+    margin-bottom: 8px !important;
+  }
+  .comm-composer {
+    padding: 14px !important;
+    gap: 10px !important;
+  }
+  .comm-composer-bottom {
+    padding-left: 0 !important;
+  }
+  .comm-composer-preview {
+    padding-left: 0 !important;
+  }
+  .comm-composer-movie-tag {
+    padding-left: 0 !important;
+  }
+  .comm-movie-search-dropdown {
+    margin-left: 0 !important;
+  }
+
+  .comm-chat-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    grid-template-columns: none !important;
+    gap: 0 !important;
+    overflow-x: hidden !important;
+  }
+  /* Force reset collapsed trên mobile */
+  .comm-chat-sidebar.collapsed {
+    width: 100% !important;
+    min-width: unset !important;
+  }
+  .comm-chat-layout.sidebar-collapsed {
+    grid-template-columns: none !important;
+  }
+  
+  .comm-chat-sidebar {
+    max-height: none !important;
+    border-radius: 0 !important;
+    margin-bottom: 0 !important;
+    flex: 1 !important;
+    width: 100% !important;
+    min-width: unset !important;
+  }
+  /* Ẩn nút thu gọn trên mobile */
+  .comm-sidebar-toggle-btn {
+    display: none !important;
+  }
+  
+  .comm-chat-box {
+    flex: 1 !important;
+    min-height: 50vh !important;
+    border-radius: 0 !important;
+  }
+}
+
+/* ============================================
+   LIGHT MODE — RESPONSIVE OVERRIDES
+   Fix hiển thị trên nền sáng cho Mobile & Tablet
+   ============================================ */
+
+/* --- TABLET LIGHT MODE --- */
+@media (max-width: 1366px) {
+  [data-theme="light"] .movie-card-wrapper.active-mobile .movie-popup-nfx {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--accent-primary);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15) !important;
+  }
+  [data-theme="light"] .movie-card-wrapper.active-mobile .popup-title-new {
+    color: var(--accent-primary) !important;
+  }
+  [data-theme="light"] .movie-card-wrapper.active-mobile .popup-body {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+  }
+  [data-theme="light"] .movie-card-wrapper.active-mobile .btn-popup-icon {
+    background: rgba(0, 0, 0, 0.06) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color) !important;
+  }
+  [data-theme="light"] .movie-card-wrapper.active-mobile .marquee-content span {
+    color: var(--accent-primary) !important;
+  }
+  /* Landscape card popup */
+  [data-theme="light"] .movie-card-landscape.active-mobile .popup-title-main {
+    color: var(--accent-primary) !important;
+  }
+  [data-theme="light"] .movie-card-landscape.active-mobile .popup-genres-text {
+    color: var(--text-secondary) !important;
+  }
+}
+
+/* --- MOBILE LIGHT MODE --- */
+@media (max-width: 768px) {
+  /* Nav menu slide (Chuẩn bị cho sidebar) */
+  [data-theme="light"] .nav-menu {
+    background: var(--bg-secondary) !important;
+    border-top-color: var(--border-color) !important;
+  }
+  [data-theme="light"] .nav-menu .nav-link {
+    border-bottom-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+  }
+  [data-theme="light"] .nav-menu .nav-link:hover,
+  [data-theme="light"] .nav-menu .nav-link.active {
+    background: rgba(0, 0, 0, 0.05) !important;
+  }
+
+  /* Nav icon buttons */
+  [data-theme="light"] .wallet-btn,
+  [data-theme="light"] #connectWalletBtn,
+  [data-theme="light"] .theme-toggle,
+  [data-theme="light"] .notification-btn,
+  [data-theme="light"] .mobile-menu-toggle,
+  [data-theme="light"] #sidebarToggleBtn {
+    background: rgba(0, 0, 0, 0.06) !important;
+    border-color: rgba(0, 0, 0, 0.1) !important;
+    color: var(--text-primary) !important;
+  }
+  /* Khi đã kết nối ví: giữ màu gradient web, không bị override xám */
+  [data-theme="light"] .wallet-btn.connected {
+    background: var(--accent-gradient) !important;
+    border-color: rgba(77, 184, 255, 0.4) !important;
+    color: #fff !important;
+    box-shadow: 0 4px 15px rgba(0, 122, 255, 0.3) !important;
+  }
+  [data-theme="light"] .wallet-btn i,
+  [data-theme="light"] #connectWalletBtn i,
+  [data-theme="light"] .theme-toggle i,
+  [data-theme="light"] .notification-btn i,
+  [data-theme="light"] .mobile-menu-toggle i,
+  [data-theme="light"] #sidebarToggleBtn i {
+    color: var(--text-primary) !important;
+  }
+  /* Icon trong nút ví đã kết nối: giữ trắng */
+  [data-theme="light"] .wallet-btn.connected i,
+  [data-theme="light"] .wallet-btn.connected span {
+    color: #fff !important;
+  }
+
+  /* Banner meta on light mode */
+  [data-theme="light"] .banner-meta span {
+    color: #fff !important; /* trên banner vẫn trắng vì có overlay tối */
+  }
+
+  /* Country section mobile */
+  [data-theme="light"] .country-section {
+    background: rgba(0, 0, 0, 0.02) !important;
+    border-color: var(--border-color) !important;
+  }
+  [data-theme="light"] .country-sidebar {
+    border-right-color: var(--border-color) !important;
+  }
+
+  /* Footer links mobile */
+  [data-theme="light"] .footer-links a,
+  [data-theme="light"] .footer-bottom {
+    color: var(--text-secondary) !important;
+  }
+
+  /* Movie popup mobile */
+  [data-theme="light"] .movie-card-wrapper.active-mobile .movie-popup-nfx {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--accent-primary) !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2) !important;
+  }
+  [data-theme="light"] .movie-card-wrapper.active-mobile .popup-title-new {
+    color: var(--accent-primary) !important;
+  }
+  [data-theme="light"] .movie-card-wrapper.active-mobile .popup-body {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+  }
+  [data-theme="light"] .movie-card-wrapper.active-mobile .btn-popup-icon {
+    background: rgba(0, 0, 0, 0.06) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color) !important;
+  }
+  [data-theme="light"] .movie-card-wrapper.active-mobile .marquee-content span {
+    color: var(--accent-primary) !important;
+  }
+  [data-theme="light"] .movie-card-wrapper.active-mobile .popup-genres-row {
+    color: var(--text-secondary) !important;
+  }
+
+  /* Search mobile */
+  [data-theme="light"] .search-input-mobile {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+  }
+
+  /* Side drawer / Mobile menu */
+  [data-theme="light"] .mobile-drawer {
+    background: var(--bg-secondary) !important;
+  }
+  [data-theme="light"] .mobile-drawer-item {
+    color: var(--text-primary) !important;
+    border-bottom-color: var(--border-color) !important;
+  }
+  [data-theme="light"] .mobile-drawer-item:hover {
+    background: rgba(0, 0, 0, 0.05) !important;
+  }
+
+  /* Notification badge */
+  [data-theme="light"] .notification-badge {
+    background: #e50914 !important;
+    color: #fff !important;
+  }
+}
+
+/* =============================================
+   POPUP BODY-LEVEL — Khi popup được di chuyển ra <body>
+   để thoát overflow container trên mobile
+   ============================================= */
+
+/* Ảnh header — giống popup gốc */
+.popup-body-level .popup-header-img {
+    height: 120px !important;
+}
+
+/* Padding body popup — thoáng hơn */
+.popup-body-level .popup-body {
+    padding: 8px 10px !important;
+}
+
+/* Tiêu đề — giữ nguyên font gốc */
+.popup-body-level .popup-title-new {
+    font-size: 13px !important;
+    margin-bottom: 4px !important;
+    line-height: 1.3 !important;
+    color: var(--accent-primary) !important;
+    font-weight: 700 !important;
+}
+
+/* Meta info — KHÔNG dùng mask-image để tránh cắt chữ bên trái */
+.popup-body-level .popup-meta-row {
+    font-size: 10px !important;
+    gap: 5px !important;
+    margin-bottom: 4px !important;
+    overflow: hidden !important;
+    flex-wrap: nowrap !important;
+    white-space: nowrap !important;
+}
+
+/* Marquee chạy chữ — giống popup gốc */
+.popup-body-level .marquee-content {
+    display: flex !important;
+    flex-shrink: 0 !important;
+    gap: 5px !important;
+    white-space: nowrap !important;
+    transform: translateX(0);
+    animation: marquee-infinite 12s linear infinite !important;
+    animation-delay: 1.5s !important;
+}
+
+/* Hiện bản sao marquee duplicate để chữ chạy liên tục */
+.popup-body-level .marquee-duplicate {
+    display: flex !important;
+}
+
+/* Nút Xem ngay — kích thước giống ảnh gốc */
+.popup-body-level .btn-popup-play {
+    font-size: 11px !important;
+    padding: 5px 10px !important;
+    height: 28px !important;
+}
+
+/* Nút icon — kích thước giống ảnh gốc */
+.popup-body-level .btn-popup-icon {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
+}
+
+/* HIỆN dòng thể loại + quốc gia — giống popup gốc */
+.popup-body-level .popup-genres-row {
+    display: flex !important;
+    font-size: 11px !important;
+    flex-wrap: nowrap !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    margin-top: 2px !important;
+}
+
+/* Ẩn thể loại dài PC, hiện bản rút gọn mobile */
+.popup-body-level .desktop-genres {
+    display: none !important;
+}
+.popup-body-level .mobile-genres {
+    display: inline-block !important;
+}
+
+/* Popup actions gọn gàng */
+.popup-body-level .popup-actions {
+    margin-bottom: 8px !important;
+    gap: 6px !important;
+    flex-wrap: nowrap !important;
+    justify-content: center !important;
+}
+
+/* Nút landscape (btn-play-pink, btn-action-glass) gọn vừa 1 hàng */
+.popup-body-level .btn-play-pink {
+    font-size: 11px !important;
+    padding: 6px 10px !important;
+    white-space: nowrap !important;
+    flex: 1 !important;
+    justify-content: center !important;
+}
+.popup-body-level .btn-action-glass {
+    font-size: 11px !important;
+    padding: 6px 8px !important;
+    white-space: nowrap !important;
+    flex: 1 !important;
+    justify-content: center !important;
+}
+
+/* Light mode tương thích */
+[data-theme="light"] .popup-body-level {
+    background: #fff !important;
+    color: #222 !important;
+    border-color: #ddd !important;
+}
+
+/* =============================================
+   POPUP LANDSCAPE COMPACT — Thu gọn popup thẻ ngang
+   ============================================= */
+.popup-body-landscape .popup-header-img {
+    height: 100px !important;
+}
+.popup-body-landscape .popup-body {
+    padding: 8px 10px 6px !important;
+}
+.popup-body-landscape .popup-title-main {
+    font-size: 14px !important;
+    margin-bottom: 2px !important;
+    line-height: 1.2 !important;
+}
+.popup-body-landscape .popup-subtitle-orig {
+    font-size: 11px !important;
+    margin-bottom: 4px !important;
+    line-height: 1.2 !important;
+}
+.popup-body-landscape .popup-actions {
+    margin-top: 4px !important;
+    margin-bottom: 6px !important;
+    gap: 5px !important;
+}
+.popup-body-landscape .btn-play-pink {
+    font-size: 10px !important;
+    padding: 5px 8px !important;
+}
+.popup-body-landscape .btn-action-glass {
+    font-size: 10px !important;
+    padding: 5px 6px !important;
+}
+.popup-body-landscape .meta-badges-row {
+    gap: 4px !important;
+    margin-bottom: 4px !important;
+}
+.popup-body-landscape .badge-item {
+    font-size: 10px !important;
+    padding: 2px 6px !important;
+}
+.popup-body-landscape .popup-genres-text {
+    font-size: 11px !important;
+    margin-bottom: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
 }

@@ -11,8 +11,9 @@ let membersUnsubscribe = null;
 let player = null;
 let isHost = false;
 let lastSyncTime = 0;
-const SYNC_THRESHOLD = 2;
+const SYNC_THRESHOLD = 3; // Ngưỡng lệch tối đa (giây) trước khi sync lại
 let latestRoomData = null;
+let hostSyncInterval = null; // Interval để host cập nhật current_time liên tục
 let allWatchRooms = []; // Lưu trữ tất cả các phòng để lọc cục bộ
 let currentRoomFilter = 'all'; // 'all', 'public', 'private'
 
@@ -21,6 +22,7 @@ let myPeer = null;
 let myStream = null;
 let peers = {};
 let isMicEnabled = false; // Mặc định tắt Mic
+let isMyMicBanned = false; // Cờ kiểm tra có bị Host cấm mic không
 let globalAudioContext = null;
 
 // QUẢN LÝ ÂM THANH
@@ -73,21 +75,7 @@ const response = await fetch("./components/watch-party.html?v=" + new Date().get
     }
   }
 
-  const navMenu = document.getElementById("navMenu");
-  if (!navMenu.querySelector('[data-page="watchParty"]')) {
-    const link = document.createElement("a");
-    link.href = "#";
-    link.className = "nav-link";
-    link.dataset.page = "watchParty";
-    link.innerHTML = '<i class="fas fa-users"></i> Xem Chung';
-    link.onclick = (e) => {
-      e.preventDefault();
-      loadRooms();
-      showPage("watchParty");
-    };
-    const adminLink = document.getElementById("adminNavLink");
-    navMenu.insertBefore(link, adminLink);
-  }
+  // Navbar: Đã chuyển sang HTML tĩnh trong index.html (dễ tìm code)
 
   const urlParams = new URLSearchParams(window.location.search);
   const inviteRoomId = urlParams.get("room");
@@ -107,6 +95,25 @@ initWatchPartyModule();
 // Biến để lưu listener của room list
 let roomsChannel = null;
 let roomRefreshInterval = null;
+
+// Chuẩn hóa dữ liệu phòng: Supabase trả snake_case, code dùng camelCase
+function normalizeRoomData(room) {
+    if (!room) return room;
+    room.movieTitle = room.movieTitle || room.movie_title || '';
+    room.moviePoster = room.moviePoster || room.movie_poster || '';
+    room.hostName = room.hostName || room.host_name || 'Host';
+    room.hostId = room.hostId || room.host_id || '';
+    room.memberCount = room.memberCount || room.member_count || 0;
+    room.videoType = room.videoType || room.video_type || 'youtube';
+    room.videoSource = room.videoSource || room.video_source || '';
+    room.videoId = room.videoId || room.video_id || '';
+    room.scheduledTime = room.scheduledTime || room.scheduled_at || null;
+    room.episodeIndex = room.episodeIndex ?? room.episode_index ?? 0;
+    room.currentTime = room.currentTime ?? room.current_time ?? 0;
+    room.endedAt = room.endedAt || room.ended_at || null;
+    room.sourceLabel = room.sourceLabel || room.source_label || '';
+    return room;
+}
 
 async function loadRooms() {
   const container = document.getElementById("roomList");
@@ -170,13 +177,13 @@ async function loadRooms() {
         const { data, error } = await supabase
             .from('watch_rooms')
             .select('*')
-            .eq('status', 'active') // Chỉ hiện phòng active? Hoặc tất cả?
             .order('created_at', { ascending: false })
             .limit(20);
         
         if (error) throw error;
 
-        allWatchRooms = data || [];
+        // Normalize snake_case → camelCase để tương thích code render
+        allWatchRooms = (data || []).map(normalizeRoomData);
         filterWatchRooms();
     };
 
@@ -214,7 +221,7 @@ function renderWatchRooms(rooms) {
     const posterUrl = room.moviePoster || 'https://via.placeholder.com/400x600/1a1a2e/ffffff?text=No+Poster';
 
     let deleteBtn = "";
-    if (currentUser && (currentUser.uid === room.hostId || (typeof isAdmin !== 'undefined' && isAdmin))) {
+    if (currentUser && (currentUser.id === room.hostId || (typeof isAdmin !== 'undefined' && isAdmin))) {
       deleteBtn = `<button class="btn-delete-room" onclick="event.stopPropagation(); deleteRoom('${room.id}', '${room.hostId}')" title="Xóa phòng"><i class="fas fa-trash"></i></button>`;
     }
 
@@ -293,6 +300,7 @@ function renderWatchRooms(rooms) {
               </div>
             </li>
             <li><i class="fas fa-tv"></i> <span>${epText}</span></li>
+            ${room.sourceLabel ? `<li><i class="fas fa-language" style="color: #00d4ff;"></i> <span>${room.sourceLabel}</span></li>` : ''}
             <li><i class="fas fa-crown"></i> <span>${room.hostName || 'Host'}</span></li>
             <li><i class="fas ${typeIcon}"></i> <span>${typeText}</span></li>
             <li><i class="fas fa-users"></i> <span>${count} người đang xem</span></li>
@@ -457,7 +465,7 @@ function hideRoomPopup(btn) {
 
 async function deleteRoom(roomId, hostId) {
   if (!currentUser) return;
-  const isOwner = currentUser.id === hostId || currentUser.uid === hostId;
+  const isOwner = currentUser.id === hostId || currentUser.id === hostId;
   
   // 👇 FIX: Admin có quyền xóa mọi phòng
   if (!isOwner && (typeof isAdmin === 'undefined' || !isAdmin)) {
@@ -509,6 +517,16 @@ async function openCreateRoomModal() {
   if (epGroup) epGroup.classList.add('hidden');
   if (passGroup) passGroup.classList.add('hidden');
 
+  // Reset room type cards về "Công khai" mặc định
+  document.querySelectorAll('.cr-type-card').forEach(c => c.classList.remove('active'));
+  const publicCard = document.querySelector('.cr-type-card[data-value="public"]');
+  if (publicCard) publicCard.classList.add('active');
+  // Reset schedule toggle
+  const schedToggle = document.getElementById('roomScheduleToggle');
+  const schedInput = document.getElementById('roomScheduleInputGroup');
+  if (schedToggle) schedToggle.checked = false;
+  if (schedInput) schedInput.classList.add('hidden');
+
   // Đảm bảo dữ liệu phim đã được tải
   if (!allMovies || allMovies.length === 0) {
     console.warn("DEBUG: allMovies empty, attempting to load...");
@@ -543,7 +561,7 @@ async function openCreateRoomModal() {
   console.log("DEBUG: Unique Movies for WP:", uniqueMovies.length, uniqueMovies);
   
   if (uniqueMovies.length > 0) {
-    renderWPMovies(uniqueMovies);
+    renderWPMovies(uniqueMovies.slice(0, 10));
   } else {
     console.error("DEBUG: No movies to render!");
   }
@@ -557,7 +575,13 @@ async function openCreateRoomModal() {
   const selectionArea = document.querySelector('.wp-movie-selection-area');
   if (selectionArea) selectionArea.classList.remove('wp-collapsed');
   
-  openModal('createWatchPartyModal');
+  // Hiển thị form tạo phòng inline (thay cho modal)
+  const lobby = document.getElementById('partyLobby');
+  const createView = document.getElementById('createRoomView');
+  if (lobby) lobby.classList.add('hidden');
+  if (createView) createView.classList.remove('hidden');
+  // Cuộn lên đầu form
+  if (createView) createView.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderWPMovies(movies) {
@@ -604,7 +628,7 @@ function filterWPMovies() {
   if (!window.allAllowedWPMovies) return;
   
   if (val === '') {
-    renderWPMovies(window.allAllowedWPMovies);
+    renderWPMovies(window.allAllowedWPMovies.slice(0, 10));
     return;
   }
   
@@ -612,7 +636,7 @@ function filterWPMovies() {
     m.title.toLowerCase().includes(val) || 
     (m.originTitle && m.originTitle.toLowerCase().includes(val))
   );
-  renderWPMovies(filtered);
+  renderWPMovies(filtered.slice(0, 10));
 }
 
 function selectWPMovie(id) {
@@ -680,10 +704,14 @@ function selectWPMovie(id) {
         </button>
       `).join("");
     }
+    // Load bản chiếu cho tập đầu tiên
+    loadEpisodeSources(id, 0);
     showNotification(`Đã chọn: ${movie.title}. Vui lòng chọn tập.`, "success");
   } else {
     if (epGroup) epGroup.classList.add('hidden');
     if (epIndexInput) epIndexInput.value = "0";
+    // Phim lẻ — cũng load sources
+    loadEpisodeSources(id, 0);
     showNotification(`Đã chọn: ${movie.title}`, "success");
   }
 
@@ -712,11 +740,22 @@ function undoMovieSelection() {
   }
   if (movieIdInput) movieIdInput.value = '';
   if (epGroup) epGroup.classList.add('hidden');
+  // Reset bản chiếu
+  const sourceGroup = document.getElementById('wpSourceSelectGroup');
+  if (sourceGroup) sourceGroup.classList.add('hidden');
 
   // Reset highlight cards
   document.querySelectorAll('.wp-movie-card').forEach(card => card.classList.remove('selected'));
   
   showNotification("Mời bạn chọn lại phim", "info");
+}
+
+/* Quay lại danh sách phòng (ẩn form tạo phòng inline) */
+function backToRoomList() {
+  const lobby = document.getElementById('partyLobby');
+  const createView = document.getElementById('createRoomView');
+  if (createView) createView.classList.add('hidden');
+  if (lobby) lobby.classList.remove('hidden');
 }
 
 function selectWPEpisode(index, btnElement) {
@@ -730,6 +769,47 @@ function selectWPEpisode(index, btnElement) {
   }
   // Đánh dấu nút vừa bấm
   if(btnElement) btnElement.classList.add('active');
+
+  // Load bản chiếu cho tập được chọn
+  const movieId = document.getElementById('roomMovieId')?.value;
+  if (movieId) loadEpisodeSources(movieId, index);
+}
+
+// Fetch và hiển thị các bản chiếu (Vietsub, Thuyết minh...) của tập phim
+async function loadEpisodeSources(movieId, epIndex) {
+  const sourceGroup = document.getElementById('wpSourceSelectGroup');
+  const sourceSelect = document.getElementById('roomSourceLabel');
+  if (!sourceGroup || !sourceSelect) return;
+
+  try {
+    const { data: episodes, error } = await supabase
+      .from('episodes')
+      .select('sources')
+      .eq('movie_id', movieId)
+      .order('episode_index', { ascending: true });
+
+    if (error) throw error;
+    const episode = episodes?.[parseInt(epIndex)] || episodes?.[0];
+
+    if (episode?.sources && Array.isArray(episode.sources) && episode.sources.length > 0) {
+      // Có nhiều bản chiếu → hiện dropdown + render pills
+      sourceGroup.classList.remove('hidden');
+      sourceSelect.innerHTML = episode.sources.map((src, i) => 
+        `<option value="${i}">${src.label || src.type || 'Nguồn ' + (i+1)}</option>`
+      ).join('');
+      // Render pill buttons từ options vừa populate
+      renderSourcePills();
+    } else {
+      // Chỉ 1 hoặc không có sources → ẩn dropdown
+      sourceGroup.classList.add('hidden');
+      sourceSelect.innerHTML = '';
+      const pillsContainer = document.getElementById('crSourcePills');
+      if (pillsContainer) pillsContainer.innerHTML = '';
+    }
+  } catch(e) {
+    console.warn('Không load được bản chiếu:', e);
+    sourceGroup.classList.add('hidden');
+  }
 }
 
 function toggleRoomPass() {
@@ -739,6 +819,56 @@ function toggleRoomPass() {
   if (!typeEl || !passGroup) return;
   
   passGroup.classList.toggle("hidden", typeEl.value !== "private");
+}
+
+/* Xử lý click card chọn loại phòng (Công khai / Riêng tư) */
+function selectRoomType(value, el) {
+  // Cập nhật class active cho cards
+  const cards = document.querySelectorAll('.cr-type-card');
+  cards.forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  // Đồng bộ vào select ẩn để JS handleCreateRoom đọc được
+  const typeSelect = document.getElementById('roomType');
+  if (typeSelect) {
+    typeSelect.value = value;
+    // Fire event để toggleRoomPass chạy
+    typeSelect.dispatchEvent(new Event('change'));
+  }
+}
+
+/* Render pill buttons bản chiếu từ options của #roomSourceLabel select ẩn */
+function renderSourcePills() {
+  const select = document.getElementById('roomSourceLabel');
+  const pillsContainer = document.getElementById('crSourcePills');
+  if (!select || !pillsContainer) return;
+
+  const options = Array.from(select.options);
+  if (options.length === 0) {
+    pillsContainer.innerHTML = '';
+    return;
+  }
+
+  pillsContainer.innerHTML = options.map((opt, i) => `
+    <div class="cr-source-pill ${i === 0 ? 'active' : ''}"
+         onclick="selectSourcePill(${i}, this)">
+      ${opt.text}
+    </div>
+  `).join('');
+
+  // Đặt mặc định option đầu tiên là chọn
+  select.selectedIndex = 0;
+}
+
+/* Xử lý click pill bản chiếu */
+function selectSourcePill(index, el) {
+  // Cập nhật class active
+  document.querySelectorAll('.cr-source-pill').forEach(p => p.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  // Đồng bộ vào select ẩn
+  const select = document.getElementById('roomSourceLabel');
+  if (select) select.selectedIndex = index;
 }
 
 async function handleCreateRoom(e) {
@@ -778,11 +908,53 @@ async function handleCreateRoom(e) {
   }
 
   const movie = allMovies.find((m) => m.id === movieId);
-  const episode = movie.episodes[epIndex];
   
-  // Lấy thông tin video (Hỗ trợ Hybrid)
-  const videoType = episode.videoType || "youtube";
-  const videoSource = episode.videoSource || episode.youtubeId;
+  // allMovies.episodes chỉ chứa {id} → cần fetch full episode data từ Supabase
+  let episode = null;
+  try {
+      const { data: epData, error: epError } = await supabase
+          .from('episodes')
+          .select('*')
+          .eq('movie_id', movieId)
+          .order('episode_index', { ascending: true });
+      
+      if (epError) throw epError;
+      if (epData && epData.length > 0) {
+          episode = epData[parseInt(epIndex)] || epData[0];
+      }
+  } catch(e) {
+      console.error("Lỗi fetch episode data:", e);
+  }
+
+  if (!episode) {
+      showNotification("Không tìm thấy tập phim! Vui lòng thử lại.", "error");
+      return;
+  }
+
+  // Lấy thông tin video (Hỗ trợ Hybrid - cùng logic với detail.js)
+  let videoType = "youtube";
+  let videoSource = "";
+  let sourceLabel = "";
+  if (episode.sources && Array.isArray(episode.sources) && episode.sources.length > 0) {
+      // Lấy bản chiếu từ dropdown (nếu có)
+      const sourceSelectEl = document.getElementById('roomSourceLabel');
+      let selectedIdx = sourceSelectEl ? parseInt(sourceSelectEl.value) : 0;
+      if (isNaN(selectedIdx) || selectedIdx < 0) selectedIdx = 0;
+      const sourceObj = episode.sources[selectedIdx] || episode.sources[0];
+      videoType = sourceObj.type || "youtube";
+      videoSource = sourceObj.source || "";
+      sourceLabel = sourceObj.label || sourceObj.type || "";
+  } else {
+      videoType = episode.videoType || episode.video_type || "youtube";
+      videoSource = episode.videoSource || episode.video_source || episode.youtubeId || "";
+  }
+
+  // Fix kkphim API format: "Full|https://..." → lấy phần sau "http"
+  if (videoSource && typeof videoSource === 'string' && videoSource.includes("http") && !videoSource.startsWith("http")) {
+      videoSource = videoSource.substring(videoSource.indexOf("http")).trim();
+  }
+
+  console.log("🎬 WP Video Source:", videoType, videoSource, "| Bản chiếu:", sourceLabel);
 
   try {
     showLoading(true);
@@ -846,14 +1018,30 @@ async function handleCreateRoom(e) {
         status: "paused",
         current_time: 0,
         duration: (() => {
-            let d = episode.duration || 0;
-            if (!d && movie.duration) {
-                const mins = parseInt(movie.duration.replace(/\D/g, ''));
-                if (mins) d = mins * 60;
+            // Parse duration từ text ("45 phút", "1 giờ 30 phút") hoặc số
+            let d = 0;
+            const rawDur = episode.duration || movie.duration || "0";
+            if (typeof rawDur === 'number') {
+                d = rawDur;
+            } else if (typeof rawDur === 'string') {
+                // Trích xuất giờ và phút từ text
+                const hourMatch = rawDur.match(/(\d+)\s*gi/i);
+                const minMatch = rawDur.match(/(\d+)\s*ph/i);
+                const hours = hourMatch ? parseInt(hourMatch[1]) : 0;
+                const mins = minMatch ? parseInt(minMatch[1]) : 0;
+                if (hours || mins) {
+                    d = (hours * 3600) + (mins * 60);
+                } else {
+                    // Fallback: lấy số đầu tiên, coi là phút
+                    const num = parseInt(rawDur.replace(/\D/g, ''));
+                    if (num) d = num * 60;
+                }
             }
             return d;
         })(),
         scheduled_at: scheduledTime ? scheduledTime : null,
+        source_label: sourceLabel || null,
+        movie_type: movie.type || movie.movieType || null,
         created_at: new Date().toISOString(),
         member_count: 1,
         banned_users: []
@@ -895,6 +1083,8 @@ async function joinRoom(roomId, type, passwordInput = null) {
       await customAlert("Phòng không tồn tại!", { type: "warning" });
       return;
     }
+    // Chuẩn hóa snake_case → camelCase
+    normalizeRoomData(roomData);
 
     if (roomData.banned_users?.includes(currentUser.id)) {
       showLoading(false);
@@ -917,13 +1107,22 @@ async function joinRoom(roomId, type, passwordInput = null) {
     const footer = document.querySelector("footer");
     if (footer) footer.style.display = "none";
 
+    // Khởi tạo emoji picker cho khu vực chat Watch Party
+    if (typeof initWpEmojiPicker === 'function') {
+        initWpEmojiPicker();
+    }
+
+    // Đăng ký dọn dẹp khi user đóng tab/trang bất ngờ
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     showLoading(false);
 
     // Lắng nghe thay đổi của phòng qua Realtime Channel
     roomUnsubscribe = supabase
       .channel(`room_state:${roomId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'watch_rooms', filter: `id=eq.${roomId}` }, (payload) => {
-        const updatedRoom = payload.new;
+        const updatedRoom = normalizeRoomData(payload.new);
         latestRoomData = updatedRoom;
 
         const { isActuallyEnded, endedAt } = checkIfRoomEnded(updatedRoom);
@@ -966,6 +1165,11 @@ async function joinRoom(roomId, type, passwordInput = null) {
 // 👇 Tìm và thay thế toàn bộ hàm setupMemberAndChat cũ bằng hàm này
 async function setupMemberAndChat(roomId) {
   // 1. Thêm bản thân vào danh sách thành viên - Supabase
+  // Xác định role để phân biệt badge trong danh sách thành viên
+  const memberRole = (typeof isAdmin !== 'undefined' && isAdmin)
+    ? 'admin'
+    : (currentUser.is_vip || currentUser.isVip) ? 'vip' : 'user';
+
   await supabase
     .from('room_members')
     .upsert({
@@ -973,111 +1177,238 @@ async function setupMemberAndChat(roomId) {
       user_id: currentUser.id,
       name: currentUser.display_name || currentUser.displayName || "User",
       avatar: currentUser.avatar || currentUser.photoURL || "",
+      user_role: memberRole,
       joined_at: new Date().toISOString(),
       is_chat_banned: false,
       is_mic_muted: false,
       is_mic_banned: false,
     });
 
-  // Tăng member_count trong watch_rooms
-  await supabase.rpc('increment_member_count', { room_id_param: roomId });
+  // Đồng bộ member_count bằng COUNT thực tế từ room_members (tránh lệch do crash/reload)
+  const { count: actualCount } = await supabase
+    .from('room_members')
+    .select('*', { count: 'exact', head: true })
+    .eq('room_id', roomId);
+  if (actualCount !== null) {
+    await supabase
+      .from('watch_rooms')
+      .update({ member_count: actualCount })
+      .eq('id', roomId);
+  }
 
-  let wasChatBanned = false;
+  // Lưu danh sách ID thành viên trước đó để phát hiện vào/rời
+  let previousMemberIds = new Set();
+  let previousMemberNames = {};  // uid → name để dùng khi báo rời phòng
+  let wasChatBanned = false;    // Cờ theo dõi trạng thái cấm chat
+  let isFirstRefresh = true;    // Lần đầu chỉ thiết lập baseline, không show notification
 
-  // 2. Lắng nghe thay đổi của thành viên qua Realtime
+  // Hàm fetch & cập nhật danh sách thành viên (dùng chung cho realtime + polling)
+  const refreshMembers = async () => {
+      if (!currentRoomId) return; // Đã rời phòng
+      const { data: members } = await supabase
+          .from('room_members')
+          .select('*')
+          .eq('room_id', roomId);
+      
+      const safeMembers = members || [];
+
+      // --- Phát hiện thành viên vào/rời ---
+      const newIds = new Set(safeMembers.map(m => m.user_id));
+      
+      if (isFirstRefresh) {
+          // Lần đầu: chỉ thiết lập baseline, KHÔNG show notification tránh ghost members
+          isFirstRefresh = false;
+      } else if (previousMemberIds.size > 0) {
+          // Người vừa vào: chỉ ghi vào chat, không hiện popup
+          safeMembers.forEach(m => {
+              if (!previousMemberIds.has(m.user_id) && m.user_id !== currentUser.id) {
+                  const name = m.name || 'Ai đó';
+                  sendSystemMessage(`${name} đã vào phòng 👋`);
+              }
+          });
+          // Người vừa rời: chỉ ghi vào chat, không hiện popup
+          previousMemberIds.forEach(uid => {
+              if (!newIds.has(uid) && uid !== currentUser.id) {
+                  const leftName = previousMemberNames[uid] || 'Ai đó';
+                  sendSystemMessage(`${leftName} đã rời phòng 🚪`);
+              }
+          });
+      }
+      safeMembers.forEach(m => { previousMemberNames[m.user_id] = m.name; });
+      previousMemberIds = newIds;
+
+      // Cập nhật cả header badge lẫn tab label
+      const countEl = document.getElementById("memberCount");
+      if (countEl) countEl.textContent = safeMembers.length;
+      const tabCountEl = document.getElementById("memberTabCount");
+      if (tabCountEl) tabCountEl.textContent = safeMembers.length;
+
+      renderMembersList(safeMembers);
+
+      const myData = safeMembers.find((m) => m.user_id === currentUser.id);
+
+      if (!myData && currentRoomId) {
+        console.warn("🚫 Phát hiện bị Kick khỏi phòng!");
+        leaveRoom(true);
+        customAlert("⚠️ BẠN ĐÃ BỊ MỜI RA KHỎI PHÒNG!", { type: "danger" });
+        return;
+      }
+
+      if (myData) {
+        const chatInput = document.getElementById("chatInput");
+        const chatBtn = document.querySelector("#chatForm button");
+
+        if (myData.is_chat_banned) {
+          if (!wasChatBanned) {
+            showNotification("⛔ QUẢN TRỊ VIÊN ĐÃ CẤM BẠN CHAT!", "error");
+            wasChatBanned = true;
+          }
+          if (chatInput) {
+            chatInput.disabled = true;
+            chatInput.value = "";
+            chatInput.placeholder = "⛔ Bạn đang bị cấm chat!";
+            chatInput.style.backgroundColor = "#2a0000";
+            chatInput.style.color = "#ff4444";
+            chatInput.style.cursor = "not-allowed";
+          }
+          if (chatBtn) { chatBtn.disabled = true; chatBtn.style.opacity = "0.5"; }
+        } else {
+          if (wasChatBanned) {
+            showNotification("✅ Bạn đã được mở Chat.", "success");
+            wasChatBanned = false;
+          }
+          if (chatInput) {
+            chatInput.disabled = false;
+            chatInput.placeholder = "Nhập tin nhắn...";
+            chatInput.style.backgroundColor = "";
+            chatInput.style.color = "";
+            chatInput.style.cursor = "text";
+          }
+          if (chatBtn) { chatBtn.disabled = false; chatBtn.style.opacity = "1"; }
+        }
+
+        if (myData.is_mic_banned) {
+          isMyMicBanned = true;
+          // Luôn hiện thông báo dù mic đang tắt hay bật
+          showNotification("⛔ QUẢN TRỊ VIÊN ĐÃ TẮT MIC CỦA BẠN!", "warning");
+          if (isMicEnabled) {
+              if (myStream && myStream.getAudioTracks()[0]) {
+                myStream.getAudioTracks()[0].enabled = false;
+              }
+              isMicEnabled = false;
+              updateMicUI(false);
+              await supabase
+                .from('room_members')
+                .update({ is_mic_muted: true })
+                .eq('user_id', currentUser.id)
+                .eq('room_id', roomId);
+          }
+        } else {
+          if (isMyMicBanned) showNotification("✅ Host đã mở khóa Mic cho bạn", "success");
+          isMyMicBanned = false;
+        }
+      }
+  };
+
+  // 2. Realtime: KHÔNG dùng filter (cần REPLICA IDENTITY FULL) → subscribe toàn bảng, lọc trong JS
   membersUnsubscribe = supabase
-    .channel(`room_members:${roomId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'room_members', filter: `room_id=eq.${roomId}` }, async () => {
-        const { data: members } = await supabase
-            .from('room_members')
-            .select('*')
-            .eq('room_id', roomId);
-        
-        const countEl = document.getElementById("memberCount");
-        if (countEl) countEl.textContent = members.length;
-
-        renderMembersList(members);
-
-        const myData = members.find((m) => m.user_id === currentUser.id);
-
-        if (!myData && currentRoomId) {
-          console.warn("🚫 Phát hiện bị Kick khỏi phòng!");
-          leaveRoom(true);
-          customAlert("⚠️ BẠN ĐÃ BỊ MỜI RA KHỎI PHÒNG!", { type: "danger" });
-          return;
-        }
-
-        if (myData) {
-          const chatInput = document.getElementById("chatInput");
-          const chatBtn = document.querySelector("#chatForm button");
-
-          if (myData.is_chat_banned) {
-            if (!wasChatBanned) {
-              showNotification("⛔ QUẢN TRỊ VIÊN ĐÃ CẤM BẠN CHAT!", "error");
-              wasChatBanned = true;
-            }
-            if (chatInput) {
-              chatInput.disabled = true;
-              chatInput.value = "";
-              chatInput.placeholder = "⛔ Bạn đang bị cấm chat!";
-              chatInput.style.backgroundColor = "#2a0000";
-              chatInput.style.color = "#ff4444";
-              chatInput.style.cursor = "not-allowed";
-            }
-            if (chatBtn) {
-              chatBtn.disabled = true;
-              chatBtn.style.opacity = "0.5";
-            }
-          } else {
-            if (wasChatBanned) {
-              showNotification("✅ Bạn đã được mở Chat.", "success");
-              wasChatBanned = false;
-            }
-            if (chatInput) {
-              chatInput.disabled = false;
-              chatInput.placeholder = "Nhập tin nhắn...";
-              chatInput.style.backgroundColor = "";
-              chatInput.style.color = "";
-              chatInput.style.cursor = "text";
-            }
-            if (chatBtn) {
-              chatBtn.disabled = false;
-              chatBtn.style.opacity = "1";
-            }
-          }
-
-          if (myData.is_mic_banned && isMicEnabled) {
-            if (myStream && myStream.getAudioTracks()[0]) {
-              myStream.getAudioTracks()[0].enabled = false;
-            }
-            isMicEnabled = false;
-            updateMicUI(false);
-            showNotification("⛔ QUẢN TRỊ VIÊN ĐÃ TẮT MIC CỦA BẠN!", "warning");
-            await supabase
-              .from('room_members')
-              .update({ is_mic_muted: true })
-              .eq('user_id', currentUser.id)
-              .eq('room_id', roomId);
-          }
-        }
+    .channel(`room_members_watch:${roomId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'room_members' }, async (payload) => {
+        console.log("⚡ Nhận Realtime room_members:", payload);
+        // Lọc trong JS: chỉ xử lý nếu thuộc phòng này (Dùng != do ID từ DB là số, roomId từ URL là chuỗi)
+        const rowRoomId = payload.new?.room_id || payload.old?.room_id;
+        if (rowRoomId != roomId) return;
+        await refreshMembers();
     })
-    .subscribe();
+    .subscribe((status) => {
+        console.log('🔴 room_members realtime status:', status);
+    });
 
   // Load initial members list
-  const { data: initialMembers } = await supabase
+  const { data: initialMembers, error: membersError } = await supabase
     .from('room_members')
     .select('*')
     .eq('room_id', roomId);
-  renderMembersList(initialMembers);
-  if (document.getElementById("memberCount")) document.getElementById("memberCount").textContent = initialMembers.length;
+  console.log("🔍 Initial members:", initialMembers, "Error:", membersError);
+  const safeMembers = initialMembers || [];
+  renderMembersList(safeMembers);
+  // Cập nhật cả header badge lẫn tab label
+  const countEl = document.getElementById("memberCount");
+  if (countEl) countEl.textContent = safeMembers.length;
+  const tabCountEl = document.getElementById("memberTabCount");
+  if (tabCountEl) tabCountEl.textContent = safeMembers.length;
 
+  // Khởi tạo danh sách ban đầu để tránh thông báo nhầm lần đầu
+  previousMemberIds = new Set(safeMembers.map(m => m.user_id));
+  safeMembers.forEach(m => { previousMemberNames[m.user_id] = m.name; });
+
+  // Polling fallback 8 giây: đảm bảo count đúng dù realtime có vấn đề
+  if (window._memberPollInterval) clearInterval(window._memberPollInterval);
+  window._memberPollInterval = setInterval(() => {
+    if (!currentRoomId) { clearInterval(window._memberPollInterval); return; }
+    refreshMembers();
+  }, 8000);
+
+  // Đợi gửi tin nhắn hệ thống TRƯỚC, rồi mới load chat để hiển thị
+  await sendSystemMessage(`${currentUser.display_name || currentUser.displayName} đã vào phòng 👋`);
   loadChat(roomId);
-  sendSystemMessage(`${currentUser.display_name || currentUser.displayName} đã vào phòng 👋`);
 }
 
 function updateRoomUI(data) {
   document.getElementById("roomTitleDisplay").textContent = data.name;
-  
+
+  // Cập nhật subtitle phim (tên phim + tập)
+  const subtitleEl = document.getElementById("roomSubtitleDisplay");
+  if (subtitleEl) {
+      const movieTitle = data.movieTitle || data.movie_title || "";
+      const epName = data.episodeName || data.episode_name || ""; // Tên tập do admin đặt
+      const movieType = data.movieType || data.movie_type || "";
+
+      // Nhãn tập: ưu tiên tên admin ghi → fallback tính tự động
+      let epLabel = "";
+      if (epName) {
+          epLabel = epName; // Admin ghi gì hiện đúng vẫn vậy
+      } else if (data.episodeIndex !== undefined && data.episodeIndex !== null) {
+          epLabel = (movieType === "single") ? "Full" : `Tập ${parseInt(data.episodeIndex) + 1}`;
+      }
+
+      let subtitle = "";
+      if (movieTitle) {
+          subtitle = epLabel ? `${epLabel} • ${movieTitle}` : movieTitle;
+      } else if (epLabel) {
+          subtitle = epLabel;
+      }
+      if (subtitle) {
+          subtitleEl.textContent = subtitle;
+          subtitleEl.classList.remove("hidden");
+      } else {
+          subtitleEl.classList.add("hidden");
+      }
+  }
+
+  // Cập nhật nhãn tên phim góc trên trái video
+  const labelTitle = document.getElementById("wpMovieLabelTitle");
+  const labelEp    = document.getElementById("wpMovieLabelEp");
+  if (labelTitle && labelEp) {
+      const movieTitle = data.movieTitle || data.movie_title || "";
+      const movieType  = data.movieType  || data.movie_type  || "";
+      const epName     = (data.episodeName || data.episode_name || "").trim();
+
+      // Nhãn loại/tập: ưu tiên movie_type rõ ràng nhất
+      let epLabel = "";
+      const isSingle = movieType === "single"
+          || epName.toLowerCase() === "full"    // Fallback khi chưa có movie_type trong DB
+          || epName.toLowerCase() === "phim lẻ";
+      if (isSingle) {
+          epLabel = "Phim lẻ";
+      } else if (data.episodeIndex !== undefined && data.episodeIndex !== null) {
+          epLabel = `Tập ${parseInt(data.episodeIndex) + 1}`;
+      }
+
+      labelTitle.textContent = movieTitle;
+      labelEp.textContent    = epLabel;
+  }
+
   // 🔥 ĐƠN GIẢN HÓA: Kiểm tra kết thúc tập trung
   const { isActuallyEnded, endedAt } = checkIfRoomEnded(data);
   const liveBadge = document.querySelector(".live-badge");
@@ -1091,8 +1422,20 @@ function updateRoomUI(data) {
       if (liveBadge) liveBadge.style.display = "inline-flex";
   }
 
+  // Cập nhật nhãn bản chiếu trên header
+  const sourceBadge = document.getElementById("sourceLabelBadge");
+  if (sourceBadge) {
+      const label = data.sourceLabel || data.source_label || "";
+      if (label) {
+          sourceBadge.textContent = label;
+          sourceBadge.classList.remove("hidden");
+      } else {
+          sourceBadge.classList.add("hidden");
+      }
+  }
+
   // 👇 FIX: Admin cũng có quyền điều khiển như chủ phòng
-  isHost = (currentUser.uid === data.hostId) || (typeof isAdmin !== 'undefined' && isAdmin);
+  isHost = (currentUser.id === data.hostId) || (typeof isAdmin !== 'undefined' && isAdmin);
   
   // Khởi tạo Hybrid Player (YouTube hoặc HTML5)
   // Chỉ init nếu chưa có player HOẶC loại video thay đổi
@@ -1181,17 +1524,34 @@ function renderMembersList(members) {
             </div>`;
     }
 
+    const role = m.user_role || 'user'; // Đọc role từ DB (admin/vip/user)
+
+    // Class viền avatar theo role
+    const avatarBorderClass = role === 'admin'
+      ? 'avatar-border-admin'
+      : role === 'vip'
+        ? 'avatar-border-vip'
+        : '';
+
+    // Badge role nhỏ hiện dưới tên thành viên
+    let roleBadgeInner = '';
+    if (role === 'admin') {
+      roleBadgeInner = `<span class="member-role-badge badge-admin">🛡️ Admin</span>`;
+    } else if (role === 'vip') {
+      roleBadgeInner = `<span class="member-role-badge badge-vip">👑 VIP</span>`;
+    }
+
     const roleHtml =
       uid === latestRoomData?.host_id
-        ? '<span class="role-host">👑 Chủ phòng</span>'
-        : '<span class="role-member">Thành viên</span>';
+        ? `<span class="role-host">👑 Chủ phòng</span>${roleBadgeInner}`
+        : `<span class="role-member">Thành viên</span>${roleBadgeInner}`;
 
     list.innerHTML += `
             <div class="member-item" id="member-row-${uid}">
                 <div class="member-main-row">
                     <div class="member-identity">
                         <div class="member-avatar-wrap">
-                            <img src="${m.avatar || defaultAvatar}" class="member-avatar avatar-img">
+                            <img src="${m.avatar || defaultAvatar}" class="member-avatar avatar-img ${avatarBorderClass}">
                             ${m.isSpeaking ? '<div class="speaking-indicator"></div>' : ""}
                         </div>
                         <div class="member-info">
@@ -1271,9 +1631,28 @@ function toggleDeafen() {
 }
 
 // Bật/Tắt popup chỉnh âm lượng Voice tổng
-window.toggleVoiceVolumePopup = function() {
+window.toggleVoiceVolumePopup = function(e) {
+  if (e) e.stopPropagation();
+
   const popup = document.getElementById('voiceVolPopup');
-  if (popup) popup.classList.toggle('hidden');
+  if (!popup) { console.warn('voiceVolPopup not found'); return; }
+
+  const isHidden = popup.classList.contains('hidden');
+
+  if (isHidden) {
+    // Tìm button bằng closest (inline onclick không có currentTarget)
+    const btn = (e && e.target) 
+        ? (e.target.closest('.btn-voice-vol') || e.target) 
+        : document.querySelector('.btn-voice-vol');
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      popup.style.left = rect.left + 'px';
+      popup.style.top  = (rect.bottom + 8) + 'px';
+    }
+    popup.classList.remove('hidden');
+  } else {
+    popup.classList.add('hidden');
+  }
 };
 
 // Chỉnh âm lượng tổng cho tất cả mic (0-200%)
@@ -1335,8 +1714,9 @@ function initVoiceChat() {
 async function getTurnCredentials() {
   try {
     console.log("🔄 Đang lấy Server xuyên tường lửa...");
+    const finalApiKey = (window.SYSTEM_SETTINGS && window.SYSTEM_SETTINGS.metered_api_key) ? window.SYSTEM_SETTINGS.metered_api_key : METERED_API_KEY;
     const response = await fetch(
-      `https://${APP_NAME}.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`,
+      `https://${APP_NAME}.metered.live/api/v1/turn/credentials?apiKey=${finalApiKey}`,
     );
     if (!response.ok) throw new Error("API Metered lỗi");
     const iceServers = await response.json();
@@ -1362,7 +1742,7 @@ async function startPeerConnection() {
     const iceServers = await getTurnCredentials();
 
     // Khởi tạo Peer Connection
-    myPeer = new Peer(currentUser.uid, {
+    myPeer = new Peer(currentUser.id, {
       config: {
         iceServers: iceServers,
         iceTransportPolicy: "all",
@@ -1417,7 +1797,7 @@ function connectToAllPeers() {
     .then(({ data }) => {
       if (!data) return;
       data.forEach((member) => {
-        if (member.user_id !== currentUser.uid) {
+        if (member.user_id !== currentUser.id) {
           const call = myPeer.call(member.user_id, myStream);
           if (call) {
             call.on("stream", (remoteStream) => {
@@ -1533,7 +1913,10 @@ function monitorAudioLevel(stream, peerId) {
 }
 
 function addMicButtonToUI() {
-  const header = document.querySelector(".room-header-bar");
+  // Inject vào slot riêng trong zone LEFT của header mới
+  const slot = document.getElementById("rhVoiceSlot");
+  // Fallback về header cũ nếu không có slot (tương thích ngược)
+  const header = slot || document.querySelector(".room-header-bar");
   if (!header) return;
 
   if (document.getElementById("myMicBtn"))
@@ -1560,8 +1943,9 @@ function addMicButtonToUI() {
   volBtn.id = "voiceVolBtnWrap";
   volBtn.className = "voice-vol-btn-wrap";
   volBtn.innerHTML = `
-    <button class="btn-voice-vol" onclick="toggleVoiceVolumePopup()" title="Âm lượng Voice Chat">
+    <button class="btn-voice-vol" onclick="toggleVoiceVolumePopup(event)" title="Âm lượng Voice Chat">
       <i class="fas fa-volume-up"></i>
+      <span class="btn-voice-vol-label">Âm lượng</span>
     </button>
     <div class="voice-vol-popup hidden" id="voiceVolPopup">
       <div class="voice-vol-popup-header">
@@ -1578,12 +1962,18 @@ function addMicButtonToUI() {
     </div>
   `;
 
-  header.insertBefore(volBtn, header.firstChild);
-  header.insertBefore(deafenBtn, header.firstChild);
-  header.insertBefore(micBtn, header.firstChild);
+  // Thứ tự: mic → deafen → vol (append tuần tự vào slot)
+  header.appendChild(micBtn);
+  header.appendChild(deafenBtn);
+  header.appendChild(volBtn);
 }
 
 async function toggleMyMic() {
+  if (isMyMicBanned) {
+      showNotification("⛔ BẠN ĐANG BỊ QUẢN TRỊ VIÊN CẤM MIC!", "error");
+      return;
+  }
+  
   if (globalAudioContext?.state === "suspended") globalAudioContext.resume().catch(()=>{});
   
   // NGUYÊN TẮC: Nếu chưa có luồng thực tế -> Yêu cầu xin quyền (getUserMedia)
@@ -1611,13 +2001,13 @@ async function toggleMyMic() {
           myStream.getAudioTracks()[0].enabled = true;
           
           updateMicUI(true);
-          monitorAudioLevel(myStream, currentUser.uid);
+          monitorAudioLevel(myStream, currentUser.id);
 
           // Cập nhật Database
           supabase.from("room_members")
             .update({ is_mic_muted: false })
             .eq("room_id", currentRoomId)
-            .eq("user_id", currentUser.uid)
+            .eq("user_id", currentUser.id)
             .then();
           
           // Gửi luồng âm thanh mới này cho tất cả những người trong phòng
@@ -1661,7 +2051,7 @@ async function toggleMyMic() {
   supabase.from("room_members")
     .update({ is_mic_muted: !isMicEnabled })
     .eq("room_id", currentRoomId)
-    .eq("user_id", currentUser.uid)
+    .eq("user_id", currentUser.id)
     .then();
 }
 
@@ -1682,8 +2072,10 @@ function updateMicUI(enabled) {
 // ==========================================
 function loadChat(roomId) {
   chatUnsubscribe = supabase
-    .channel(`room_chat:${roomId}`)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_chat', filter: `room_id=eq.${roomId}` }, (payload) => {
+    .channel(`room_chat_watch:${roomId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_chat' }, (payload) => {
+      // Lọc trong JS: chỉ hiện tin nhắn của phòng này (Dùng != để cho phép ID chữ/số)
+      if (payload.new?.room_id != roomId) return;
       const container = document.getElementById("chatMessages");
       renderMessage(payload.new, container);
       
@@ -1694,7 +2086,9 @@ function loadChat(roomId) {
         });
       }, 100);
     })
-    .subscribe();
+    .subscribe((status) => {
+        console.log('🔵 room_chat realtime status:', status);
+    });
 
   // Load initial chat
   supabase
@@ -1744,18 +2138,42 @@ async function sendChatMessage(e) {
   }
 
   try {
+    // Xác định role để hiển thị màu khác nhau trong chat
+    const userRole = (typeof isAdmin !== 'undefined' && isAdmin)
+      ? 'admin'
+      : (currentUser.is_vip || currentUser.isVip)
+        ? 'vip'
+        : 'user';
+
     const { error } = await supabase
       .from('room_chat')
       .insert({
         room_id: currentRoomId,
         user_id: currentUser.id,
         user_name: currentUser.display_name || currentUser.displayName,
+        user_role: userRole,
         content: text,
         type: "text",
         created_at: new Date().toISOString(),
       });
     
-    if (error) throw error;
+    if (error) {
+      // Fallback: Nếu column user_role chưa tồn tại, gửi lại không có role
+      if (error.message?.includes('user_role') || error.code === '42703') {
+        console.warn('[WP Chat] Column user_role chưa có trong DB, gửi không có role');
+        const { error: err2 } = await supabase.from('room_chat').insert({
+          room_id: currentRoomId,
+          user_id: currentUser.id,
+          user_name: currentUser.display_name || currentUser.displayName,
+          content: text,
+          type: "text",
+          created_at: new Date().toISOString(),
+        });
+        if (err2) throw err2;
+      } else {
+        throw error;
+      }
+    }
     
     input.value = "";
     const container = document.getElementById("chatMessages");
@@ -1821,6 +2239,58 @@ function initHTML5Player(type, source, initialData) {
     player.videoType = type; // Đánh dấu loại
     video.controls = false; // Tắt native controls, dùng custom
 
+    // --- Nhãn Buffering: hiện khi mạng chậm / lag ---
+    const bufLabel = document.createElement('div');
+    bufLabel.id = 'partyBufferingLabel';
+    bufLabel.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Đang tải...';
+    bufLabel.style.cssText = `
+        display:none; position:absolute; top:10px; right:10px; z-index:500;
+        background:rgba(0,0,0,0.72); color:#fff; font-size:12px; font-weight:600;
+        padding:5px 10px; border-radius:20px; line-height:1.4;
+        backdrop-filter:blur(4px); pointer-events:none;
+        border:1px solid rgba(255,255,255,0.15);
+    `;
+    // Wrapper cần position:relative để nhãn absolute hoạt động
+    const wrapper = container.closest('.room-player-wrapper') || container.parentElement;
+    if (wrapper) wrapper.style.position = 'relative';
+    (wrapper || container).appendChild(bufLabel);
+
+    const showBufLabel = (text = 'Đang tải...', icon = 'fa-circle-notch fa-spin') => {
+        bufLabel.innerHTML = `<i class="fas ${icon}"></i> ${text}`;
+        bufLabel.style.display = 'flex';
+        bufLabel.style.alignItems = 'center';
+        bufLabel.style.gap = '6px';
+    };
+    const hideBufLabel = () => { bufLabel.style.display = 'none'; };
+
+    // Bắt sự kiện native video
+    video.addEventListener('waiting', () => showBufLabel('Đang tải...'));
+    video.addEventListener('stalled', () => showBufLabel('Mạng chậm...', 'fa-wifi'));
+    video.addEventListener('playing', hideBufLabel);
+    video.addEventListener('canplay', hideBufLabel);
+
+    // Watchdog: phát hiện video bị stall âm thầm (currentTime không tiến dù đang play)
+    let _lastTime = -1;
+    let _stallCount = 0;
+    const _stallWatcher = setInterval(() => {
+        if (!video || video.paused || video.ended || !document.getElementById('partyBufferingLabel')) {
+            clearInterval(_stallWatcher);
+            return;
+        }
+        const ct = video.currentTime;
+        if (ct === _lastTime && !video.paused) {
+            _stallCount++;
+            if (_stallCount >= 2) { // Kẹt liên tục ≥ 4 giây
+                showBufLabel('Video bị lag...', 'fa-circle-notch fa-spin');
+            }
+        } else {
+            _stallCount = 0;
+            hideBufLabel();
+        }
+        _lastTime = ct;
+    }, 2000);
+
+
     // Xác định phòng có lên lịch chiếu hay không
     const isScheduledRoom = !!(initialData.scheduledTime);
 
@@ -1844,14 +2314,29 @@ function initHTML5Player(type, source, initialData) {
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
             if (isScheduledRoom) {
-                video.play().catch(e => {
-                    console.log("Auto-play blocked (Scheduled HLS)", e);
-                    showMobilePlayOverlay();
-                });
-            } else if (initialData.status === "playing") {
+                if (hlsStartPosition > 5) {
+                    // Đã qua giờ chiếu: seek đúng vị trí và play ngay
+                    video.currentTime = hlsStartPosition;
+                    video.play().catch(e => {
+                        console.log('Auto-play blocked (Scheduled HLS - past time)', e);
+                        showMobilePlayOverlay();
+                    });
+                } else {
+                    // Chưa tới giờ chiếu: PRELOAD - load segment đầu rồi pause ngay
+                    // Browser sẽ tự buffer trong nền, khi tới giờ play sẽ mượt
+                    console.log('⏳ Preloading HLS trước giờ chiếu...');
+                    video.currentTime = 0;
+                    video.play()
+                        .then(() => { video.pause(); }) // pause ngay sau khi browser cho phép
+                        .catch(() => {
+                            // Nếu autoplay bị chặn (mobile), video đã preload manifest rồi là đủ
+                            video.load();
+                        });
+                }
+            } else if (initialData.status === 'playing') {
                 video.currentTime = initialData.currentTime || 0;
                 video.play().catch(e => {
-                    console.log("Auto-play blocked (Playing HLS)", e);
+                    console.log('Auto-play blocked (Playing HLS)', e);
                     showMobilePlayOverlay();
                 });
             }
@@ -1860,15 +2345,46 @@ function initHTML5Player(type, source, initialData) {
         hls.on(Hls.Events.LEVEL_SWITCHED, (evt, data) => {
             wpUpdateQualityDisplay(data.level);
         });
+        // Xử lý lỗi HLS: Hiện thông báo thay vì silent buffering
+        hls.on(Hls.Events.ERROR, (event, errData) => {
+            console.error("🔴 HLS Error:", errData.type, errData.details, errData.fatal);
+            // Lỗi nhẹ (non-fatal): hiện "Đỡ băm thông..." rồi tự ẩn
+            if (!errData.fatal) {
+                showBufLabel('Đang tải...', 'fa-circle-notch fa-spin');
+                setTimeout(() => { if (video.readyState >= 3) hideBufLabel(); }, 5000);
+            }
+            if (errData.fatal) {
+                if (errData.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                    console.warn("⚡ HLS fatal network error, đang thử tải lại...");
+                    showBufLabel('Lỗi mạng, đang thử lại...', 'fa-wifi');
+                    hls.startLoad();
+                } else if (errData.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                    console.warn("⚡ HLS fatal media error, recover...");
+                    showBufLabel('Lỗi video, đang khôi phục...', 'fa-exclamation-triangle');
+                    hls.recoverMediaError();
+                } else {
+                    hideBufLabel();
+                    showNotification("❌ Không thể tải video. Nguồn phim có thể lỗi hoặc không còn hỗ trợ.", "error");
+                    hls.destroy();
+                }
+            }
+        });
+
     } else {
         video.src = source;
-        if (isScheduledRoom && hlsStartPosition > 0) {
+        video.preload = 'auto'; // Preload sẵn để buffer trước
+        if (isScheduledRoom && hlsStartPosition > 5) {
+            // Đã qua giờ chiếu: seek đúng vị trí và play
             video.currentTime = hlsStartPosition;
             video.play().catch(e => {
-                console.log("Auto-play blocked (Scheduled MP4)", e);
+                console.log('Auto-play blocked (Scheduled MP4)', e);
                 showMobilePlayOverlay();
             });
-        } else if (initialData.status === "playing") {
+        } else if (isScheduledRoom) {
+            // Chưa tới giờ: load + pause để preload buffer
+            console.log('⏳ Preloading MP4 trước giờ chiếu...');
+            video.load();
+        } else if (initialData.status === 'playing') {
              video.currentTime = initialData.currentTime || 0;
              video.play().catch(e => {
                  console.log("Auto-play blocked (Playing MP4)", e);
@@ -1976,6 +2492,18 @@ function onPlayerReady() {
                 .eq("id", currentRoomId)
                 .then();
           }
+
+          // 🔄 Interval sync: Host cập nhật current_time mỗi 10 giây khi video đang chạy
+          if (hostSyncInterval) clearInterval(hostSyncInterval);
+          hostSyncInterval = setInterval(() => {
+              if (!player || !player.getPlayerState) return;
+              const state = player.getPlayerState();
+              if (state === 1) { // Đang phát
+                  const curr = player.getCurrentTime();
+                  const dur = player.getDuration();
+                  updateRoomState("playing", curr, dur);
+              }
+          }, 10000); // Mỗi 10 giây
       }
   }
 }
@@ -2004,7 +2532,7 @@ const onPlayerStateChange = (event) => {
 async function updateRoomState(status, time, forcedDuration = null) {
   if (!currentRoomId || currentRoomId === "undefined" || currentRoomId === "") return;
   
-  if (status !== "ended" && Date.now() - lastSyncTime < 500) return;
+  if (status !== "ended" && Date.now() - lastSyncTime < 2000) return; // Throttle 2 giây cho interval sync
   lastSyncTime = Date.now();
   
   try {
@@ -2053,15 +2581,24 @@ async function updateRoomState(status, time, forcedDuration = null) {
   }
 }
 
+// Biến quản lý sync thông minh
+let lastSyncSeekTime = 0;      // Thời điểm seek gần nhất, dùng cho cooldown
+let syncCooldownMs = 3000;      // Cooldown 3 giây sau mỗi lần seek, tránh sync loop
+let isBuffering = false;        // Flag theo dõi trạng thái buffering
+let consecutiveSyncFails = 0;   // Đếm số lần sync thất bại liên tiếp (mạng quá lag)
+const GENTLE_SYNC_THRESHOLD = 8;  // Lệch 3-8 giây → dùng playbackRate bù dần
+const HARD_SYNC_THRESHOLD = 30;   // Lệch >30 giây → buộc seek ngay
+
 function handleSync(data) {
-  if (isHost) return; // Host không cần sync ngược (trừ khi có tính năng cướp host)
+  if (isHost) return;
   if (!player) return;
 
-  // Phòng có lên lịch chiếu -> Schedule Sync Engine lo toàn bộ, không can thiệp ở đây
+  // Phòng hẹn giờ → Schedule Sync Engine lo, không can thiệp
   if (data.scheduledTime) return;
 
   const currentType = player.videoType || (player.playVideo ? "youtube" : "html5");
 
+  // --- Xử lý trạng thái KẾT THÚC ---
   if (data.status === "ended") {
       showRoomEndedOverlay(data.endedAt);
       if (currentType === "youtube") player.pauseVideo();
@@ -2071,31 +2608,107 @@ function handleSync(data) {
       hideRoomEndedOverlay();
   }
 
+  // --- Kiểm tra Cooldown: Nếu vừa seek xong, đợi video ổn định ---
+  const now = Date.now();
+  if (now - lastSyncSeekTime < syncCooldownMs) return;
+
+  // --- Xử lý trạng thái BUFFERING từ host ---
+  if (data.status === "buffering") {
+      // Host đang buffer/seek → không sync, đợi host ổn định
+      return;
+  }
+
   if (currentType === "youtube" && player.getPlayerState) {
       // --- SYNC YOUTUBE ---
+      const ytState = player.getPlayerState();
+      
+      // Không sync nếu client đang buffering (state 3)
+      if (ytState === 3) {
+          isBuffering = true;
+          return;
+      }
+      isBuffering = false;
+
       const ytTime = player.getCurrentTime();
       const diff = Math.abs(ytTime - data.currentTime);
-      
-      if (diff > SYNC_THRESHOLD) player.seekTo(data.currentTime, true);
-      
-      const ytState = player.getPlayerState();
+
+      if (diff > SYNC_THRESHOLD) {
+          if (diff > HARD_SYNC_THRESHOLD) {
+              // Lệch >30 giây → Hard seek ngay
+              console.log("⚡ Hard sync YouTube:", ytTime.toFixed(1), "→", data.currentTime.toFixed(1), `(lệch ${diff.toFixed(1)}s)`);
+              player.seekTo(data.currentTime, true);
+              lastSyncSeekTime = now;
+              consecutiveSyncFails = 0;
+          } else if (diff > GENTLE_SYNC_THRESHOLD) {
+              // Lệch 8-30 giây → Seek nhẹ (có thể gây giật nhỏ)
+              console.log("🔄 Seek sync YouTube:", ytTime.toFixed(1), "→", data.currentTime.toFixed(1), `(lệch ${diff.toFixed(1)}s)`);
+              player.seekTo(data.currentTime, true);
+              lastSyncSeekTime = now;
+          }
+          // Lệch 3-8 giây → Chấp nhận được, YouTube sẽ tự bù dần
+      }
+
+      // Đồng bộ trạng thái play/pause
       if (data.status === "playing" && ytState !== 1) player.playVideo();
       else if (data.status === "paused" && ytState !== 2) player.pauseVideo();
 
   } else if (currentType === "html5" || player.tagName === "VIDEO") {
-      // --- SYNC HTML5 ---
+      // --- SYNC HTML5 (HLS/MP4) ---
+      
+      // Không sync nếu client đang waiting/buffering
+      if (player.readyState < 3) {
+          isBuffering = true;
+          return;
+      }
+      isBuffering = false;
+
       const vidTime = player.currentTime;
       const diff = Math.abs(vidTime - data.currentTime);
-      
+
       if (diff > SYNC_THRESHOLD) {
-          console.log("🔄 Syncing time:", vidTime, "->", data.currentTime);
-          player.currentTime = data.currentTime;
+          if (diff > HARD_SYNC_THRESHOLD) {
+              // Lệch >30 giây → Hard seek
+              console.log("⚡ Hard sync HTML5:", vidTime.toFixed(1), "→", data.currentTime.toFixed(1), `(lệch ${diff.toFixed(1)}s)`);
+              player.currentTime = data.currentTime;
+              lastSyncSeekTime = now;
+              consecutiveSyncFails = 0;
+          } else if (diff > GENTLE_SYNC_THRESHOLD) {
+              // Lệch 8-30 giây → Seek
+              console.log("🔄 Seek sync HTML5:", vidTime.toFixed(1), "→", data.currentTime.toFixed(1), `(lệch ${diff.toFixed(1)}s)`);
+              player.currentTime = data.currentTime;
+              lastSyncSeekTime = now;
+          } else {
+              // Lệch 3-8 giây → Gentle sync: tăng/giảm tốc độ phát để bù dần
+              if (vidTime < data.currentTime) {
+                  // Client chậm hơn host → tăng tốc nhẹ
+                  player.playbackRate = 1.05;
+                  console.log("⏩ Gentle sync: tăng tốc 1.05x (chậm hơn host", diff.toFixed(1) + "s)");
+              } else {
+                  // Client nhanh hơn host → giảm tốc nhẹ
+                  player.playbackRate = 0.95;
+                  console.log("⏪ Gentle sync: giảm tốc 0.95x (nhanh hơn host", diff.toFixed(1) + "s)");
+              }
+              // Tự reset playbackRate khi đã bù xong (sau vài giây)
+              setTimeout(() => {
+                  if (player && player.playbackRate !== 1) {
+                      player.playbackRate = 1;
+                  }
+              }, Math.min(diff * 1000, 5000));
+          }
+      } else {
+          // Đã sync tốt → đảm bảo playbackRate = 1
+          if (player.playbackRate !== 1) player.playbackRate = 1;
       }
-      
+
+      // Đồng bộ trạng thái play/pause
       if (data.status === "playing" && player.paused) {
           player.play().catch(e => {
-              console.log("Sync play failed (Autoplay block):", e);
-              showMobilePlayOverlay();
+              consecutiveSyncFails++;
+              if (consecutiveSyncFails <= 2) {
+                  console.log("Sync play failed (Autoplay block):", e);
+                  showMobilePlayOverlay();
+              }
+              // Nếu thất bại >2 lần → dừng cố gắng (tránh spam)
           });
       } else if (data.status === "paused" && !player.paused) {
           player.pause();
@@ -2151,6 +2764,16 @@ async function leaveRoom(isKicked = false) {
       clearInterval(scheduleSyncInterval);
       scheduleSyncInterval = null;
   }
+  // Dọn polling members interval
+  if (window._memberPollInterval) {
+      clearInterval(window._memberPollInterval);
+      window._memberPollInterval = null;
+  }
+  // Dọn interval sync host
+  if (hostSyncInterval) {
+      clearInterval(hostSyncInterval);
+      hostSyncInterval = null;
+  }
 
   // 4. Dọn dẹp Player
   if (player && typeof player.destroy === "function") {
@@ -2161,22 +2784,40 @@ async function leaveRoom(isKicked = false) {
   player = null;
   document.getElementById("partyPlayer").innerHTML = "";
 
-  // 5. Xóa tên khỏi danh sách thành viên (Nếu không phải bị kick)
-  if (!isKicked && currentRoomId) {
+  // 5. Xóa tên khỏi danh sách thành viên
+  if (currentRoomId) {
     try {
-      await supabase
-        .from('room_members')
-        .delete()
-        .eq('room_id', currentRoomId)
-        .eq('user_id', currentUser.id);
+      if (!isKicked) {
+        // Tự rời: xóa DB + giảm count
+        await supabase
+          .from('room_members')
+          .delete()
+          .eq('room_id', currentRoomId)
+          .eq('user_id', currentUser.id);
+      }
 
-      await supabase.rpc('decrement_member_count', { room_id_param: currentRoomId });
+      // Sau khi xóa: đếm COUNT thực tế và cập nhật (luôn chính xác)
+      const roomIdSnapshot = currentRoomId; // snapshot trước khi reset
+      const { count: remaining } = await supabase
+        .from('room_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('room_id', roomIdSnapshot);
+      if (remaining !== null) {
+        await supabase
+          .from('watch_rooms')
+          .update({ member_count: remaining })
+          .eq('id', roomIdSnapshot);
+      }
     } catch (e) {
       console.log("Lỗi xóa user Supabase:", e);
     }
   }
 
-  // 6. Reset giao diện
+  // 6. Gỡ listener dọn dẹp tab
+  window.removeEventListener('beforeunload', handleBeforeUnload);
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+  // 7. Reset giao diện
   currentRoomId = null;
   document.getElementById("partyRoom").classList.add("hidden");
   document.getElementById("partyLobby").classList.remove("hidden");
@@ -2186,29 +2827,94 @@ async function leaveRoom(isKicked = false) {
 
   console.log("✅ Đã thoát phòng sạch sẽ (Supabase).");
 }
+
+// Xử lý khi user đóng tab hoặc reload trang mà đang trong phòng
+function handleBeforeUnload(e) {
+  if (!currentRoomId || !currentUser) return;
+  // fetch + keepalive: request tiếp tục dù tab đã đóng (sendBeacon chỉ hỗ trợ POST)
+  try {
+    if (typeof SUPABASE_URL !== 'undefined' && typeof SUPABASE_ANON_KEY !== 'undefined') {
+      const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+      };
+      // Xóa member
+      fetch(
+        `${SUPABASE_URL}/rest/v1/room_members?room_id=eq.${currentRoomId}&user_id=eq.${currentUser.id}`,
+        { method: 'DELETE', keepalive: true, headers }
+      );
+      // Giảm member_count
+      fetch(
+        `${SUPABASE_URL}/rest/v1/rpc/decrement_member_count`,
+        { method: 'POST', keepalive: true, headers, body: JSON.stringify({ room_id_param: currentRoomId }) }
+      );
+    }
+  } catch(err) {
+    console.warn('Cleanup on tab close failed:', err);
+  }
+}
+
+// Xử lý khi user chuyển tab (mobile: thoát app)
+function handleVisibilityChange() {
+  if (document.visibilityState === 'hidden' && currentRoomId && currentUser) {
+    // Trên mobile, khi thoát app sẽ trigger 'hidden'
+    // Gửi tin nhắn hệ thống nhưng KHÔNG rời phòng (user có thể quay lại)
+    console.log('📱 Tab hidden, giữ phòng nhưng đánh dấu away');
+  }
+}
 function renderMessage(msg, c) {
   const div = document.createElement("div");
+  // Hỗ trợ cả camelCase (realtime payload) và snake_case (Supabase select)
+  const uid = msg.userId || msg.user_id;
+  const uname = msg.userName || msg.user_name || 'Ẩn danh';
+  const role = msg.userRole || msg.user_role || 'user'; // Admin/VIP role
+
   if (msg.type === "system") {
     div.className = "chat-msg system";
     div.textContent = msg.content;
   } else {
-    div.className = `chat-msg ${msg.userId === currentUser.uid ? "me" : ""}`;
-    div.innerHTML = `<span class="author">${msg.userId === currentUser.uid ? "" : msg.userName + ":"}</span> <span class="text">${msg.content}</span>`;
+    const isMe = uid === currentUser?.id;
+    div.className = `chat-msg ${isMe ? "me" : ""}`;
+
+    // Tạo badge role (admin/vip)
+    let roleBadgeHtml = '';
+    let authorClass = 'author';
+    if (role === 'admin') {
+      roleBadgeHtml = `<span class="wp-role-badge wp-badge-admin">🛡️ Admin</span>`;
+      authorClass = 'author author-admin';
+    } else if (role === 'vip') {
+      roleBadgeHtml = `<span class="wp-role-badge wp-badge-vip">👑 VIP</span>`;
+      authorClass = 'author author-vip';
+    }
+
+    if (isMe) {
+      // Tin nhắn của mình: không hiện tên, chỉ hiện nội dung
+      div.innerHTML = `<span class="text">${msg.content}</span>`;
+    } else {
+      div.innerHTML = `${roleBadgeHtml}<span class="${authorClass}">${uname}:</span> <span class="text">${msg.content}</span>`;
+    }
   }
   c.appendChild(div);
 }
-function sendSystemMessage(t) {
-  supabase.from('room_chat').insert({
+async function sendSystemMessage(t) {
+  if (!currentUser) return;
+  return await supabase.from('room_chat').insert({
     room_id: currentRoomId,
     content: t,
     type: "system",
+    user_id: currentUser.id, // Bắt buộc truyền user_id để KHÔNG bị RLS chặn
     created_at: new Date().toISOString(),
   });
 }
 function kickUser(uid, name) {
   customConfirm("KICK " + name + "?", { title: "Kick thành viên", type: "warning", confirmText: "Kick" }).then(async (ok) => { 
     if (!ok) return;
+    // Xóa khỏi room_members
     await supabase.from('room_members').delete().eq('room_id', currentRoomId).eq('user_id', uid);
+    // Giảm member_count sau khi kick
+    await supabase.rpc('decrement_member_count', { room_id_param: currentRoomId });
+    sendSystemMessage(`${name} đã bị mời ra khỏi phòng`);
   });
 }
 
@@ -2369,7 +3075,12 @@ window.toggleMicBan = async function (uid, shouldBan) {
   if (!currentRoomId) return;
   try {
     const updateData = { is_mic_banned: shouldBan };
-    if (shouldBan) updateData.is_mic_muted = true;
+    // Cấm mic: tắt mic luôn. Bỏ cấm: reset cả is_mic_muted để icon hiện đúng
+    if (shouldBan) {
+        updateData.is_mic_muted = true;
+    } else {
+        updateData.is_mic_muted = false;
+    }
 
     await supabase
       .from('room_members')
@@ -2679,9 +3390,14 @@ function initWpCustomControls(video) {
 
 function wpFormatTime(s) {
     if (!s || isNaN(s)) return "00:00";
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m < 10 ? "0" + m : m}:${sec < 10 ? "0" + sec : sec}`;
+    const totalSec = Math.floor(s);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const sec = totalSec % 60;
+    const mm = m < 10 ? "0" + m : m;
+    const ss = sec < 10 ? "0" + sec : sec;
+    // Nếu >= 1 giờ: "1h05:30", nếu không: "49:12"
+    return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
 
 function wpUpdatePlayIcons(isPlaying) {
@@ -2723,16 +3439,13 @@ window.wpShowSubMenu = function(type) {
     document.getElementById("wpSettingsMenu").style.display = "none";
     if (type === 'speed') document.getElementById("wpSpeedMenu").style.display = "flex";
     else if (type === 'quality') document.getElementById("wpQualityMenu").style.display = "flex";
-    else if (type === 'color') document.getElementById("wpColorMenu").style.display = "flex";
 };
 
 window.wpHideSubMenu = function() {
     const speed = document.getElementById("wpSpeedMenu");
     const quality = document.getElementById("wpQualityMenu");
-    const color = document.getElementById("wpColorMenu");
     if (speed) speed.style.display = "none";
     if (quality) quality.style.display = "none";
-    if (color) color.style.display = "none";
     document.getElementById("wpSettingsMenu").style.display = "flex";
 };
 
@@ -2798,54 +3511,7 @@ window.wpSetQuality = function(levelIndex) {
     wpToggleSettings();
 };
 
-// --- Subtitle Color (All users) ---
-window.wpSetSubtitleColor = function(color) {
-    // Áp dụng màu cho phụ đề của video
-    if (player && player.tagName === "VIDEO" && player.textTracks) {
-        for (let i = 0; i < player.textTracks.length; i++) {
-            const track = player.textTracks[i];
-            if (track.cues) {
-                for (let j = 0; j < track.cues.length; j++) {
-                    track.cues[j].snapToLines = false;
-                    track.cues[j].line = 90;
-                }
-            }
-        }
-    }
 
-    // Lưu màu vào CSS variable cho video
-    const container = document.getElementById("wpVideoContainer");
-    if (container) {
-        container.style.setProperty("--subtitle-color", color);
-    }
-
-    // Áp màu trực tiếp qua style tag
-    let styleTag = document.getElementById("wp-subtitle-style");
-    if (!styleTag) {
-        styleTag = document.createElement("style");
-        styleTag.id = "wp-subtitle-style";
-        document.head.appendChild(styleTag);
-    }
-    styleTag.textContent = `
-        #partyHtml5Player::cue {
-            color: ${color} !important;
-            background: rgba(0,0,0,0.5) !important;
-        }
-    `;
-
-    // Update UI
-    const label = document.getElementById("wpColorVal");
-    const names = { white: "Trắng", yellow: "Vàng", cyan: "Xanh dương", green: "Xanh lá" };
-    if (label) label.textContent = names[color] || color;
-
-    // Mark active
-    document.querySelectorAll("#wpColorMenu .submenu-item").forEach(item => {
-        item.classList.toggle("active", item.dataset.color === color);
-    });
-
-    wpHideSubMenu();
-    wpToggleSettings();
-};
 
 // --- Fullscreen (All users) ---
 window.wpToggleFullscreen = function() {
@@ -2993,13 +3659,16 @@ function startScheduleSync(roomData) {
 
     let hasInitialSeeked = false;  // Cờ: Đã tua lần đầu chưa
     let lastHardSeekTime = 0;      // Thời điểm hard-seek gần nhất (ms)
+    let syncTickCount = 0;         // Đếm tick: mỗi 3 tick mới chạy sync nặng
     const HARD_SEEK_COOLDOWN = 15000; // 15 giây giữa 2 lần hard-seek
-    const DRIFT_TOLERANCE = 5;     // Dưới 5s lệch -> coi là OK, không làm gì
-    const RATE_ADJUST_RANGE = 15;  // 5-15s lệch -> Dùng playbackRate bù
-    const HARD_SEEK_THRESHOLD = 30; // >30s lệch -> Bắt buộc hard-seek
+    const DRIFT_TOLERANCE = 5;     // Dưới 5s lệch → coi là OK, không làm gì
+    const RATE_ADJUST_RANGE = 15;  // 5-15s lệch → Dùng playbackRate bù
+    const HARD_SEEK_THRESHOLD = 30; // >30s lệch → Bắt buộc hard-seek
 
     scheduleSyncInterval = setInterval(() => {
         if (!player) return;
+        syncTickCount++;
+        const isHeavySyncTick = (syncTickCount % 3 === 0); // Chỉ sync nặng mỗi 3 giây
         
         if (latestRoomData && latestRoomData.status === "ended") {
             console.log("🛑 Engine detected ended status from DB. Stopping sync.");
@@ -3025,7 +3694,7 @@ function startScheduleSync(roomData) {
             // ========== ĐÃ QUA GIỜ CHIẾU ==========
             
             // 🔥 NẾU DIFF VƯỢT QUÁ DURATION THÌ KẾT THÚC LUÔN (TRÁNH SEEK VÔ TẬN)
-            if (videoDuration > 0 && diffSeconds >= videoDuration) {
+            if (isHeavySyncTick && videoDuration > 0 && diffSeconds >= videoDuration) {
                 console.log("🎬 diffSeconds exceeds videoDuration. Ending sync engine.");
                 
                 // Tính chính xác mốc thời gian phim hết
@@ -3043,26 +3712,39 @@ function startScheduleSync(roomData) {
             let isPlaying = false;
             let isBufferingState = false;
 
-            if (isYt) {
-                const ytState = player.getPlayerState ? player.getPlayerState() : -1;
-                currentTime = player.getCurrentTime ? player.getCurrentTime() : 0;
-                isPlaying = (ytState === 1);
-                isBufferingState = (ytState === 3);
+            if (isHeavySyncTick) {
+                // Sync nặng: chỉ chạy mỗi 3 giây để tiết kiệm CPU
+                if (isYt) {
+                    const ytState = player.getPlayerState ? player.getPlayerState() : -1;
+                    currentTime = player.getCurrentTime ? player.getCurrentTime() : 0;
+                    isPlaying = (ytState === 1);
+                    isBufferingState = (ytState === 3);
 
-                // Đảm bảo video đang chạy
-                if (!isPlaying && !isBufferingState) {
-                    player.playVideo();
+                    // Đảm bảo video đang chạy
+                    if (!isPlaying && !isBufferingState) {
+                        player.playVideo();
+                    }
+                } else {
+                    currentTime = player.currentTime || 0;
+                    isPlaying = !player.paused;
+                    isBufferingState = (player.readyState < 3);
+
+                    if (!isPlaying && !isBufferingState) {
+                        player.play().catch(e => {
+                            console.log("Schedule auto-play blocked", e);
+                            showMobilePlayOverlay();
+                        });
+                    }
                 }
             } else {
-                currentTime = player.currentTime || 0;
-                isPlaying = !player.paused;
-                isBufferingState = (player.readyState < 3);
-
-                if (!isPlaying && !isBufferingState) {
-                    player.play().catch(e => {
-                        console.log("Schedule auto-play blocked", e);
-                        showMobilePlayOverlay();
-                    });
+                // Tick nhẹ: chỉ đọc trạng thái cơ bản để tính drift
+                if (isYt) {
+                    currentTime = player.getCurrentTime ? player.getCurrentTime() : 0;
+                    isPlaying = (player.getPlayerState ? player.getPlayerState() === 1 : false);
+                } else {
+                    currentTime = player.currentTime || 0;
+                    isPlaying = !player.paused;
+                    isBufferingState = (player.readyState < 3);
                 }
             }
 
@@ -3071,6 +3753,16 @@ function startScheduleSync(roomData) {
 
             // --- TẦNG 1: Initial Seek (Chỉ chạy 1 lần duy nhất khi mới vào phòng) ---
             if (!hasInitialSeeked && diffSeconds > 2) {
+                // Guard: Chỉ seek sau khi HLS/video đã load metadata (readyState >= 1)
+                // readyState 0=NOTHING, 1=METADATA, 2=CURRENT_DATA, 3=FUTURE_DATA, 4=ENOUGH_DATA
+                if (!isYt && player.readyState < 1) {
+                    // Video chưa có metadata → đợi tick sau
+                    if (syncStatus) {
+                        syncStatus.classList.remove("hidden");
+                        syncStatus.querySelector("span").textContent = "Đang tải luồng...";
+                    }
+                    return;
+                }
                 hasInitialSeeked = true;
                 console.log(`⏩ [ScheduleSync] Initial seek tới ${Math.round(diffSeconds)}s`);
                 if (isYt) {
@@ -3178,16 +3870,26 @@ function startScheduleSync(roomData) {
             }
 
             if (isYt) {
+                // Chỉ pause nếu đang phát, KHÔNG seek về 0 (để preload buffer)
                 if (player.getPlayerState && player.getPlayerState() === 1) {
                     player.pauseVideo();
                 }
-                if (player.getCurrentTime && player.getCurrentTime() > 1) player.seekTo(0, true);
+                // Preload YouTube: cueVideoById load metadata không autoplay (chỉ gọi 1 lần)
+                if (player.getPlayerState && player.getPlayerState() === -1) {
+                    // -1 = unstarted → chưa load → cue để tải trước
+                    const vidId = roomData.videoId || roomData.video_id || roomData.videoSource;
+                    if (vidId && player.cueVideoById) {
+                        player.cueVideoById(vidId, 0);
+                        console.log('⏳ YouTube: cueVideoById preload trước giờ chiếu');
+                    }
+                }
             } else {
+                // Chỉ pause, KHÔNG đặt lại currentTime về 0 mỗi giây
+                // Giữ nguyên vị trí buffer để browser tự buffer tiếp
                 if (!player.paused) player.pause();
-                if (player.currentTime > 1) player.currentTime = 0;
             }
         }
-    }, 3000); // Kiểm tra mỗi 3 giây thay vì 1 giây (giảm tải CPU/Network)
+    }, 1000); // 1 giây để countdown đếm mượt, sync logic có throttle riêng bên trong
 }
 
 /** Hàm kiểm tra phòng đã kết thúc chưa (Dùng chung cho cả Lobby và Room) **/

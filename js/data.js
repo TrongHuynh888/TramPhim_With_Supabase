@@ -140,6 +140,41 @@ async function loadInitialData() {
         startWatchHistoryRealtimeListener();
     }
 
+    // 6. Auto-sync tập phim mới + Auto-import phim mới khi Admin mở web (không cần vào trang Admin)
+    if (typeof isAdmin !== 'undefined' && isAdmin) {
+        setTimeout(() => {
+            // Lazy load admin-api-import.js nếu chưa load
+            if (!window._adminScriptsLoaded) {
+                console.log('🔄 [AutoSync] Admin detected → Loading sync scripts...');
+                if (typeof lazyLoadScriptBundle === 'function') {
+                    // ★ [FIX] Phải load admin-api-explorer.js TRƯỚC vì nó chứa API_PROVIDERS
+                    // mà importSingleMovieFromApi() cần dùng để gọi API nguồn
+                    lazyLoadScriptBundle([
+                        'js/admin-api-explorer.js?v=3',
+                        'js/admin-api-import.js?v=3'
+                    ], () => {
+                        if (typeof autoSyncEpisodesIfNeeded === 'function') {
+                            console.log('🔄 [AutoSync] Bắt đầu kiểm tra tập phim mới...');
+                            autoSyncEpisodesIfNeeded();
+                        }
+                        if (typeof autoImportNewMoviesIfNeeded === 'function') {
+                            console.log('🎬 [AutoImport] Bắt đầu quét phim mới từ nguồn...');
+                            autoImportNewMoviesIfNeeded();
+                        }
+                    });
+                }
+            } else {
+                // Script đã load rồi (admin đã vào trang Admin trước đó)
+                if (typeof autoSyncEpisodesIfNeeded === 'function') {
+                    autoSyncEpisodesIfNeeded();
+                }
+                if (typeof autoImportNewMoviesIfNeeded === 'function') {
+                    autoImportNewMoviesIfNeeded();
+                }
+            }
+        }, 5000); // Chờ 5s sau khi data load xong
+    }
+
   } catch (error) {
     console.error("Lỗi load dữ liệu:", error);
   }
@@ -310,7 +345,8 @@ function normalizeMovieData(movie) {
     movie.castData = movie.castData || movie.cast_data || [];
     movie.ageLimit = movie.ageLimit || movie.age_limit || "";
     movie.countryId = movie.countryId || movie.country_id || "";
-    movie.categoryId = movie.categoryId || movie.category_id || "";
+    movie.imdbRating = movie.imdbRating || movie.imdb_rating || null;
+    movie.tmdb_trailer_key = movie.tmdb_trailer_key || null; // Trailer key (YouTube ID / vimeo:ID / full URL)
     
     // --- ĐỒNG BỘ SỐ TẬP HIỆN CÓ ---
     // Tính toán từ mảng episodes nếu có (kết quả của join hoặc cache)
@@ -329,14 +365,15 @@ function normalizeMovieData(movie) {
     }
 
     // --- ĐỒNG BỘ DỮ LIỆU THỂ LOẠI & QUỐC GIA CHO UI ---
-    // 1. Đảm bảo categories luôn là mảng và chứa category_id nếu có
-    if (!movie.categories || !Array.isArray(movie.categories)) {
-        movie.categories = movie.categoryId ? [movie.categoryId] : [];
-    } else if (movie.categoryId && !movie.categories.includes(movie.categoryId)) {
-        movie.categories.unshift(movie.categoryId);
+    // category_ids là mảng text[] - dùng trực tiếp, không còn category_id đơn trị
+    if (!movie.category_ids || !Array.isArray(movie.category_ids)) {
+        movie.category_ids = [];
     }
-    
+    // movie.categories = alias cho category_ids (để tương thích code cũ)
+    movie.categories = [...movie.category_ids].filter(Boolean);
+
     // 2. Đảm bảo country đồng bộ với country_id
+
     if (!movie.country && movie.countryId) {
         movie.country = movie.countryId;
     }
@@ -376,9 +413,25 @@ async function loadMovies(remoteTimestamp) {
 
     if (data && data.length > 0) {
         allMovies = data.map(normalizeMovieData);
+        
+        // ★ Ép buộc Sort cứng phim: Năm ra mắt MỚI NHẤT -> CŨ NHẤT. Nếu cùng năm thì phim nào mới cập nhật sẽ lên trên.
+        allMovies.sort((a, b) => {
+            const yearA = parseInt(a.year) || 0;
+            const yearB = parseInt(b.year) || 0;
+            
+            if (yearB !== yearA) {
+                return yearB - yearA; // Ưu tiên 1: Xếp theo Năm ra mắt giảm dần
+            }
+            
+            // Ưu tiên 2: Cùng năm thì xếp theo Ngày cập nhật web giảm dần
+            const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+            const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+            return dateB - dateA; 
+        });
+
         saveToCache("movies", allMovies);
         if (remoteTimestamp) setCacheTimestamp("movies", remoteTimestamp);
-        console.log(`🌐 Fetched ${allMovies.length} Movies from Supabase`);
+        console.log(`🌐 Fetched ${allMovies.length} Movies from Supabase (Sorted by Latest)`);
     } else {
         allMovies = SAMPLE_MOVIES;
     }
@@ -398,7 +451,7 @@ async function loadMovies(remoteTimestamp) {
 function renderAllInitialMovies() {
     renderFeaturedMovies();
     renderNewMovies();
-    renderAllMovies();
+    filterMovies(); // Render trang Tất Cả Phim có phân trang
     renderCountrySections();
     renderBannerSlider();
 }

@@ -1,4 +1,4 @@
-// --- KHAI BÁO BIẾN TOÀN CỤC (Đảm bảo luôn tồn tại để tránh ReferenceError) ---
+// --- KHAI BÁO BIẾN TOÀN CỤC (đảm bảo luôn tồn tại để tránh ReferenceError) ---
 window.editingUserId = null;
 window.selectedActorIds = [];
 window.latestAddedActorIds = JSON.parse(localStorage.getItem('latestAddedActorIds') || '[]');
@@ -36,9 +36,9 @@ async function notifyDataChange(type) {
             updated_at: new Date().toISOString()
         });
         
-        console.log(`📡 Đã gửi tín hiệu đồng bộ Metadata Supabase cho: ${type}`);
+        console.log(`📡 ã gửi tín hiệu đồng bộ Metadata Supabase cho: ${type}`);
     } catch (e) {
-        console.warn("⚠️ Không thể cập nhật Metadata Sync Supabase:", e);
+        console.warn("⚠ Không thể cập nhật Metadata Sync Supabase:", e);
     }
 }
 
@@ -49,13 +49,14 @@ const actorsPerPage = 20;
 // Phân trang các tab khác
 let currentAdminMoviePage = 1;
 let currentAdminEpisodePage = 1;
+let currentEpMovieSelectPage = 1; // Trang hiện tại của grid chọn phim (tab Tập)
 let currentAdminUserPage = 1;
 let currentAdminNotifPage = 1;
 let currentAdminVipPage = 1;
 let currentAdminErrorPage = 1;
 let currentAdminRoomPage = 1;
 
-const adminPerPage = 20; // Số mục mỗi trang mặc định cho các tab
+const adminPerPage = 15; // Số mục mỗi trang mặc định cho các tab
 
 /**
  * TỐI ƯU HÓA: DEBOUNCE CHO CÁC HÀM TÌM KIẾM ADMIN
@@ -67,7 +68,8 @@ window.filterAdminMoviesDebounced = debounce(() => {
 }, 300);
 window.filterEpisodeMoviesDebounced = debounce(() => {
     // Lưu ý: Tab Episodes có 2 bước, chọn phim và chọn tập. 
-    // Ở đây reset danh sách phim gợi ý.
+    // Ở đây reset trang grid chọn phim về 1 khi tìm kiếm.
+    window.currentEpMovieSelectPage = 1;
     window.currentAdminEpisodePage = 1; 
     if (typeof filterEpisodeMovies === 'function') filterEpisodeMovies();
 }, 300);
@@ -142,6 +144,11 @@ window.setLatestAutoActorIds = function(ids, append = false) {
  * Load dữ liệu cho Admin
  */
 async function loadAdminData() {
+  // Không re-init Admin khi AI đang xử lý (tránh reload trang)
+  if (window.__aiProcessing) {
+    console.warn("[AI Shield] Bỏ qua loadAdminData() vì AI đang xử lý phụ đề!");
+    return;
+  }
   if (!isAdmin) return;
 
   try {
@@ -149,8 +156,14 @@ async function loadAdminData() {
     if (typeof loadCategories === "function") await loadCategories();
     if (typeof loadCountries === "function") await loadCountries();
 
+    // Khôi phục trang phim đã xem trước khi rời web (từ sessionStorage)
+    try {
+      const savedPage = parseInt(sessionStorage.getItem('adminMoviePage'));
+      if (savedPage && savedPage > 1) currentAdminMoviePage = savedPage;
+    } catch(e) {}
+
     // Load movies for admin
-    await loadAdminMovies();
+    await loadAdminMovies(currentAdminMoviePage > 1);
 
     // Load users
     await loadAdminUsers();
@@ -173,7 +186,7 @@ async function loadAdminData() {
     renderAdminActors();
 
 
-    // Load VIP Requests
+    // Load⭐ VIP Requests
     await loadAdminVipRequests();
 
     // Load Notifications (Realtime)
@@ -187,6 +200,11 @@ async function loadAdminData() {
 
     // ✅ Cập nhật thống kê Dashboard
     await loadAdminStats();
+
+    // 🔄 Tự động sync tập mới từ API (chạy ngầm, không ảnh hưởng UI)
+    if (typeof autoSyncEpisodesIfNeeded === 'function') autoSyncEpisodesIfNeeded();
+    // 🎬 Tự động import phim mới từ nguồn API (chạy ngầm)
+    if (typeof autoImportNewMoviesIfNeeded === 'function') autoImportNewMoviesIfNeeded();
   } catch (error) {
     console.error("Lỗi load admin data:", error);
   }
@@ -406,7 +424,7 @@ window.approveVipRequest = async function(requestId, userId, packageType) {
 
         // 3. Gửi thông báo cho User
         if (typeof sendNotification === "function") {
-            const durationText = packageType === 'lifetime' ? "Vĩnh Viễn ♾️" : `${durationDays} ngày`;
+            const durationText = packageType === 'lifetime' ? "Vĩnh Viễn ♾" : `${durationDays} ngày`;
             await sendNotification(userId, "Yêu cầu VIP đã được duyệt ✅", `Tài khoản của bạn đã được nâng cấp VIP (${durationText}).`, "vip_approved");
         }
 
@@ -449,7 +467,7 @@ window.rejectVipRequest = async function(requestId) {
 }
 
 /**
- * Xóa Yêu Cầu VIP Khỏi Bảng (Xóa luôn trong Database)
+ * Xóa Yêu Cầu VIP Khi Bảng (Xóa luôn trong Database)
  */
 window.deleteVipRequest = async function(requestId) {
     if (!await customConfirm("Hành động này sẽ XÓA VĨNH VIỄN yêu cầu này. Bạn có chắc không?", { title: "Xóa yêu cầu", type: "danger", confirmText: "Xóa" })) return;
@@ -471,73 +489,735 @@ window.deleteVipRequest = async function(requestId) {
 }
 
 /**
- * Load thống kê Admin
+ * Load thống kê Admin (Phiên bản Dashboard mới - PRO)
+ * Bao gồm: 6 stat cards, 4 biểu đồ Chart.js, bảng hoạt động gần đây
  */
 async function loadAdminStats() {
   if (!supabase) return;
   try {
-    // Tổng số phim (Đã có từ allMovies trong data.js)
-    document.getElementById("statTotalMovies").textContent = allMovies.length;
+    // === 1. Tổng số phim (đếm trực tiếp từ DB, không phụ thuộc mảng JS bị limit) ===
+    const { count: totalMovies } = await supabase
+      .from('movies')
+      .select('*', { count: 'exact', head: true });
+    animateCountUp("statTotalMovies", totalMovies || 0);
 
-    // Tổng lượt xem
-    const totalViews = allMovies.reduce((sum, m) => sum + (m.views || 0), 0);
-    document.getElementById("statTotalViews").textContent = formatNumber(totalViews);
+    // === 2. Tổng lượt xem (Cộng dồn cột views từ tất cả phim hiện hành) ===
+    let totalViews = 0;
+    try {
+      let offset = 0;
+      const limit = 1000;
+      while(true) {
+          const { data: mv, error } = await supabase.from('movies').select('views').range(offset, offset + limit - 1);
+          if (error || !mv || mv.length === 0) break;
+          totalViews += mv.reduce((sum, m) => sum + (m.views || 0), 0);
+          if (mv.length < limit) break;
+          offset += limit;
+      }
+    } catch(e) { /* fallback = 0 */ }
+    animateCountUp("statTotalViews", totalViews);
 
-    // Doanh thu ước tính (Từ transactions)
-    const { data: txData, error: txError } = await supabase
+    // === 3. Doanh thu ước tính (Từ transactions) ===
+    const { data: txData } = await supabase
         .from('transactions')
         .select('amount')
         .eq('status', 'completed');
-    
-    let totalRevenue = (txData || []).reduce((sum, tx) => sum + (tx.amount || 0), 0);
-    document.getElementById("statTotalRevenue").textContent = `${formatNumber(totalRevenue)} CRO`;
+    const totalRevenue = (txData || []).reduce((sum, tx) => sum + (tx.amount || 0), 0);
+    const revenueEl = document.getElementById("statTotalRevenue");
+    if (revenueEl) {
+      animateCountUp("statTotalRevenue", totalRevenue, 1200, ` CRO`);
+    }
 
-    // Tổng users (Từ profiles)
-    const { count, error: userError } = await supabase
+    // === 4. Tổng users ===
+    const { count: userCount } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true });
-    
-    document.getElementById("statTotalUsers").textContent = formatNumber(count || 0);
+    animateCountUp("statTotalUsers", userCount || 0);
 
-    // Recent movies
+    // === 5. VIP Users ===
+    const { count: vipCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_vip', true);
+    animateCountUp("statVipUsers", vipCount || 0);
+
+    // === 6. Báo lỗi chờ xử lý ===
+    const { count: errorCount } = await supabase
+        .from('error_reports')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+    animateCountUp("statPendingErrors", errorCount || 0);
+
+    // === Render các phần phụ ===
+    const chartMovies = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0)
+      ? allAdminMovies : (allMovies || []);
+      
+    // Cập nhật lượt xem thực tế vào mảng phim trước khi vẽ chart
+    try {
+        const viewCountsAll = await queryViewLogsCounts('all');
+        chartMovies.forEach(m => {
+            m.views = viewCountsAll[m.id] || 0;
+        });
+    } catch(err) {
+        console.warn('Lỗi đồng bộ views cho chart:', err);
+    }
+
     renderRecentMovies();
+    renderDashboardCharts(chartMovies);
+    renderRecentActivities();
+
   } catch (error) {
-    console.error("Lỗi load stats Supabase:", error);
+    console.error("Lỗi load stats Dashboard:", error);
   }
 }
 
 /**
- * Render phim gần đây trong dashboard
+ * Hiệu ứng đếm số từ 0 đến endValue
+ * @param {string} elementId - ID của element hiển thị số
+ * @param {number} endValue - Giá trị cuối cùng
+ * @param {number} duration - Thời gian animation (ms)
+ * @param {string} suffix - Hậu tố (ví dụ: ' CRO')
+ */
+function animateCountUp(elementId, endValue, duration = 1000, suffix = '') {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+
+  // Nếu giá trị = 0, hiển thị luôn
+  if (endValue === 0) {
+    el.textContent = '0' + suffix;
+    return;
+  }
+
+  const startTime = performance.now();
+  const startValue = 0;
+
+  function update(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Easing: ease-out
+    const easedProgress = 1 - Math.pow(1 - progress, 3);
+    const currentValue = Math.round(startValue + (endValue - startValue) * easedProgress);
+    
+    el.textContent = formatNumber(currentValue) + suffix;
+
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    } else {
+      el.textContent = formatNumber(endValue) + suffix;
+      el.classList.add('counting');
+      setTimeout(() => el.classList.remove('counting'), 300);
+    }
+  }
+
+  requestAnimationFrame(update);
+}
+
+/**
+ * Render phim gần đây trong dashboard (Phiên bản mới - thêm Loại + Lượt xem)
  */
 function renderRecentMovies() {
   const tbody = document.getElementById("recentMoviesTable");
   if (!tbody) return;
 
-  const recent = [...allMovies]
-    .sort((a, b) => {
-      const dateA = new Date(a.created_at || 0);
-      const dateB = new Date(b.created_at || 0);
-      return dateB - dateA;
-    })
+  const moviesSrc = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) 
+    ? allAdminMovies : allMovies;
+
+  const recent = [...moviesSrc]
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
     .slice(0, 5);
 
-  tbody.innerHTML = recent
-    .map((movie) => {
-      return `
-            <tr>
-                <td><img src="${movie.poster_url || movie.posterUrl}" alt="${movie.title}" onerror="this.src='https://placehold.co/50x75'"></td>
-                <td>${movie.title}</td>
-                <td>${movie.price} CRO</td>
-                <td><span class="status-badge ${movie.status}">${getStatusText(movie.status)}</span></td>
-                <td>${formatDate(movie.created_at)}</td>
-            </tr>
-        `;
-    })
-    .join("");
+  if (recent.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:20px;color:#888;">Chưa có phim nào</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = recent.map(movie => {
+    // Badge loại phim
+    const typeBadge = movie.type === 'series' 
+      ? '<span style="background:rgba(218,119,242,0.15);color:#da77f2;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">Phim bộ</span>'
+      : '<span style="background:rgba(77,171,247,0.15);color:#4dabf7;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">Phim lẻ</span>';
+
+    return `
+      <tr>
+        <td><img src="${movie.poster_url || movie.posterUrl || ''}" alt="${movie.title}" 
+             onerror="this.src='https://placehold.co/50x75'" style="width:45px;height:65px;object-fit:cover;border-radius:6px;"></td>
+        <td><strong style="font-size:0.9rem;">${movie.title}</strong></td>
+        <td>${typeBadge}</td>
+        <td><i class="fas fa-eye" style="color:var(--accent-primary);margin-right:4px;font-size:0.8rem;"></i>${formatNumber(movie.views || 0)}</td>
+        <td><span class="status-badge ${movie.status}">${getStatusText(movie.status)}</span></td>
+        <td style="font-size:0.85rem;color:var(--text-muted);">${formatDate(movie.created_at)}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+// === Lưu trữ Chart instances để hủy khi re-render ===
+window._dashCharts = window._dashCharts || {};
+
+// Lưu trạng thái period cho từng chart dashboard
+window._dashChartPeriods = window._dashChartPeriods || {
+  categories: 'all',
+  views: 'all',
+  topMovies: 'all'
+};
+
+/**
+ * Render 4 biểu đồ Dashboard bằng Chart.js
+ * @param {Array} movies - Mảng phim để phân tích
+ */
+function renderDashboardCharts(movies) {
+  if (typeof Chart === 'undefined') {
+    console.warn("⚠ Chart.js chưa được load, bỏ qua render biểu đồ.");
+    return;
+  }
+
+  // Cấu hình chung cho Chart.js (Dark theme)
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const textColor = isDark ? '#b0b0b0' : '#555555';
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
+
+  // --- 1. Bar Chart: Phim theo thể loại ---
+  renderChartMoviesByCategory(movies, textColor, gridColor, window._dashChartPeriods.categories);
+
+  // --- 2. Line Chart: Phân bổ lượt xem theo top phim ---
+  renderChartViewsDistribution(movies, textColor, gridColor, window._dashChartPeriods.views);
+
+  // --- 3. Doughnut: Tỉ lệ phim lẻ/bộ ---
+  renderChartMovieTypes(movies, textColor);
+
+  // --- 4. Horizontal Bar: Top 10 phim xem nhiều ---
+  renderChartTopMovies(movies, textColor, gridColor, window._dashChartPeriods.topMovies);
 }
 
 /**
- * Load lịch sử giao dịch (Đã cập nhật hiện giờ chi tiết)
+ * Xử lý khi click tab lọc thời gian cho biểu đồ Dashboard
+ * @param {string} chartName - 'categories' | 'views' | 'topMovies'
+ * @param {string} period - 'all' | 'day' | 'week' | 'month'
+ */
+window.changeDashChartPeriod = function(chartName, period) {
+  window._dashChartPeriods[chartName] = period;
+
+  // Cập nhật active tab
+  document.querySelectorAll(`.chart-tab[data-chart="${chartName}"]`).forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.period === period);
+  });
+
+  // Lấy dữ liệu phim hiện tại
+  const movies = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0)
+    ? allAdminMovies : (allMovies || []);
+
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const textColor = isDark ? '#b0b0b0' : '#555555';
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
+
+  // Render lại chart tương ứng
+  if (chartName === 'categories') {
+    renderChartMoviesByCategory(movies, textColor, gridColor, period);
+  } else if (chartName === 'views') {
+    renderChartViewsDistribution(movies, textColor, gridColor, period);
+  } else if (chartName === 'topMovies') {
+    renderChartTopMovies(movies, textColor, gridColor, period);
+  }
+};
+
+/**
+ * Helper: Tính mốc thi gian ISO cho period
+ */
+function getDashPeriodFromDate(period) {
+  const now = new Date();
+  if (period === 'day') {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  } else if (period === 'week') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 7);
+    return d.toISOString();
+  } else if (period === 'month') {
+    const d = new Date(now);
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString();
+  }
+  return null;
+}
+
+/**
+ * Helper: Query view_logs và đếm lượt xem theo movie_id
+ */
+async function queryViewLogsCounts(period) {
+  if (!supabase) return {};
+  try {
+    let query = supabase.from('view_logs').select('movie_id');
+    const fromDate = getDashPeriodFromDate(period);
+    if (fromDate) query = query.gte('viewed_at', fromDate);
+
+    const { data, error } = await query.limit(50000);
+    if (error) throw error;
+
+    const counts = {};
+    (data || []).forEach(log => {
+      counts[log.movie_id] = (counts[log.movie_id] || 0) + 1;
+    });
+    return counts;
+  } catch (err) {
+    console.warn('Lỗi query view_logs:', err.message);
+    return {};
+  }
+}
+
+/**
+ * Biểu đồ cột: Số phim/lượt xem theo thể loại
+ */
+async function renderChartMoviesByCategory(movies, textColor, gridColor, period) {
+  const ctx = document.getElementById('chartMoviesByCategory');
+  if (!ctx) return;
+
+  if (window._dashCharts.categories) window._dashCharts.categories.destroy();
+  const exist_categories = Chart.getChart("chartMoviesByCategory");
+  if (exist_categories) exist_categories.destroy();
+
+  const categories = typeof allCategories !== 'undefined' ? allCategories : [];
+
+  if (period && period !== 'all') {
+    // Query view_logs theo thời gian, đếm theo category
+    const viewCounts = await queryViewLogsCounts(period);
+    const catViewCount = {};
+
+    Object.entries(viewCounts).forEach(([movieId, count]) => {
+      const movie = movies.find(m => m.id === movieId);
+      if (!movie) return;
+      const cats = movie.categories || [];
+      cats.forEach(catId => {
+        const catObj = categories.find(c => c.id === catId || c.name === catId);
+        const catName = catObj ? catObj.name : catId;
+        if (catName) catViewCount[catName] = (catViewCount[catName] || 0) + count;
+      });
+      if (cats.length === 0 && movie.category) {
+        catViewCount[movie.category] = (catViewCount[movie.category] || 0) + count;
+      }
+    });
+
+    const sorted = Object.entries(catViewCount).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    renderCategoryChart(ctx, sorted.map(s => s[0]), sorted.map(s => s[1]), 'Lượt xem', textColor, gridColor);
+  } else {
+    // ếm số phim theo thể loại (logic cũ)
+    const catCount = {};
+    movies.forEach(m => {
+      const cats = m.categories || [];
+      cats.forEach(catId => {
+        const catObj = categories.find(c => c.id === catId || c.name === catId);
+        const catName = catObj ? catObj.name : catId;
+        if (catName) catCount[catName] = (catCount[catName] || 0) + 1;
+      });
+      if (cats.length === 0 && m.category) {
+        catCount[m.category] = (catCount[m.category] || 0) + 1;
+      }
+    });
+    const sorted = Object.entries(catCount).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    renderCategoryChart(ctx, sorted.map(s => s[0]), sorted.map(s => s[1]), 'Số phim', textColor, gridColor);
+  }
+}
+
+/**
+ * Vẽ chart phim theo thể loại
+ */
+function renderCategoryChart(ctx, labels, data, labelText, textColor, gridColor) {
+  const colors = [
+    '#4db8ff', '#ff6b6b', '#ffd700', '#00ff88',
+    '#da77f2', '#ff9ff3', '#54a0ff', '#48dbfb'
+  ];
+
+  window._dashCharts.categories = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: labelText,
+        data,
+        backgroundColor: colors.slice(0, data.length).map(c => c + '99'),
+        borderColor: colors.slice(0, data.length),
+        borderWidth: 1,
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          titleColor: '#fff',
+          bodyColor: '#ddd',
+          cornerRadius: 8,
+          padding: 10,
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: textColor, font: { size: 11 } },
+          grid: { display: false }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: textColor, stepSize: 1, font: { size: 11 } },
+          grid: { color: gridColor }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Biểu đồ Line: Phân bổ lượt xem (top 10 phim)
+ */
+async function renderChartViewsDistribution(movies, textColor, gridColor, period) {
+  const ctx = document.getElementById('chartViewsRecent');
+  if (!ctx) return;
+
+  if (window._dashCharts.views) window._dashCharts.views.destroy();
+  const exist_views = Chart.getChart("chartViewsRecent");
+  if (exist_views) exist_views.destroy();
+
+  let labels, data;
+
+  if (period && period !== 'all') {
+    const viewCounts = await queryViewLogsCounts(period);
+    const sorted = Object.entries(viewCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    labels = sorted.map(([movieId]) => {
+      const m = movies.find(mv => mv.id === movieId);
+      const title = m ? m.title : movieId;
+      return title.length > 15 ? title.substring(0, 15) + '...' : title;
+    });
+    data = sorted.map(([, count]) => count);
+  } else {
+    const topMovies = [...movies]
+      .filter(m => (m.views || 0) > 0)
+      .sort((a, b) => (b.views || 0) - (a.views || 0))
+      .slice(0, 10);
+    labels = topMovies.map(m => m.title.length > 15 ? m.title.substring(0, 15) + '...' : m.title);
+    data = topMovies.map(m => m.views || 0);
+  }
+
+  window._dashCharts.views = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Lượt xem',
+        data,
+        borderColor: '#4db8ff',
+        backgroundColor: 'rgba(77, 184, 255, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#4db8ff',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          titleColor: '#fff',
+          bodyColor: '#ddd',
+          cornerRadius: 8,
+          padding: 10,
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: textColor, font: { size: 10 }, maxRotation: 45 },
+          grid: { display: false }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: textColor, font: { size: 11 } },
+          grid: { color: gridColor }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Biểu đồ Doughnut: Tỉ lệ phim lẻ / phim bộ
+ */
+function renderChartMovieTypes(movies, textColor) {
+  const ctx = document.getElementById('chartMovieTypes');
+  if (!ctx) return;
+
+  if (window._dashCharts.types) window._dashCharts.types.destroy();
+  const exist_types = Chart.getChart("chartMovieTypes");
+  if (exist_types) exist_types.destroy();
+
+  const singleCount = movies.filter(m => m.type === 'single' || !m.type).length;
+  const seriesCount = movies.filter(m => m.type === 'series').length;
+
+  window._dashCharts.types = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Phim lẻ', 'Phim bộ'],
+      datasets: [{
+        data: [singleCount, seriesCount],
+        backgroundColor: ['rgba(77, 171, 247, 0.8)', 'rgba(218, 119, 242, 0.8)'],
+        borderColor: ['#4dabf7', '#da77f2'],
+        borderWidth: 2,
+        hoverOffset: 8,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: textColor,
+            font: { size: 13, weight: '600' },
+            padding: 20,
+            usePointStyle: true,
+            pointStyleWidth: 12,
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          titleColor: '#fff',
+          bodyColor: '#ddd',
+          cornerRadius: 8,
+          padding: 10,
+          callbacks: {
+            label: function(context) {
+              const total = context.dataset.data.reduce((a, b) => a + b, 0);
+              const pct = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
+              return ` ${context.label}: ${context.parsed} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Biểu đồ Horizontal Bar: Top 10 phim xem nhiều nhất
+ */
+async function renderChartTopMovies(movies, textColor, gridColor, period) {
+  const ctx = document.getElementById('chartTopMovies');
+  if (!ctx) return;
+
+  if (window._dashCharts.topMovies) window._dashCharts.topMovies.destroy();
+  const exist_topMovies = Chart.getChart("chartTopMovies");
+  if (exist_topMovies) exist_topMovies.destroy();
+
+  let labels, data;
+
+  if (period && period !== 'all') {
+    const viewCounts = await queryViewLogsCounts(period);
+    const sorted = Object.entries(viewCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    labels = sorted.map(([movieId]) => {
+      const m = movies.find(mv => mv.id === movieId);
+      const title = m ? m.title : movieId;
+      return title.length > 20 ? title.substring(0, 20) + '...' : title;
+    });
+    data = sorted.map(([, count]) => count);
+  } else {
+    const top10 = [...movies]
+      .sort((a, b) => (b.views || 0) - (a.views || 0))
+      .slice(0, 10);
+    labels = top10.map(m => m.title.length > 20 ? m.title.substring(0, 20) + '...' : m.title);
+    data = top10.map(m => m.views || 0);
+  }
+
+  const barColors = [
+    '#ffd700', '#c0c0c0', '#cd7f32', '#4db8ff', '#da77f2',
+    '#ff922b', '#20c997', '#748ffc', '#f06595', '#adb5bd'
+  ];
+
+  window._dashCharts.topMovies = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Lượt xem',
+        data,
+        backgroundColor: barColors.slice(0, data.length).map(c => c + 'cc'),
+        borderColor: barColors.slice(0, data.length),
+        borderWidth: 1,
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          titleColor: '#fff',
+          bodyColor: '#ddd',
+          cornerRadius: 8,
+          padding: 10,
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: { color: textColor, font: { size: 11 } },
+          grid: { color: gridColor }
+        },
+        y: {
+          ticks: { color: textColor, font: { size: 11 } },
+          grid: { display: false }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Render danh sách hoạt động gần đây (tổng hợp từ nhiu nguồn)
+ */
+async function renderRecentActivities() {
+  const container = document.getElementById("recentActivitiesList");
+  if (!container || !supabase) return;
+
+  try {
+    const activities = [];
+
+    // 1. Phim mới thêm gần đây
+    const moviesSrc = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) 
+      ? allAdminMovies : allMovies;
+    const recentMovies = [...moviesSrc]
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      .slice(0, 3);
+    
+    recentMovies.forEach(m => {
+      activities.push({
+        type: 'movie',
+        icon: 'fas fa-film',
+        title: `Phim mới: <strong>${m.title}</strong>`,
+        time: m.created_at,
+      });
+    });
+
+    // 2.⭐ VIP Requests gần đây
+    if (typeof allVipRequests !== 'undefined' && allVipRequests.length > 0) {
+      allVipRequests.slice(0, 3).forEach(req => {
+        const statusText = req.status === 'pending' ? 'ch duyệt' : (req.status === 'approved' ? 'đã duyệt' : 'đã từ chối');
+        activities.push({
+          type: 'vip',
+          icon: 'fas fa-crown',
+          title: `Yêu cầu VIP: <strong>${req.user_email || 'User'}</strong> — ${statusText}`,
+          time: req.created_at,
+        });
+      });
+    }
+
+    // 3. Báo lỗi và Auto-fix gần đây (wrap riêng try-catch)
+    try {
+      const { data: recentErrors } = await supabase
+        .from('error_reports')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(8); // Tăng limit lên 8 để lấy đủ cả lỗi và auto-fix
+
+      (recentErrors || []).forEach(err => {
+        if (err.error_type && err.error_type.startsWith('auto_fix_')) {
+          const typeName = err.error_type.includes('poster') ? 'Poster' : 'Nền';
+          // Dùng class "success" hoặc "auto_fix" cho CSS riêng
+          activities.push({
+            type: 'auto_fix', 
+            icon: 'fas fa-magic',
+            title: `Auto-Fix: Tự cập nhật ${typeName} cho <strong>${err.movie_title || 'Không rõ'}</strong>`,
+            time: err.created_at,
+          });
+        } else {
+          activities.push({
+            type: 'error',
+            icon: 'fas fa-bug',
+            title: `Báo lỗi: <strong>${err.movie_title || 'Không rõ'}</strong> bởi ${err.user_name || 'ẨẨn danh'}`,
+            time: err.created_at,
+          });
+        }
+      });
+    } catch (e) { /* B qua nếu bảng chưa có */ }
+
+    // 4. User mới đăng ký gần đây
+    try {
+      const { data: recentUsers } = await supabase
+        .from('profiles')
+        .select('email, display_name, created_at')
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      (recentUsers || []).forEach(u => {
+        activities.push({
+          type: 'user',
+          icon: 'fas fa-user-plus',
+          title: `User mới: <strong>${u.display_name || u.email || 'Unnamed'}</strong>`,
+          time: u.created_at,
+        });
+      });
+    } catch (e) { /* B qua nếu lỗi */ }
+
+    // Sort tất cả theo thi gian mới nhất và lấy top 10
+    activities.sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
+    const top10 = activities.slice(0, 10);
+
+    if (top10.length === 0) {
+      container.innerHTML = '<div class="dash-activity-empty"><i class="fas fa-inbox"></i> Chưa có hoạt động nào</div>';
+      return;
+    }
+
+    container.innerHTML = top10.map(act => {
+      const timeAgo = getTimeAgo(act.time);
+      return `
+        <div class="dash-activity-item">
+          <div class="dash-activity-icon ${act.type}">
+            <i class="${act.icon}"></i>
+          </div>
+          <div class="dash-activity-content">
+            <div class="dash-activity-title">${act.title}</div>
+            <div class="dash-activity-time">${timeAgo}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  } catch (error) {
+    console.error("Lỗi load hoạt động gần đây:", error);
+    container.innerHTML = '<div class="dash-activity-empty"><i class="fas fa-exclamation-circle"></i> Lỗi tải dữ liệu</div>';
+  }
+}
+
+/**
+ * Tính thi gian tương đối (vd: "2 gi trước", "3 ngày trước")
+ */
+function getTimeAgo(dateStr) {
+  if (!dateStr) return '';
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diff = Math.floor((now - date) / 1000);
+
+  if (diff < 60) return 'Vừa xong';
+  if (diff < 3600) return `${Math.floor(diff / 60)} phút trước`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} gi trước`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)} ngày trước`;
+  if (diff < 2592000) return `${Math.floor(diff / 604800)} tuần trước`;
+  return formatDate(dateStr);
+}
+
+/**
+ * Load lịch sử giao dịch (ã cập nhật hiện gi chi tiết)
  */
 async function loadAdminTransactions() {
   const tbody = document.getElementById("adminTransactionsTable");
@@ -586,7 +1266,7 @@ function loadEditMovieForm() {
             if (typeof filterEditMovieDropdown === 'function') {
                 filterEditMovieDropdown(editSearchInput, editSelect);
             } else {
-                // Tự implement nhanh nếu thiếu hoặc dùng logic lọc cơ bản
+                // Tự implement nhanh nếu thiếu hoặc dùng logic lc cơ bản
                 const val = editSearchInput.value.toLowerCase();
                 Array.from(editSelect.options).forEach(opt => {
                     if (opt.value === "") return;
@@ -609,7 +1289,7 @@ function loadEditMovieForm() {
 }
 
 /* ============================================
-   QUẢN LÝ BÁO LỖI (ERROR REPORTS)
+   QUẢN L BO LỖI (ERROR REPORTS)
    ============================================ */
 
 let allErrorReports = []; // Mảng chứa dữ liệu error_reports realtime
@@ -654,12 +1334,12 @@ async function fetchErrorReports() {
 }
 
 /**
- * Lọc và tìm kiếm
+ * Lc và tìm kiếm
  */
 window.filterErrorReports = function() {
     const searchInput = document.getElementById("adminSearchError");
     const statusSelect = document.getElementById("errorFilterStatus");
-    const typeSelect = document.getElementById("errorFilterType"); // Tùy chọn mới
+    const typeSelect = document.getElementById("errorFilterType"); // Tùy chn mới
 
     const searchText = searchInput ? searchInput.value.toLowerCase().trim() : "";
     const statusVal = statusSelect ? statusSelect.value : "";
@@ -726,14 +1406,14 @@ function renderErrorReports(list) {
             
         const isResolved = item.status === "resolved";
         const statusHtml = isResolved 
-            ? '<span style="color: #4ade80; font-weight: bold;"><i class="fas fa-check-circle"></i> Đã xử lý</span>' 
+            ? '<span style="color: #4ade80; font-weight: bold;"><i class="fas fa-check-circle"></i> ã xử lý</span>' 
             : '<span style="color: #f87171; font-weight: bold;"><i class="fas fa-exclamation-circle"></i> Chưa xử lý</span>';
             
-        // Map label hiển thị Badge trên Admin với màu sắc tường minh
+        // Map label hiển thị Badge trên Admin với màu sắc tưng minh
         const typeLabels = {
             "load_slow": { label: "Video giật lag", bg: "#ff9800", text: "#fff" },
             "broken_link": { label: "Hỏng link", bg: "#f44336", text: "#fff" },
-            "subtitle_error": { label: "Lỗi phụ đề", bg: "#2196f3", text: "#fff" },
+            "subtitle_error": { label: "Lỗi phụ đ", bg: "#2196f3", text: "#fff" },
             "audio_error": { label: "Lỗi âm thanh", bg: "#9c27b0", text: "#fff" },
             "wrong_movie": { label: "Sai phim/Tập", bg: "#4caf50", text: "#fff" },
             "other": { label: "Khác", bg: "#607d8b", text: "#fff" }
@@ -743,7 +1423,7 @@ function renderErrorReports(list) {
         return `
             <tr style="${isResolved ? 'opacity: 0.7;' : ''}">
                 <td>
-                    <div style="font-weight: 500;">${item.user_name || "Ẩn danh"}</div>
+                    <div style="font-weight: 500;">${item.user_name || "ẨẨn danh"}</div>
                     <div style="font-size: 11px; color: #888;">${(item.user_id || "").substring(0,8)}...</div>
                 </td>
                 <td style="text-align: center;">
@@ -752,7 +1432,7 @@ function renderErrorReports(list) {
                     </span>
                 </td>
                 <td>
-                    <div style="font-weight: 500; color: #4db8ff;">${item.movie_title || "—"}</div>
+                    <div style="font-weight: 500; color: #4db8ff; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;" onclick="goToMovieFromError('${(item.movie_title || '').replace(/'/g, "\\'")}'${item.movie_id ? `,  '${item.movie_id}'` : ''})" title="Bấm để chuyển đến Quản lý Phim → Sửa ảnh">${item.movie_title || "—"} <i class='fas fa-external-link-alt' style='font-size:10px; opacity:0.5; margin-left:4px;'></i></div>
                     <div style="font-size: 12px; color: #aaa;">${item.episode_name || "Phim lẻ"}</div>
                 </td>
                 <td>
@@ -765,7 +1445,7 @@ function renderErrorReports(list) {
                 <td>${statusHtml}</td>
                 <td style="text-align: center;">
                     ${!isResolved ? `
-                        <button class="btn btn-sm btn-success" onclick="resolveErrorReport('${item.id}')" title="Đánh dấu đã xử lý" style="margin-right: 4px;">
+                        <button class="btn btn-sm btn-success" onclick="resolveErrorReport('${item.id}')" title="ánh dấu đã xử lý" style="margin-right: 4px;">
                             <i class="fas fa-check"></i>
                         </button>
                     ` : ''}
@@ -784,10 +1464,10 @@ function renderErrorReports(list) {
 }
 
 /**
- * Đánh dấu báo lỗi là Đã Xử Lý
+ * ánh dấu báo lỗi là ã Xử Lý
  */
 window.resolveErrorReport = async function(id) {
-    if (!await customConfirm("Đánh dấu lỗi này là đã giải quyết?", { title: "Xử lý lỗi", type: "info", confirmText: "Đồng ý" })) return;
+    if (!await customConfirm("ánh dấu lỗi này là đã giải quyết?", { title: "Xử lý lỗi", type: "info", confirmText: "ồĐồng ý" })) return;
 
     try {
         const { error } = await supabase.from('error_reports').update({
@@ -825,23 +1505,201 @@ window.deleteErrorReport = async function(id) {
         showLoading(false);
     }
 };
+
 /**
- * Lọc danh sách phim (Admin)
+ * Chuyển nhanh từ Báo Lỗi → Quản lý Phim và tự tìm phim đó
+ * @param {string} movieTitle - Tên phim cần tìm
+ * @param {string} movieId - ID phim (optional, dùng để mở edit trực tiếp)
  */
-function filterAdminMovies() {
+window.goToMovieFromError = function(movieTitle, movieId) {
+    // 1. Chuyển sang tab Quản lý Phim
+    if (typeof showAdminPanel === 'function') {
+        showAdminPanel('movies');
+    } else if (typeof window.showAdminPanel === 'function') {
+        window.showAdminPanel('movies');
+    }
+
+    // 2. ợi tab render xong → đin tên phim vào ô tìm kiếm
+    setTimeout(() => {
+        const searchInput = document.getElementById('adminSearchMovies');
+        if (searchInput && movieTitle) {
+            searchInput.value = movieTitle;
+            searchInput.focus();
+            // Trigger lc danh sách phim
+            if (typeof filterAdminMovies === 'function') {
+                filterAdminMovies();
+            } else {
+                searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+
+        // 3. Nếu có movieId → thử mở edit form trực tiếp
+        if (movieId) {
+            setTimeout(() => {
+                const editBtn = document.querySelector(`[data-movie-id="${movieId}"] .btn-edit, tr[data-id="${movieId}"] .btn-edit`);
+                if (editBtn) editBtn.click();
+            }, 500);
+        }
+    }, 300);
+};
+
+// ============================================================
+// LỌC PHIM TRÙNG LẶP (DUPLICATE DETECTION)
+// ============================================================
+let _isDuplicateFilterActive = false;
+
+/**
+ * Toggle chế độ lọc phim trùng lặp
+ * Khi bật: chỉ hiển thị các nhóm phim bị trùng nhau
+ * Khi tắt: quay v danh sách bình thường
+ */
+function toggleDuplicateMoviesFilter() {
+    _isDuplicateFilterActive = !_isDuplicateFilterActive;
+    const btn = document.getElementById('btnFilterDuplicates');
+    
+    if (_isDuplicateFilterActive) {
+        if (btn) {
+            btn.style.background = 'rgba(255, 152, 0, 0.4)';
+            btn.style.borderColor = '#ff9800';
+            btn.innerHTML = '<i class="fas fa-clone"></i> ang lc trùng <i class="fas fa-times-circle" style="margin-left: 4px;"></i>';
+        }
+        showNotification(' ang quét phim trùng lặp...', 'info');
+        
+        const duplicates = _findDuplicateMovies(allAdminMovies || []);
+        
+        if (duplicates.length === 0) {
+            showNotification('✅ Không tìm thấy phim trùng lặp nào!', 'success');
+            _isDuplicateFilterActive = false;
+            if (btn) {
+                btn.style.background = 'rgba(255, 152, 0, 0.15)';
+                btn.style.borderColor = 'rgba(255, 152, 0, 0.35)';
+                btn.innerHTML = '<i class="fas fa-clone"></i> Lọc phim trùng';
+            }
+            return;
+        }
+        
+        showNotification('⚠ Tìm thấy ' + duplicates.length + ' phim nằm trong nhóm trùng lặp!', 'warning');
+        currentAdminMoviePage = 1;
+        renderAdminMoviesList(duplicates);
+        updateAdminMovieStats(duplicates);
+    } else {
+        if (btn) {
+            btn.style.background = 'rgba(255, 152, 0, 0.15)';
+            btn.style.borderColor = 'rgba(255, 152, 0, 0.35)';
+            btn.innerHTML = '<i class="fas fa-clone"></i> Lọc phim trùng';
+        }
+        filterAdminMovies();
+    }
+}
+
+/**
+ * Tìm các phim trùng lặp trong danh sách
+ * Tiêu chí: origin_title+year, title+year, slug gốc (b timestamp)
+ * @returns {Array} Mảng các phim nằm trong nhóm trùng, sắp theo tên
+ */
+function _findDuplicateMovies(movies) {
+    if (!movies || movies.length === 0) return [];
+    
+    // Chuẩn hóa tên: b dấu, lowercase, xóa ký tự đặc biệt
+    var normalize = function(str) {
+        if (!str) return '';
+        return str.toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+            .replace(/[^a-z0-9\s]/g, '')
+            .replace(/\s+/g, ' ').trim();
+    };
+    
+    // Lấy slug gốc từ ID (b phần timestamp cuối: "-123456")
+    var getBaseSlug = function(id) {
+        if (!id) return '';
+        return id.replace(/-\d{6,}$/, '').trim();
+    };
+    
+    // Map nhóm trùng: key → Set<movieIndex>
+    var groupMap = {};
+    
+    movies.forEach(function(m, idx) {
+        var year = Number(m.year) || 0;
+        var originTitle = normalize(m.originTitle || m.origin_title || '');
+        var title = normalize(m.title || '');
+        var baseSlug = getBaseSlug(m.id);
+        
+        // Key 1: origin_title + year (chính xác nhất)
+        if (originTitle && year) {
+            var key1 = 'origin:' + originTitle + '|' + year;
+            if (!groupMap[key1]) groupMap[key1] = [];
+            groupMap[key1].push(idx);
+        }
+        
+        // Key 2: title + year
+        if (title && year) {
+            var key2 = 'title:' + title + '|' + year;
+            if (!groupMap[key2]) groupMap[key2] = [];
+            groupMap[key2].push(idx);
+        }
+        
+        // Key 3: slug gốc (b timestamp)
+        if (baseSlug) {
+            var key3 = 'slug:' + baseSlug;
+            if (!groupMap[key3]) groupMap[key3] = [];
+            groupMap[key3].push(idx);
+        }
+    });
+    
+    // Lc ra các nhóm có >= 2 phim (là trùng)
+    var duplicateIndices = {};
+    Object.keys(groupMap).forEach(function(key) {
+        var indices = groupMap[key];
+        if (indices.length >= 2) {
+            indices.forEach(function(idx) { duplicateIndices[idx] = true; });
+        }
+    });
+    
+    // Trả v mảng phim trùng, sắp xếp theo title
+    var duplicates = Object.keys(duplicateIndices)
+        .map(function(idx) { return movies[Number(idx)]; })
+        .sort(function(a, b) {
+            var tA = normalize(a.title || '');
+            var tB = normalize(b.title || '');
+            if (tA !== tB) return tA.localeCompare(tB);
+            // Cùng tên → sắp theo ngày tạo (cũ trước, mới sau)
+            var dA = new Date(a.created_at || a.createdAt || 0).getTime();
+            var dB = new Date(b.created_at || b.createdAt || 0).getTime();
+            return dA - dB;
+        });
+    
+    console.log('[DuplicateDetection] Tìm thấy ' + duplicates.length + ' phim trùng');
+    return duplicates;
+}
+
+/**
+ * Lc danh sách phim (Admin)
+ */
+function filterAdminMovies(skipPageReset = false) {
   const searchInput = document.getElementById("adminSearchMovies");
   const statusSelect = document.getElementById("adminFilterStatus");
   const typeSelect = document.getElementById("adminFilterMovieType");
   const categorySelect = document.getElementById("adminFilterMovieCategory");
   const countrySelect = document.getElementById("adminFilterCountry");
   const sortSelect = document.getElementById("adminSortMovies");
+  // Nếu đang ở chế độ lc trùng, tự tắt khi admin thay đổi bộ lc khác
+  if (_isDuplicateFilterActive) {
+      _isDuplicateFilterActive = false;
+      const btn = document.getElementById('btnFilterDuplicates');
+      if (btn) {
+          btn.style.background = 'rgba(255, 152, 0, 0.15)';
+          btn.style.borderColor = 'rgba(255, 152, 0, 0.35)';
+          btn.innerHTML = '<i class="fas fa-clone"></i> Lọc phim trùng';
+      }
+  }
   
-  // TỰ ĐỘNG RESET VỀ TRANG 1 KHI LỌC (Tránh lỗi không thấy phim do đang ở trang cao)
-  if (typeof currentAdminMoviePage !== 'undefined') {
+  // Reset về trang 1 khi người dùng lọc — KHÔNG reset khi changeAdminMoviePage gọi
+  if (!skipPageReset && typeof currentAdminMoviePage !== 'undefined') {
       currentAdminMoviePage = 1; 
   }
   
-  const searchText = searchInput.value.toLowerCase().trim();
+  const searchText = removeDiacritics(searchInput.value);
   const statusFilter = statusSelect ? statusSelect.value : "";
   const typeFilter = typeSelect ? typeSelect.value : "";
   const categoryFilter = categorySelect ? categorySelect.value : "";
@@ -850,16 +1708,14 @@ function filterAdminMovies() {
 
   console.log("🔍 Đang lọc Admin Movies:", { searchText, statusFilter, typeFilter, categoryFilter, countryFilter });
   const filteredMovies = (allAdminMovies || []).filter(m => {
-    // 1. Phân tách logic: Tên/ID
-    const movieTitle = (m.title || "").toLowerCase();
-    const movieOrigin = (m.originTitle || m.origin_title || "").toLowerCase();
-    const matchText = !searchText || movieTitle.includes(searchText) || movieOrigin.includes(searchText) || (m.id || "").toLowerCase().includes(searchText);
+    // 1. Phân tách logic: Tên/ID (hỗ trợ không dấu)
+    const matchText = !searchText || removeDiacritics(m.title || "").includes(searchText) || removeDiacritics(m.originTitle || m.origin_title || "").includes(searchText) || (m.id || "").toLowerCase().includes(searchText);
     
     // 2. Trạng thái & Loại
     const matchStatus = statusFilter === "" || m.status === statusFilter;
     const matchType = typeFilter === "" || m.type === typeFilter;
     
-    // 3. Quốc gia (Đồng nhất ID/Name)
+    // 3. Quốc gia (ồng nhất ID/Name)
     const movieCountryId = m.countryId || m.country_id || "";
     const movieCountryName = m.country || "";
     const matchCountry = countryFilter === "" || movieCountryId === countryFilter || movieCountryName === countryFilter;
@@ -876,7 +1732,7 @@ function filterAdminMovies() {
     return matchText && matchStatus && matchType && matchCategory && matchCountry;
   });
 
-  console.log(`✅ Kết quả: tìm thấy ${filteredMovies.length} phim thỏa mãn bộ lọc`);
+  console.log(`✅ Kết quả: tìm thấy ${filteredMovies.length} phim tha mãn bộ lc`);
 
   // Xử lý Sắp xếp
   filteredMovies.sort((a, b) => {
@@ -897,14 +1753,22 @@ function filterAdminMovies() {
 /**
  * Cập nhật thanh thống kê số lượng phim
  */
-function updateAdminMovieStats(moviesList) {
+async function updateAdminMovieStats(moviesList) {
     const totalEl = document.getElementById("statMoviesTotal");
     const singleEl = document.getElementById("statMoviesSingle");
     const seriesEl = document.getElementById("statMoviesSeries");
 
     if (!totalEl || !singleEl || !seriesEl) return;
 
-    const total = moviesList.length;
+    // ếm tổng chính xác từ DB (không bị limit bởi mảng JS)
+    let total = moviesList.length;
+    try {
+        if (typeof supabase !== 'undefined') {
+            const { count } = await supabase.from('movies').select('*', { count: 'exact', head: true });
+            if (count !== null && count !== undefined) total = count;
+        }
+    } catch(e) { /* fallback dùng mảng */ }
+
     const singleCount = moviesList.filter(m => m.type === "single").length;
     const seriesCount = moviesList.filter(m => m.type === "series").length;
 
@@ -914,7 +1778,7 @@ function updateAdminMovieStats(moviesList) {
 }
 
 /**
- * Tự động nạp các thể loại thực tế có phim vào bộ lọc
+ * Tự động nạp các thể loại thực tế có phim vào bộ lc
  */
 function populateAdminMovieFilters() {
     const categorySelect = document.getElementById("adminFilterMovieCategory");
@@ -963,15 +1827,15 @@ function populateAdminMovieFilters() {
                               ? allCountries.find(c => c.id === countryId || c.name === countryId)
                               : null;
                 const displayName = found ? found.name : countryId;
-                const info = (typeof getCountryInfo === 'function') ? getCountryInfo(displayName) : { icon: "🌐" };
-                return `<option value="${countryId}">${info.icon} ${displayName} (${countryStats[countryId]})</option>`;
+                const info = (typeof getCountryInfo === 'function') ? getCountryInfo(displayName) : { icon: "" };
+                return `<option value="${countryId}">${displayName} (${countryStats[countryId]})</option>`;
             }).join("");
     }
 }
 
 /**
  * Render danh sách <option> cho dropdown chọn phim trong Quản lý Tập
- * Kèm theo Badge: Chưa có tập, Đang cập nhật (x/y)
+ * Kèm theo Badge: Chưa có tập, ang cập nhật (x/y)
  */
 function renderEpisodeMovieOptions(moviesList) {
     if (!moviesList) return '<option value="">-- Chọn phim --</option>';
@@ -985,7 +1849,7 @@ function renderEpisodeMovieOptions(moviesList) {
             if (currentEps === 0) {
                 badge = "🔴 [Chưa có tập] ";
             } else if (m.type === 'series' && currentEps < totalEps) {
-                badge = `🟠 [Đang cập nhật ${currentEps}/${totalEps}] `;
+                badge = `🟠 [ang cập nhật ${currentEps}/${totalEps}] `;
             }
 
             return `<option value="${m.id}">${badge}${m.title}</option>`;
@@ -996,23 +1860,72 @@ function renderEpisodeMovieOptions(moviesList) {
  * Lấy thông tin trang trí cho Quốc gia (Icon + Màu sắc)
  */
 function getCountryInfo(countryName) {
-    if (!countryName) return { icon: '🌐', bg: 'rgba(255,255,255,0.05)', color: '#ccc' };
+    if (!countryName) return { icon: '', bg: 'rgba(255,255,255,0.05)', color: '#ccc' };
     
     const name = countryName.toLowerCase().trim();
     
     const countries = {
-        'việt nam': { icon: '🇻🇳', code: 'vn', bg: 'rgba(229, 9, 20, 0.15)', color: '#ff4d4d' },
-        'hàn quốc': { icon: '🇰🇷', code: 'kr', bg: 'rgba(77, 171, 247, 0.15)', color: '#4dabf7' },
-        'trung quốc': { icon: '🇨🇳', code: 'cn', bg: 'rgba(253, 126, 20, 0.15)', color: '#fd7e14' },
-        'mỹ': { icon: '🇺🇸', code: 'us', bg: 'rgba(51, 154, 240, 0.15)', color: '#339af0' },
-        'nhật bản': { icon: '🇯🇵', code: 'jp', bg: 'rgba(255, 255, 255, 0.15)', color: '#fff' },
-        'thái lan': { icon: '🇹🇭', code: 'th', bg: 'rgba(81, 207, 102, 0.15)', color: '#51cf66' },
-        'âu mỹ': { icon: '🇪🇺', code: 'eu', bg: 'rgba(132, 94, 247, 0.15)', color: '#845ef7' },
-        'đài loan': { icon: '🇹🇼', code: 'tw', bg: 'rgba(20, 184, 166, 0.15)', color: '#14b8a6' },
-        'ấn độ': { icon: '🇮🇳', code: 'in', bg: 'rgba(245, 159, 0, 0.15)', color: '#f59f00' },
-        'pháp': { icon: '🇫🇷', code: 'fr', bg: 'rgba(45, 201, 255, 0.12)', color: '#2dc9ff' },
-        'anh': { icon: '🇬🇧', code: 'gb', bg: 'rgba(77, 171, 247, 0.12)', color: '#4dabf7' }
+        // Châu 
+        'việt nam':        { icon: '🇻🇳', code: 'vn', bg: 'rgba(229,9,20,0.15)',    color: '#ff4d4d' },
+        'hàn quốc':        { icon: '🇰🇷', code: 'kr', bg: 'rgba(77,171,247,0.15)',  color: '#4dabf7' },
+        'trung quốc':      { icon: '🇨🇳', code: 'cn', bg: 'rgba(253,126,20,0.15)',  color: '#fd7e14' },
+        'nhật bản':        { icon: '🇯🇵', code: 'jp', bg: 'rgba(255,255,255,0.15)', color: '#fff' },
+        'thái lan':        { icon: '🇹🇭', code: 'th', bg: 'rgba(81,207,102,0.15)',  color: '#51cf66' },
+        'đđài loan':        { icon: '🇹🇼', code: 'tw', bg: 'rgba(20,184,166,0.15)',  color: '#14b8a6' },
+        'hồng kông':       { icon: '🇭🇰', code: 'hk', bg: 'rgba(220,38,38,0.15)',   color: '#f87171' },
+        'ấn độ':           { icon: '🇮🇳', code: 'in', bg: 'rgba(245,159,0,0.15)',   color: '#f59f00' },
+        'philippines':     { icon: '🇵🇭', code: 'ph', bg: 'rgba(59,130,246,0.15)',  color: '#60a5fa' },
+        'indonesia':       { icon: '🇮🇩', code: 'id', bg: 'rgba(239,68,68,0.15)',   color: '#f87171' },
+        'malaysia':        { icon: '🇲🇾', code: 'my', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'singapore':       { icon: '🇸🇬', code: 'sg', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'campuchia':       { icon: '🇰🇭', code: 'kh', bg: 'rgba(99,102,241,0.12)',  color: '#a5b4fc' },
+        'myanma':          { icon: '🇲🇲', code: 'mm', bg: 'rgba(234,179,8,0.12)',   color: '#fde047' },
+        'myanmar':         { icon: '🇲🇲', code: 'mm', bg: 'rgba(234,179,8,0.12)',   color: '#fde047' },
+        'lào':             { icon: '🇱🇦', code: 'la', bg: 'rgba(239,68,68,0.12)',   color: '#fca5a5' },
+        'mông cổ':         { icon: '🇲🇳', code: 'mn', bg: 'rgba(99,102,241,0.12)',  color: '#a5b4fc' },
+        'pakistan':        { icon: '🇵🇰', code: 'pk', bg: 'rgba(34,197,94,0.15)',   color: '#4ade80' },
+        'bangladesh':      { icon: '🇧🇩', code: 'bd', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'sri lanka':       { icon: '🇱🇰', code: 'lk', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'iran':            { icon: '🇮🇷', code: 'ir', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'israel':          { icon: '🇮🇱', code: 'il', bg: 'rgba(96,165,250,0.12)',  color: '#93c5fd' },
+        'thổ nhĩ kỳ':      { icon: '🇹🇷', code: 'tr', bg: 'rgba(220,38,38,0.15)',   color: '#f87171' },
+        'ả rập xê út':     { icon: '🇸🇦', code: 'sa', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        // Châu Âu
+        'mỹ':              { icon: '🇺🇸', code: 'us', bg: 'rgba(51,154,240,0.15)',  color: '#339af0' },
+        'anh':             { icon: '🇬🇧', code: 'gb', bg: 'rgba(77,171,247,0.12)',  color: '#4dabf7' },
+        'pháp':            { icon: '🇫🇷', code: 'fr', bg: 'rgba(45,201,255,0.12)',  color: '#2dc9ff' },
+        'đức':             { icon: '🇩🇪', code: 'de', bg: 'rgba(234,179,8,0.12)',   color: '#fde047' },
+        'ý':               { icon: '🇮🇹', code: 'it', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'tây ban nha':     { icon: '🇪🇸', code: 'es', bg: 'rgba(239,68,68,0.12)',   color: '#f87171' },
+        'bồ đào nha':      { icon: '🇵🇹', code: 'pt', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'nga':             { icon: '🇷🇺', code: 'ru', bg: 'rgba(239,68,68,0.12)',   color: '#f87171' },
+        'hà lan':          { icon: '🇳🇱', code: 'nl', bg: 'rgba(245,158,11,0.12)',  color: '#fbbf24' },
+        'bỉ':              { icon: '🇧🇪', code: 'be', bg: 'rgba(234,179,8,0.12)',   color: '#fde047' },
+        'thụy điển':       { icon: '🇸🇪', code: 'se', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        'đan mạch':        { icon: '🇩🇰', code: 'dk', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'nauy':            { icon: '🇳🇴', code: 'no', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'phần lan':        { icon: '🇫🇮', code: 'fi', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        'áo':              { icon: '🇦🇹', code: 'at', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'thụy sĩ':         { icon: '🇨🇭', code: 'ch', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'ba lan':          { icon: '🇵🇱', code: 'pl', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'séc':             { icon: '🇨🇿', code: 'cz', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        'hungary':         { icon: '🇭🇺', code: 'hu', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'hy lạp':          { icon: '🇬🇷', code: 'gr', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        // Châu Mỹ & Khác
+        'canada':          { icon: '🇨🇦', code: 'ca', bg: 'rgba(220,38,38,0.12)',   color: '#fca5a5' },
+        'brazil':          { icon: '🇧🇷', code: 'br', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'mexico':          { icon: '🇲🇽', code: 'mx', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'argentina':       { icon: '🇦🇷', code: 'ar', bg: 'rgba(96,165,250,0.12)',  color: '#93c5fd' },
+        'australia':       { icon: '🇦🇺', code: 'au', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        'úc':              { icon: '🇦🇺', code: 'au', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        'new zealand':     { icon: '🇳🇿', code: 'nz', bg: 'rgba(59,130,246,0.12)',  color: '#93c5fd' },
+        'nam phi':         { icon: '🇿🇦', code: 'za', bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
+        'ai cập':          { icon: '🇪🇬', code: 'eg', bg: 'rgba(234,179,8,0.12)',   color: '#fde047' },
+        // Liên minh / a quốc gia
+        'âu mỹỹ':           { icon: '🇪🇺', code: 'eu', bg: 'rgba(132,94,247,0.15)',  color: '#845ef7' },
+        'quốc tế':         { icon: '', code: '',   bg: 'rgba(148,163,184,0.12)', color: '#94a3b8' },
     };
+
 
     // 1. Tìm kiếm trong danh sách được cấu hình sẵn màu sắc đẹp
     for (const key in countries) {
@@ -1024,7 +1937,7 @@ function getCountryInfo(countryName) {
         const found = allCountries.find(c => c.name.toLowerCase() === name || (c.id && c.id.toLowerCase() === name));
         if (found && found.code) {
             return { 
-                icon: '🏳️', 
+                icon: '', 
                 code: found.code.toLowerCase(), 
                 bg: 'rgba(255,255,255,0.08)', 
                 color: '#eee' 
@@ -1033,43 +1946,130 @@ function getCountryInfo(countryName) {
     }
 
     // Mặc định cho quốc gia lạ
-    return { icon: '🏳️', bg: 'rgba(255,255,255,0.08)', color: '#eee' };
+    return { icon: '', bg: 'rgba(255,255,255,0.08)', color: '#eee' };
 }
 
 
 /**
- * Biến toàn cục lưu danh sách phim cho Admin (Bao gồm cả ẩn/chờ duyệt)
+ * Biến toàn cục lưu danh sách phim cho Admin (Bao gồm cả ẩn/ch duyệt)
  */
 let allAdminMovies = [];
 
 /**
  * Load danh sách phim cho Admin
  */
-async function loadAdminMovies() {
+async function loadAdminMovies(skipPageReset = false) {
   const tbody = document.getElementById("adminMoviesTable");
+  
+  // Kiểm tra quyền hiển thị nút Xóa tất cả phim (chỉ Super Admin mới thấy)
+  const btnDeleteAll = document.getElementById("btnDeleteAllMovies");
+  if (btnDeleteAll) {
+      if (typeof currentUser !== 'undefined' && currentUser && currentUser.email === "huynhphutrong8223@gmail.com") {
+          btnDeleteAll.style.display = "inline-flex";
+      } else {
+          btnDeleteAll.style.display = "none";
+      }
+  }
+
   if (!supabase) return;
 
   try {
-    const { data: movies, error } = await supabase
-        .from('movies')
-        .select('*, episodes(id)')
-        .order('created_at', { ascending: false })
-        .limit(200);
+    // Load tất cả phim — chỉ select cột cần, KHÔNG join episodes (tránh lag)
+    // Supabase giới hạn 1000 rows/query nên loop batch
+    let allMoviesRaw = [];
+    const BATCH = 1000;
+    let from = 0;
+    let keepFetching = true;
+    while (keepFetching) {
+        const { data: batch, error: batchErr } = await supabase
+            .from('movies')
+            .select('id, title, origin_title, poster_url, background_url, type, status, year, quality, country_id, category_ids, total_episodes, price, rating, imdb_rating, api_url_backup, cast_data, tags, versions, part, series_id, duration, age_limit, description, created_at, updated_at')
+            .order('created_at', { ascending: false })
+            .range(from, from + BATCH - 1);
+        if (batchErr) throw batchErr;
+        if (!batch || batch.length === 0) break;
+        allMoviesRaw = allMoviesRaw.concat(batch);
+        if (batch.length < BATCH) break;
+        from += BATCH;
+    }
 
-    if (error) throw error;
-    
-    // Chuẩn hóa dữ liệu và đếm số tập
-    allAdminMovies = (movies || []).map(m => {
+    // Chuẩn hóa dữ liệu
+    allAdminMovies = allMoviesRaw.map(m => {
         const normalized = typeof normalizeMovieData === 'function' ? normalizeMovieData(m) : m;
-        // Đếm số tập thực tế từ join
-        if (m.episodes && Array.isArray(m.episodes)) {
-            normalized._episodeCount = m.episodes.length;
-        }
+        normalized._episodeCount = 0; // Sẽ gán lại sau khi đếm thực tế
         return normalized;
     });
 
+    // ★ [FIX] ếm số tập THỰC TẾ trong bảng episodes cho mỗi phim (thay vì dùng total_episodes từ API)
+    try {
+        let allEpCounts = [];
+        let countFrom = 0;
+        const COUNT_BATCH = 1000;
+        while (true) {
+            const { data: countBatch, error: countErr } = await supabase
+                .from('episodes')
+                .select('movie_id')
+                .range(countFrom, countFrom + COUNT_BATCH - 1);
+            if (countErr || !countBatch || countBatch.length === 0) break;
+            allEpCounts = allEpCounts.concat(countBatch);
+            if (countBatch.length < COUNT_BATCH) break;
+            countFrom += COUNT_BATCH;
+        }
+        // ếm số tập theo movie_id
+        const epCountMap = {};
+        allEpCounts.forEach(ep => {
+            epCountMap[ep.movie_id] = (epCountMap[ep.movie_id] || 0) + 1;
+        });
+        // Gán _episodeCount thực tế vào mỗi movie
+        allAdminMovies.forEach(m => {
+            m._episodeCount = epCountMap[m.id] || 0;
+        });
+        console.log(`📊 ếm tập thực tế cho ${Object.keys(epCountMap).length} phim`);
+    } catch (e) {
+        console.warn('⚠ Không đếm được số tập thực tế:', e);
+        // Fallback: dùng total_episodes nếu không đếm được
+        allAdminMovies.forEach(m => {
+            m._episodeCount = m.totalEpisodes || m.total_episodes || 0;
+        });
+    }
+
+    // [NEW] Lấy server info nhẹ: Chỉ fetch movie_id + sources từ episode đầu tiên
+    try {
+        let allFirstEps = [];
+        let epFrom = 0;
+        const EP_BATCH = 1000;
+        while (true) {
+            const { data: epBatch, error: epErr } = await supabase
+                .from('episodes')
+                .select('movie_id, sources')
+                .eq('episode_index', 0)
+                .range(epFrom, epFrom + EP_BATCH - 1);
+            if (epErr || !epBatch || epBatch.length === 0) break;
+            allFirstEps = allFirstEps.concat(epBatch);
+            if (epBatch.length < EP_BATCH) break;
+            epFrom += EP_BATCH;
+        }
+        // Gán _serverNames vào từng movie (chuẩn hóa tên: rỗng/Unknown → KKPhim)
+        const serverInfoMap = {};
+        allFirstEps.forEach(ep => {
+            if (ep.sources && Array.isArray(ep.sources)) {
+                const servers = [...new Set(ep.sources.map(s => {
+                    const name = (s.server || '').trim();
+                    return (!name || name === 'Unknown') ? 'KKPhim' : name;
+                }))];
+                serverInfoMap[ep.movie_id] = servers;
+            }
+        });
+        allAdminMovies.forEach(m => {
+            m._serverNames = serverInfoMap[m.id] || [];
+        });
+        console.log(`📡 Server info loaded for ${Object.keys(serverInfoMap).length} movies`);
+    } catch (e) {
+        console.warn('⚠ Không load được server info:', e);
+    }
+
     if (typeof populateAdminMovieFilters === 'function') populateAdminMovieFilters();
-    filterAdminMovies();
+    filterAdminMovies(skipPageReset);
     
     const select = document.getElementById("selectMovieForEpisodes");
     if (select) {
@@ -1081,16 +2081,13 @@ async function loadAdminMovies() {
     }
 
     renderRecentMovies();
-
-    const statTotal = document.getElementById("statTotalMovies");
-    if (statTotal) statTotal.textContent = allAdminMovies.length;
   } catch (error) {
     console.error("Lỗi load admin movies Supabase:", error);
   }
 }
 
 /**
- * Helper: Parse chuỗi thời lượng (VD: "1 giờ 30 phút" hoặc "120 phút") thành {h, m}
+ * Helper: Parse chuỗi thi lượng (VD: "1 giờ 30 phút" hoặc "120 phút") thành {h, m}
  */
 function parseDuration(str) {
     let hours = 0;
@@ -1098,14 +2095,14 @@ function parseDuration(str) {
     
     if (!str) return { h: 0, m: 0 };
     
-    // Regex tìm giờ và phút
-    const hourMatch = str.match(/(\d+)\s*giờ/i);
+    // Regex tìm gi và phút
+    const hourMatch = str.match(/(\d+)\s*gi/i);
     const minuteMatch = str.match(/(\d+)\s*phút/i);
     
     if (hourMatch) hours = parseInt(hourMatch[1]);
     if (minuteMatch) minutes = parseInt(minuteMatch[1]);
     
-    // Nếu không có cả 2 mà chỉ có số (trường hợp dữ liệu cũ thô)
+    // Nếu không có cả 2 mà chỉ có số (trưng hợp dữ liệu cũ thô)
     if (!hourMatch && !minuteMatch) {
         const onlyNum = str.match(/(\d+)/);
         if (onlyNum) minutes = parseInt(onlyNum[1]);
@@ -1119,7 +2116,7 @@ function parseDuration(str) {
  */
 function formatDuration(h, m) {
     let result = [];
-    if (h > 0) result.push(`${h} giờ`);
+    if (h > 0) result.push(`${h} gi`);
     if (m > 0) result.push(`${m} phút`);
     return result.join(" ") || "";
 }
@@ -1232,7 +2229,7 @@ async function fetchMovieFromAPI() {
         let thumbUrl = movieData.thumb_url || "";
         let posterUrl = movieData.poster_url || "";
         
-        // Cdn Domain cho trường hợp trả về link tương đối
+        // Cdn Domain cho trưng hợp trả v link tương đối
         let cdnDomain = resData.APP_DOMAIN_CDN_IMAGE || (resData.data && resData.data.APP_DOMAIN_CDN_IMAGE) || resData.pathImage || "https://img.ophim.live/uploads/movies";
         cdnDomain = cdnDomain.replace(/\/$/, "");
 
@@ -1243,16 +2240,18 @@ async function fetchMovieFromAPI() {
              posterUrl = `${cdnDomain}/${posterUrl.replace(/^\//, "")}`;
         }
 
-        document.getElementById("moviePoster").value = thumbUrl;
-        document.getElementById("movieBackground").value = posterUrl;
+        // poster_url từ API = ảnh dc → dùng làm Poster
+        // thumb_url từ API = ảnh ngang → dùng làm Background/Nền
+        document.getElementById("moviePoster").value = posterUrl;
+        document.getElementById("movieBackground").value = thumbUrl;
         
         // Gán preview luôn cho sinh động
-        window.updateImagePreview(thumbUrl, 'posterPreview');
-        window.updateImagePreview(posterUrl, 'bgPreview');
+        window.updateImagePreview(posterUrl, 'posterPreview');
+        window.updateImagePreview(thumbUrl, 'bgPreview');
 
         // --- 3. FILL MÔ TẢ & CHẤT LƯỢNG ---
         let contentDesc = movieData.content || "";
-        // Content ophim trả về thường bọc thẻ <p>. Xóa mã html đi cho đẹp:
+        // Content ophim trả v thưng bc thẻ <p>. Xóa mã html đi cho đẹp:
         contentDesc = contentDesc.replace(/<[^>]*>?/gm, ''); 
         document.getElementById("movieDescription").value = contentDesc;
         
@@ -1264,7 +2263,7 @@ async function fetchMovieFromAPI() {
              document.getElementById("movieQuality").value = "FHD";
         }
 
-        // Năm phát hành, thời lượng
+        // Năm phát hành, thi lượng
         if (movieData.year) document.getElementById("movieYear").value = movieData.year;
         
         // Bóc số phút
@@ -1275,18 +2274,29 @@ async function fetchMovieFromAPI() {
         }
 
         // --- 4. MAP THỂ LOẠI (CATEGORIES) ---
-        // Tick chọn tự động các thể loại giống OPhim
+        // Tick chn tự động các thể loại giống OPhim
+        // cb.value là ID (UUID), cần tra cứu tên từ allCategories để so sánh với tên API
         if (movieData.category && Array.isArray(movieData.category)) {
-            const opCategories = movieData.category.map(c => c.name.toLowerCase());
+            const opCategories = movieData.category.map(c => c.name.toLowerCase().trim());
             const checkboxes = document.querySelectorAll('input[name="movieCategoryCheckbox"]');
             
             checkboxes.forEach(cb => {
                 cb.checked = false; // Reset
-                const catName = cb.value.toLowerCase();
-                // Check nếu tên thể loại OPhim chứa tên thể loại Web (VD: Tình Cảm Lãng Mạn -> "Tình Cảm")
+                // Tra cứu tên thể loại trong hệ thống dựa trên ID của checkbox
+                const catObj = (typeof allCategories !== 'undefined' && allCategories)
+                    ? allCategories.find(c => c.id === cb.value)
+                    : null;
+                if (!catObj) return; // Không tìm thấy thể loại trong hệ thống
+                
+                const catName = catObj.name.toLowerCase().trim();
+                // So sánh tên thể loại hệ thống với tên từ OPhim API (hỗ trợ khớp một phần)
                 const isMatch = opCategories.some(opCat => opCat.includes(catName) || catName.includes(opCat));
                 if (isMatch) cb.checked = true;
             });
+            
+            // Log kết quả để debug
+            const checkedCount = document.querySelectorAll('input[name="movieCategoryCheckbox"]:checked').length;
+            console.log(`🎬 [API] ã auto-check ${checkedCount} thể loại từ API:`, opCategories);
         }
 
         // --- 5. MAP QUỐC GIA ---
@@ -1302,14 +2312,57 @@ async function fetchMovieFromAPI() {
             }
         }
 
-        // --- 6. KIỂU PHIM BỘ HAY PHIM LẺ ---
-        if (movieData.type === "series") {
+        // --- 5b. CHẶN QUỐC GIA (giống logic auto import) ---
+        if (typeof _importState !== 'undefined' && _importState.excludeCountryEnabled && _importState.excludeCountryText) {
+            const cText = (movieData.country || []).map(c => c.name).join(', ');
+            if (cText) {
+                const normalizeStr = (str) => {
+                    if (!str) return '';
+                    return str.normalize('NFD')
+                              .replace(/[\u0300-\u036f]/g, '')
+                              .toLowerCase()
+                              .replace(/đ/g, 'd')
+                              .replace(/[^a-z0-9]/g, '');
+                };
+                const blockedCountries = _importState.excludeCountryText.split(',').map(s => normalizeStr(s)).filter(Boolean);
+                const movieCountries = normalizeStr(cText);
+                const isBlocked = blockedCountries.some(bc => movieCountries.includes(bc));
+                if (isBlocked) {
+                    // Chặn cứng: phim thuộc quốc gia bị chặn → không điền form, bỏ qua luôn
+                    showLoading(false);
+                    showNotification(`🚫 Phim "${movieData.name}" thuộc quốc gia bị chặn (${cText}). Đã bỏ qua!`, "warning", 5000);
+                    console.warn(`🚫 [Chặn quốc gia] "${movieData.name}" thuộc ${cText} → bỏ qua.`);
+                    return;
+                }
+            }
+        }
+
+        // --- 6. KIỂU PHIM BỘ HAY PHIM LẺ + TỰ ĐỘNG ÉP KIỂU NẾU SỐ TẬP > 1 ---
+        // Đếm số tập thực tế từ dữ liệu API
+        let _actualEpsCount = 0;
+        const _tempEpData = episodesData || movieData.episodes || [];
+        if (Array.isArray(_tempEpData) && _tempEpData.length > 0) {
+            const firstSrv = _tempEpData[0];
+            if (firstSrv.server_data && Array.isArray(firstSrv.server_data)) {
+                _actualEpsCount = firstSrv.server_data.length;
+            } else if (firstSrv.items && Array.isArray(firstSrv.items)) {
+                _actualEpsCount = firstSrv.items.length;
+            }
+        }
+        const _cTotal = parseInt(movieData.episode_total) || 0;
+        const _maxEps = Math.max(_cTotal, _actualEpsCount);
+
+        if (movieData.type === "series" || _maxEps > 1) {
             document.getElementById("movieType").value = "series";
+            if (movieData.type !== "series" && _maxEps > 1) {
+                showNotification(`⚠️ API khai báo Phim lẻ nhưng có ${_maxEps} tập → Tự động chuyển thành Phim bộ`, "warning", 5000);
+                console.warn(`⚠️ [Ép kiểu] Phim "${movieData.name}" khai báo single nhưng có ${_maxEps} tập → ép thành series`);
+            }
         } else {
             document.getElementById("movieType").value = "single";
         }
         
-        // --- 8. PHÂN TÍCH DIỄN VIÊN TỪ API ---
+        // --- 8. PHÂN TCH DIỄN VIÊN TỪ API ---
         if (movieData.actor && Array.isArray(movieData.actor)) {
             const actorNames = movieData.actor.filter(n => n.toLowerCase() !== "đang cập nhật");
             if (typeof initSmartActorsFromCastString === "function") {
@@ -1319,7 +2372,7 @@ async function fetchMovieFromAPI() {
             }
         }
         
-        // --- 7. TẠO TỰ ĐỘNG DANH SÁCH TẬP PHIM SERVER DATA (Trick Save API) ---
+        // --- 7. TẠO TỰ ỘNG DANH SCH TẬP PHIM SERVER DATA (Trick Save API) ---
         let svData = null;
         if (episodesData && episodesData.length > 0) {
             svData = episodesData[0].server_data;
@@ -1332,7 +2385,7 @@ async function fetchMovieFromAPI() {
             // Do Admin form chưa hỗ trợ Save Episdoes cùng lúc với Create Movie. 
             // Tốt nhất là hiện Alert nhắc Admin lấy List Link M3U8 để thêm sau
             
-            showNotification(`Đã tự động điền Form! Phim này có ${svData.length} tập. Vui lòng bấm LƯU để tạo phim trước, sau đó chép Link thủ công sang nút THÊM TẬP!`, "success", 8000);
+            showNotification(`ã tự động đin Form! Phim này có ${svData.length} tập. Vui lòng bấm LƯU để tạo phim trước, sau đó chép Link thủ công sang nút THÊM TẬP!`, "success", 8000);
             
             // Lưu tạm list server_data raw vào bộ nhớ window cho phép copy paste nếu cần
             window.tempOphimEpisodes = svData; 
@@ -1341,7 +2394,7 @@ async function fetchMovieFromAPI() {
              showNotification("Tải dữ liệu thông tin phim thành công!", "success");
         }
         
-        // --- 9. COPY LINK TỪ FETCH XUỐNG DỰ PHÒNG ---
+        // --- 9. COPY LINK TỪ FETCH XUNG DỰ PHÒNG ---
         document.getElementById("movieApiUrlBackup").value = url;
         
         // --- 10. TỰ SINH MÃ BỘ PHIM TỪ TÊN (MỚI) ---
@@ -1355,14 +2408,14 @@ async function fetchMovieFromAPI() {
         
     } catch (err) {
         console.error("Lỗi Fetch Data OPhim:", err);
-        showNotification("Lỗi gọi API: " + err.message, "error");
+        showNotification("Lỗi gi API: " + err.message, "error");
     } finally {
         showLoading(false);
     }
 }
 
 /**
- * Ẩn hiện trường tổng số tập dựa trên loại phim
+ * Ẩn hiện trưng tổng số tập dựa trên loại phim
  */
 function toggleTotalEpsField(type) {
     const group = document.getElementById("totalEpisodesGroup");
@@ -1384,10 +2437,10 @@ function openMovieModal(movieId = null) {
   const categoryContainer = document.getElementById("movieCategoryContainer");
   categoryContainer.innerHTML = allCategories
       .map((c) => `
-        <div class="checkbox-item" style="margin-bottom: 5px;">
-            <label style="cursor: pointer; display: flex; align-items: center;">
-                <input type="checkbox" name="movieCategoryCheckbox" value="${c.id}" style="margin-right: 8px;">
-                ${c.name}
+        <div class="checkbox-item">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.9rem; white-space: nowrap; padding: 3px 0;">
+                <input type="checkbox" name="movieCategoryCheckbox" value="${c.id}" style="width: 16px; height: 16px; flex-shrink: 0; accent-color: var(--accent-primary, #9b59b6); cursor: pointer;">
+                <span>${c.name}</span>
             </label>
         </div>
       `)
@@ -1395,7 +2448,7 @@ function openMovieModal(movieId = null) {
 
     const countrySelect = document.getElementById("movieCountry");
     countrySelect.innerHTML =
-    '<option value="">Chọn quốc gia</option>' +
+    '<option value="">Chn quốc gia</option>' +
     allCountries
       .map((c) => `<option value="${c.id}">${c.name}</option>`)
       .join("");
@@ -1423,7 +2476,7 @@ function openMovieModal(movieId = null) {
       const match = partStr.match(/^(Phần|Season|Chapter|Quyển|Tập)\s+(\d+)$/);
 
       if (match) {
-          // Khớp mẫu -> Chọn Type và điền Number
+          // Khớp mẫu -> Chn Type và đin Number
           partTypeSelect.value = match[1];
           partNumberInput.value = match[2];
           partCustomInput.value = "";
@@ -1433,7 +2486,7 @@ function openMovieModal(movieId = null) {
           partNumberInput.value = "1";
           partCustomInput.value = "";
       } else {
-          // Không khớp (VD: "Tập Đặc Biệt") -> Chọn Custom
+          // Không khớp (VD: "Tập ặc Biệt") -> Chn Custom
           partTypeSelect.value = "custom";
           partNumberInput.value = "1";
           partCustomInput.value = partStr;
@@ -1458,7 +2511,7 @@ function openMovieModal(movieId = null) {
           }
       }
 
-      // Gán link ảnh nền vào ô input và cập nhật preview
+      // Gán link ảnh nn vào ô input và cập nhật preview
       const bgUrlVal = movie.backgroundUrl || movie.background_url || "";
       document.getElementById("movieBackground").value = bgUrlVal;
       // Cập nhật preview cho background
@@ -1478,30 +2531,27 @@ function openMovieModal(movieId = null) {
       document.getElementById("movieOriginTitle").value = movie.originTitle || movie.origin_title || "";
       document.getElementById("movieApiUrlBackup").value = movie.apiUrlBackup || movie.api_url_backup || "";
       
-      // Xử lý Versions (Checkboxes + Custom)
-      const versionsStr = movie.versions || "";
-      const currentVersions = versionsStr.split(",").map(v => v.trim()).filter(v => v);
-      const defaultVersions = ["Vietsub", "Thuyết minh", "Lồng tiếng"];
+      // Xử lý Versions (Checkboxes + Custom) - versions là text[]
+      const versionsRaw = movie.versions || [];
+      // Hỗ trợ cả array (mới) và string (fallback cũ)
+      const currentVersions = Array.isArray(versionsRaw)
+          ? versionsRaw
+          : String(versionsRaw).split(',').map(v => v.trim()).filter(Boolean);
+      const defaultVersions = ['Vietsub', 'Thuyết minh', 'Lồng tiếng'];
       const vCheckboxes = document.querySelectorAll('input[name="movieVersionCheckbox"]');
       let customVersions = [];
 
       vCheckboxes.forEach(cb => {
-          if (currentVersions.includes(cb.value)) {
-              cb.checked = true;
-          } else {
-              cb.checked = false;
-          }
+          cb.checked = currentVersions.includes(cb.value);
       });
 
       // Tìm các version không thuộc mặc định
       currentVersions.forEach(v => {
-          if (!defaultVersions.includes(v)) {
-              customVersions.push(v);
-          }
+          if (!defaultVersions.includes(v)) customVersions.push(v);
       });
-      document.getElementById("movieVersionsCustom").value = customVersions.join(", ");
+      document.getElementById('movieVersionsCustom').value = customVersions.join(', ');
 
-      // Xử lý Thời lượng (Smart Input)
+      // Xử lý Thi lượng (Smart Input)
       const dur = parseDuration(movie.duration || "");
       document.getElementById("movieDurationHour").value = dur.h || "";
       document.getElementById("movieDurationMinute").value = dur.m || "";
@@ -1509,13 +2559,13 @@ function openMovieModal(movieId = null) {
       document.getElementById("movieAgeLimit").value = movie.ageLimit || "P";
       document.getElementById("movieQuality").value = movie.quality || "HD";
 
-      // Xử lý Mult-Genre Checkboxes (Ưu tiên ID)
-      const savedCategoryIds = movie.category_id ? [movie.category_id] : (movie.categories || []);
+      // Xử lý Mult-Genre Checkboxes - đc từ category_ids (mảng)
+      const savedCategoryIds = (movie.category_ids && movie.category_ids.length > 0)
+          ? movie.category_ids
+          : (movie.categories || []);
       const checkboxes = document.querySelectorAll('input[name="movieCategoryCheckbox"]');
       checkboxes.forEach(cb => {
-          if (savedCategoryIds.includes(cb.value)) {
-              cb.checked = true;
-          }
+          cb.checked = savedCategoryIds.includes(cb.value);
       });
 
       document.getElementById("movieCountry").value = movie.country_id || movie.country || "";
@@ -1570,7 +2620,7 @@ function openMovieModal(movieId = null) {
     toggleTotalEpsField("series"); // Default to series
     document.getElementById("movieTotalEpisodes").value = ""; // Reset total episodes
     
-    // Mặc định Phần/Mùa: Chọn Trống
+    // Mặc định Phần/Mùa: Chn Trống
     document.getElementById("moviePartType").value = "";
     document.getElementById("moviePartNumber").value = "1";
     document.getElementById("moviePartCustom").value = "";
@@ -1592,7 +2642,7 @@ function openMovieModal(movieId = null) {
     });
     document.getElementById("movieVersionsCustom").value = "";
 
-    // Reset Thời lượng
+    // Reset Thi lượng
     document.getElementById("movieDurationHour").value = "";
     document.getElementById("movieDurationMinute").value = "";
 
@@ -1619,10 +2669,38 @@ async function handleMovieSubmit(event) {
     return;
   }
 
-  // Chờ tải ảnh lên Cloudinary nếu có (Deduplicate)
+  // 👇 HIỂN THỊ LOADING NGAY LẬP TỨC 👇
+  showLoading(true, "Đang xử lý dữ liệu phim...");
+
+  // Ch tải ảnh lên Cloudinary nếu có (Deduplicate)
   if (typeof window.uploadPendingImages === "function") {
       const uploadSuccess = await window.uploadPendingImages();
-      if (!uploadSuccess) return; 
+      if (!uploadSuccess) {
+          showLoading(false);
+          return; 
+      }
+  }
+
+  // Nếu thêm phim mới (chưa có movieId), tạo ID sớm để R2 upload dùng đúng folder
+  // Lưu vào biến tạm, KHÔNG gán vào hidden input (để tránh nhầm sang nhánh UPDATE)
+  const existingMovieId = document.getElementById("movieId").value;
+  if (!existingMovieId) {
+      const title = document.getElementById("movieTitle").value;
+      if (title) {
+          window._preGeneratedMovieId = generateSeriesIdFromTitle(title) + '-' + Date.now().toString().slice(-8);
+      }
+  } else {
+      window._preGeneratedMovieId = null; // Reset nếu đang edit
+  }
+
+  // Ch tải ảnh lên Cloudflare R2 nếu có (Thực sự upload khi bấm Lưu)
+  if (typeof window.uploadPendingR2Images === "function") {
+      showLoading(true, "Đang upload ảnh lên Server...");
+      const r2Success = await window.uploadPendingR2Images();
+      if (!r2Success) {
+          showLoading(false);
+          return;
+      }
   }
 
   const movieId = document.getElementById("movieId").value;
@@ -1632,10 +2710,12 @@ async function handleMovieSubmit(event) {
                                   .map(cb => cb.value);
   
   if (selectedCategories.length === 0) {
+      showLoading(false);
       showNotification("Vui lòng chọn ít nhất 1 thể loại!", "error");
       return;
   }
 
+  showLoading(true, "Đang đồng bộ dữ liệu...");
   const movieData = {
     title: document.getElementById("movieTitle").value,
     origin_title: document.getElementById("movieOriginTitle").value || "",
@@ -1689,10 +2769,10 @@ async function handleMovieSubmit(event) {
 
     // --- [FIX] CHUẨN HÓA DỮ LIỆU TRƯỚC KHI GỬI LÊN SUPABASE ---
     const whitelist = [
-        'id', 'title', 'origin_title', 'poster_url', 'background_url', 'description', 
+        'id', 'slug', 'title', 'origin_title', 'poster_url', 'background_url', 'description', 
         'year', 'type', 'duration', 'quality', 'status', 'age_limit', 'series_id', 
-        'price', 'rating', 'total_episodes', 'api_url_backup', 'cast_data', 'tags', 
-        'category_id', 'country_id', 'created_at', 'updated_at', 'view_count'
+        'price', 'rating', 'tmdb_id', 'total_episodes', 'api_url_backup', 'cast_data', 'tags', 
+        'versions', 'category_ids', 'country_id', 'created_at', 'updated_at'
     ];
 
     const finalMovieData = {};
@@ -1700,8 +2780,8 @@ async function handleMovieSubmit(event) {
         if (movieData[key] !== undefined) {
             let value = movieData[key];
             
-            // Ép kiểu cho các trường số (Tránh lỗi 22P02 của PostgreSQL khi gửi "")
-            const numericFields = ['year', 'price', 'rating', 'total_episodes', 'view_count'];
+            // Ép kiểu cho các trưng số (Tránh lỗi 22P02 của PostgreSQL khi gửi "")
+            const numericFields = ['year', 'price', 'rating', 'total_episodes'];
             if (numericFields.includes(key)) {
                 if (value === "" || value === null || isNaN(value)) {
                     value = null;
@@ -1714,11 +2794,19 @@ async function handleMovieSubmit(event) {
         }
     });
 
-    // 1. Đồng bộ Category & Country (Chỉ lấy 1 cái đầu tiên cho category_id)
+    // 1. Đồng bộ Category & Country
     if (selectedCategories && selectedCategories.length > 0) {
-        finalMovieData.category_id = selectedCategories[0];
+        finalMovieData.category_ids = selectedCategories; // Lưu tất cả thể loại dạng mảng
     }
     finalMovieData.country_id = document.getElementById("movieCountry").value;
+
+    // 1b. Versions từ checkbox - lưu dạng array (text[])
+    try {
+        let vels = Array.from(document.querySelectorAll('input[name="movieVersionCheckbox"]:checked')).map(cb => cb.value);
+        const custom = document.getElementById('movieVersionsCustom').value.trim();
+        if (custom) vels.push(...custom.split(',').map(s => s.trim()).filter(Boolean));
+        finalMovieData.versions = [...new Set(vels)]; // Lưu là array
+    } catch(e) {}
 
     // Tự động tạo diễn viên mới và gán vào cast_data
     try {
@@ -1726,11 +2814,11 @@ async function handleMovieSubmit(event) {
         const castData = await autoCreateNewActors(castString);
         finalMovieData.cast_data = castData;
     } catch (e) {
-        console.warn("⚠️ Không thể tạo diễn viên tự động:", e);
+        console.warn("⚠ Không thể tạo diễn viên tự động:", e);
     }
 
     try {
-        showLoading(true, "Đang lưu...");
+        showLoading(true, "Đang lưu vào kho dữ liệu...");
 
         if (movieId) {
             // Cập nhật
@@ -1741,12 +2829,17 @@ async function handleMovieSubmit(event) {
             }
             showNotification("Đã cập nhật phim!", "success");
         } else {
-            // Thêm mới - Cần tạo ID nếu chưa có
-            finalMovieData.id = generateSeriesIdFromTitle(movieData.title) + '-' + Math.floor(Math.random() * 1000);
-            finalMovieData.view_count = 0;
+            // Thêm mới - Dùng ID đã sinh sớm (trước upload R2) hoặc tạo mới nếu chưa có
+            finalMovieData.id = window._preGeneratedMovieId || (generateSeriesIdFromTitle(movieData.title) + '-' + Date.now().toString().slice(-8));
+            window._preGeneratedMovieId = null; // Reset sau khi dùng
+
             finalMovieData.rating = 0;
             
-            console.log("DEBUG: Đang tạo phim mới với ID:", finalMovieData.id, finalMovieData);
+            // ★ LỚP 2: Tự sinh slug cho phim thêm thủ công (chống trùng cấp DB)
+            if (!finalMovieData.slug) {
+                finalMovieData.slug = generateSeriesIdFromTitle(movieData.title) || finalMovieData.id;
+            }
+
             const { error } = await supabase.from('movies').insert(finalMovieData);
             if (error) {
                 console.error("Lỗi thêm phim mới:", error);
@@ -1766,8 +2859,15 @@ async function handleMovieSubmit(event) {
         notifyDataChange("movies"); 
         closeModal("movieModal");
 
+        // Lưu lại trang hiện tại để sau khi reload không bị nhảy về trang 1
+        const _savedMoviePage = currentAdminMoviePage || 1;
+
         if (typeof loadMovies === 'function') await loadMovies();
-        await loadAdminMovies();
+        // Truyền skipPageReset=true để loadAdminMovies không reset trang về 1
+        await loadAdminMovies(true);
+
+        // Đảm bảo trang không bị thay đổi (phòng hờ)
+        currentAdminMoviePage = _savedMoviePage;
     } catch (error) {
         console.error("Lỗi chi tiết Supabase:", error);
         showNotification(`Lỗi: ${error.message || 'Không thể lưu phim'}`, "error");
@@ -1839,11 +2939,24 @@ function closeSeriesIdSuggestions() {
 function generateSeriesIdFromTitle(title) {
     if (!title) return "";
     
-    // Tách lấy phần tên gốc trước dấu : hoặc -
-    let baseTitle = title.split(":")[0].split("-")[0].trim();
+    // Giữ toàn bộ tên phim (không cắt tại dấu : hoặc - như trước)
+    let baseTitle = title.trim();
     
-    // Loại bỏ các chữ số La Mã và số thường ở cuối (Phần 1, Season II, ...)
-    baseTitle = baseTitle.replace(/(\s+)(\d+|I|II|III|IV|V)+$/i, "").trim();
+    // Ngưỡng tối đa: số > 30 thưng là tên phim (VD: "Xin Chào 1983"), KHÔNG phải phần/mùa
+    const MAX_PART = 30;
+    
+    // Loại bỏ từ khóa Phần/Season/Mùa/Part/Quyển/Kỳ/Vol... kèm số (VD: "Phần 2", "Season 3", "Vol. 2")
+    baseTitle = baseTitle.replace(/(\s+)(Phần|Season|Mùa|Part|Quyển|Kỳ|Chapter|Vol(?:ume)?\.?|Series|Cour)\s*(\d+|I{1,3}V?|V?I{1,3}|X{1,3})/i, "").trim();
+    // Loại bỏ shorthand S02, SS2 ở cuối
+    baseTitle = baseTitle.replace(/\s+SS?\d+$/i, "").trim();
+    
+    // Loại bỏ số La Mã hoặc số nhỏ ở cuối (VD: "Iron Man 2") — CHỈ khi số <= MAX_PART
+    baseTitle = baseTitle.replace(/(\s+)(I|II|III|IV|V)$/i, "").trim();
+    baseTitle = baseTitle.replace(/(\s+)(\d+)$/i, (match, space, numStr) => {
+        const num = parseInt(numStr);
+        // Chỉ xóa nếu là số nh (phần/mùa), giữ nguyên số lớn (tên phim VD: 1983, 2024)
+        return (num <= MAX_PART) ? "" : match;
+    }).trim();
 
     return baseTitle
         .toLowerCase()
@@ -1892,16 +3005,59 @@ async function deleteMovie(movieId) {
   if (!supabase) return;
 
   try {
-    showLoading(true, "Đang xóa...");
+    showLoading(true, "Đang xử lý dọn dẹp và xóa phim...");
 
+    // 1. Lấy thông tin phim trước để lấy URL ảnh R2 (nếu có) để xóa file vật lý
+    const { data: movie } = await supabase.from('movies').select('poster_url, background_url').eq('id', movieId).single();
+    
+    // 2. Xóa ảnh trên Cloudflare R2 nếu có
+    if (movie) {
+        if (movie.poster_url) await window.deleteImageFromR2(movie.poster_url);
+        if (movie.background_url) await window.deleteImageFromR2(movie.background_url);
+    }
+
+    // 3. Xóa dữ liệu rác trong bảng notifications (giữ lại code này vì JSONB không hỗ trợ Cascade SQL)
+    try {
+        await supabase.from('notifications').delete().contains('metadata', { movie_id: movieId });
+    } catch (e) { console.warn("Lỗi dọn rác notifications:", e); }
+
+    // 3b. Xóa error_reports liên quan đến phim (tránh lỗi foreign key constraint)
+    try {
+        await supabase.from('error_reports').delete().eq('movie_id', movieId);
+    } catch (e) { console.warn("Lỗi dọn rác error_reports:", e); }
+
+    // 4. Xóa phim khi Database
     const { error } = await supabase.from('movies').delete().eq('id', movieId);
     if (error) throw error;
 
-    showNotification("Đã xóa phim!", "success");
+    showNotification("Đã xóa phim và dọn dẹp ảnh R2 (nếu có)!", "success");
     notifyDataChange("movies"); 
 
-    if (typeof loadMovies === 'function') await loadMovies();
-    await loadAdminMovies();
+    // ★ Nếu đang ở chế độ lọc phim trùng → chỉ bỏ phim vừa xóa, giữ danh sách lọc
+    if (_isDuplicateFilterActive) {
+        // Xóa phim khi mảng cache local (không cần reload toàn bộ từ DB)
+        allAdminMovies = (allAdminMovies || []).filter(m => m.id !== movieId);
+        // Re-scaẨn danh sách trùng từ mảng đã cập nhật
+        const duplicates = _findDuplicateMovies(allAdminMovies);
+        if (duplicates.length === 0) {
+            showNotification('✅ Đã xóa hết phim trùng! Quay về danh sách bình thường.', 'success');
+            _isDuplicateFilterActive = false;
+            const btn = document.getElementById('btnFilterDuplicates');
+            if (btn) {
+                btn.style.background = 'rgba(255, 152, 0, 0.15)';
+                btn.style.borderColor = 'rgba(255, 152, 0, 0.35)';
+                btn.innerHTML = '<i class="fas fa-clone"></i> Lọc phim trùng';
+            }
+            filterAdminMovies();
+        } else {
+            renderAdminMoviesList(duplicates);
+            updateAdminMovieStats(duplicates);
+        }
+        if (typeof loadMovies === 'function') loadMovies(); // Cập nhật frontend
+    } else {
+        if (typeof loadMovies === 'function') await loadMovies();
+        await loadAdminMovies();
+    }
   } catch (error) {
     console.error("Lỗi xóa phim Supabase:", error);
     showNotification("Không thể xóa phim!", "error");
@@ -1909,1445 +3065,97 @@ async function deleteMovie(movieId) {
     showLoading(false);
   }
 }
-/**
- * Lọc phim trong dropdown chọn phim (Quản lý Tập)
- */
-/**
- * Lọc phim và hiển thị Grid chọn phim (Quản lý Tập)
- */
-function filterEpisodeMovies() {
-  const searchInput = document.getElementById("episodeMovieSearch");
-  const sortSelect = document.getElementById("episodeMovieSort");
-  const alphabetSelect = document.getElementById("episodeMovieAlphabet");
-  const grid = document.getElementById("movieSelectionGrid");
-  
-  if (!searchInput || !grid) return;
-
-  const searchText = searchInput.value.toLowerCase().trim();
-  const sortOrder = sortSelect ? sortSelect.value : "newest";
-  const alphabetFilter = alphabetSelect ? alphabetSelect.value : "";
-  
-  // Lọc phim từ allAdminMovies
-  let filteredMovies = (allAdminMovies || []).filter(m => {
-    const matchText = m.title.toLowerCase().includes(searchText);
-    
-    let matchAlphabet = true;
-    if (alphabetFilter) {
-        const firstChar = m.title.trim().charAt(0).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        if (alphabetFilter === "A-D") matchAlphabet = "ABCD".includes(firstChar);
-        else if (alphabetFilter === "E-H") matchAlphabet = "EFGH".includes(firstChar);
-        else if (alphabetFilter === "I-L") matchAlphabet = "IJKL".includes(firstChar);
-        else if (alphabetFilter === "M-P") matchAlphabet = "MNOP".includes(firstChar);
-        else if (alphabetFilter === "Q-T") matchAlphabet = "QRST".includes(firstChar);
-        else if (alphabetFilter === "U-Z") matchAlphabet = "UVWXYZ".includes(firstChar);
-        else if (alphabetFilter === "others") matchAlphabet = !/^[A-Z]$/.test(firstChar);
-    }
-
-    return matchText && matchAlphabet;
-  });
-
-  // Sắp xếp
-  filteredMovies.sort((a, b) => {
-    const timeA = a.createdAt ? (a.createdAt.seconds || new Date(a.createdAt).getTime() / 1000 || 0) : 0;
-    const timeB = b.createdAt ? (b.createdAt.seconds || new Date(b.createdAt).getTime() / 1000 || 0) : 0;
-    
-    if (sortOrder === "newest") return timeB - timeA;
-    if (sortOrder === "oldest") return timeA - timeB;
-    return 0;
-  });
-
-  // Render Grid
-  renderMovieSelectionGrid(filteredMovies);
-}
 
 /**
- * Render Grid danh sách phim để chọn
+ * Xóa toàn bộ phim trong Database (Làm sạch hoàn toàn)
  */
-function renderMovieSelectionGrid(movies) {
-    const grid = document.getElementById("movieSelectionGrid");
-    if (!grid) return;
-
-    if (!movies || movies.length === 0) {
-        grid.innerHTML = `
-            <div class="text-center py-5 w-100" style="grid-column: 1/-1; opacity: 0.6;">
-                <i class="fas fa-search fa-2x mb-2"></i>
-                <p>Không tìm thấy phim nào khớp với bộ lọc.</p>
-            </div>
-        `;
-        return;
-    }
-
-    grid.innerHTML = movies.map(m => {
-        const currentEps = m._episodeCount || (m.episodes ? m.episodes.length : 0);
-        const totalEps = parseInt(m.totalEpisodes || m.total_episodes) || 0;
-        
-        let statusHtml = "";
-        let badgeClass = "";
-        let badgeText = "";
-
-        if (currentEps === 0) {
-            badgeClass = "bg-danger";
-            badgeText = "CHƯA CÓ TẬP";
-        } else if (m.type === 'series' && currentEps < totalEps) {
-            badgeClass = "bg-warning text-dark";
-            badgeText = `ĐANG CẬP NHẬT (${currentEps}/${totalEps})`;
-        } else if (m.type === 'series' && currentEps >= totalEps) {
-            badgeClass = "bg-success";
-            badgeText = `HOÀN TẤT (${currentEps}/${totalEps})`;
-        } else if (m.type === 'single') {
-            badgeClass = "bg-info text-dark";
-            badgeText = "PHIM LẺ";
-        }
-
-        if (badgeText) {
-            statusHtml = `<span class="status-badge ${badgeClass}">${badgeText}</span>`;
-        }
-
-        return `
-            <div class="movie-selection-card" onclick="loadEpisodesForMovie('${m.id}')">
-                <div class="poster-wrapper">
-                    ${statusHtml}
-                    <img src="${m.posterUrl || m.poster_url || ''}" alt="${m.title}" loading="lazy" onerror="this.src='https://placehold.co/200x300?text=No+Poster'">
-                </div>
-                <div class="info">
-                    <div class="title" title="${m.title}">${m.title}</div>
-                    <div class="stats">
-                        <i class="fas fa-calendar-alt"></i> ${m.year || 'N/A'} • 
-                        <i class="fas fa-eye"></i> ${formatNumber(m.views || 0)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join("");
-}
-
-/**
- * Quay lại bảng chọn phim
- */
-function goBackToMovieSelection() {
-    selectedMovieForEpisodes = null;
-    document.getElementById("movieSelectionSection").classList.remove("hidden");
-    document.getElementById("episodesManagement").classList.add("hidden");
-    
-    // Refresh grid để đảm bảo data mới nhất
-    filterEpisodeMovies();
-}
-
-/**
- * Load tập phim cho phim đã chọn
- */
-async function loadEpisodesForMovie(movieIdFromGrid, resetPage = true) {
-  const movieId = movieIdFromGrid || document.getElementById("selectMovieForEpisodes").value;
-  const management = document.getElementById("episodesManagement");
-  const selectionSection = document.getElementById("movieSelectionSection");
-  const tbody = document.getElementById("adminEpisodesTable");
-
-  if (!movieId || !supabase) {
-    if (!movieId) {
-        management?.classList.add("hidden");
-        selectionSection?.classList.remove("hidden");
-    }
-    return;
-  }
-
-  if (resetPage) currentAdminEpisodePage = 1;
-  selectedMovieForEpisodes = movieId;
-  
-  management.classList.remove("hidden");
-  selectionSection.classList.add("hidden");
-
-  try {
-      // 1. Fetch Movie
-      const { data: freshMovie, error: movieError } = await supabase
-          .from('movies')
-          .select('*')
-          .eq('id', movieId)
-          .single();
-
-      if (movieError) throw movieError;
-      if (!freshMovie) return;
-
-      // 2. Fetch Episodes
-      const { data: episodes, error: epError } = await supabase
-          .from('episodes')
-          .select('*')
-          .eq('movie_id', movieId)
-          .order('episode_number', { ascending: true });
-
-      if (epError) throw epError;
-
-      const fullMovieData = { ...freshMovie, episodes: episodes || [] };
-      
-      // Update global allMovies
-      const mIdx = allMovies.findIndex(m => m.id === movieId);
-      if (mIdx !== -1) {
-          allMovies[mIdx] = fullMovieData;
-      } else {
-          allMovies.push(fullMovieData);
-      }
-      
-      const titleEl = document.getElementById("currentMovieEpisodesTitle");
-      if (titleEl) titleEl.innerHTML = `Danh sách tập: <span style="color: #f1c40f; font-weight: bold;">${freshMovie.title}</span>`;
-
-      const totalEpisodesInput = document.getElementById("totalEpisodesInput");
-      const totalEpisodesContainer = document.getElementById("totalEpisodesContainer");
-      const badge = document.getElementById("episodeStatusBadge");
-      
-      if (totalEpisodesContainer) {
-          totalEpisodesContainer.style.display = freshMovie.type === 'single' ? 'none' : 'flex';
-      }
-      if (badge) {
-          badge.style.display = freshMovie.type === 'single' ? 'none' : 'inline-block';
-      }
-
-      if (totalEpisodesInput) {
-          totalEpisodesInput.value = freshMovie.total_episodes || "";
-      }
-      updateEpisodeStatusBadge(fullMovieData.episodes.length, freshMovie.total_episodes);
-
-      // --- LOGIC PHÂN TRANG ---
-      const totalItems = fullMovieData.episodes.length;
-      const perPage = adminPerPage; 
-      const totalPages = Math.ceil(totalItems / perPage);
-      
-      if (currentAdminEpisodePage > totalPages && totalPages > 0) currentAdminEpisodePage = totalPages;
-      if (currentAdminEpisodePage < 1) currentAdminEpisodePage = 1;
-
-      const startIndex = (currentAdminEpisodePage - 1) * perPage;
-      const paginatedEpisodes = fullMovieData.episodes.slice(startIndex, startIndex + perPage);
-
-      if (totalItems === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center">Chưa có tập nào</td></tr>';
-        const paginationContainer = document.getElementById("adminEpisodePagination");
-        if (paginationContainer) paginationContainer.innerHTML = "";
-        return;
-      }
-
-      const isSingle = freshMovie.type === 'single';
-      
-      tbody.innerHTML = paginatedEpisodes
-        .map(
-          (ep, locIdx) => {
-            const globalIdx = startIndex + locIdx;
-            return `
-              <tr data-index="${globalIdx}">
-                  <td>
-                      <input type="checkbox" class="episode-checkbox" data-index="${globalIdx}" onclick="updateEpisodeSelection()">
-                  </td>
-                  <td class="drag-handle-cell">
-                      ${!isSingle ? '<i class="fas fa-grip-lines drag-handle"></i>' : ""}
-                  </td>
-                  <td>
-                      <input type="text" class="quick-edit-input ${isSingle ? 'is-single' : ''}" 
-                        value="${ep.episode_name || ep.episode_number || ep.episodeNumber || ""}" 
-                        onblur="saveQuickEditEpisodeNumber(${globalIdx}, this.value)"
-                        title="Sửa nhanh tên tập">
-                  </td>
-                  <td>${ep.sources ? ep.sources.length + " sources" : "N/A"}</td>
-                  <td>${ep.duration || "N/A"}</td>
-                  <td>${ep.quality || "HD"}</td>
-                  <td>
-                      <button class="btn btn-sm btn-secondary" onclick="editEpisode(${globalIdx})" title="Sửa">
-                          <i class="fas fa-edit"></i>
-                      </button>
-                      <button class="btn btn-sm btn-danger" onclick="deleteEpisode(${globalIdx})" title="Xóa">
-                          <i class="fas fa-trash"></i>
-                      </button>
-                  </td>
-              </tr>
-          `;
-          }
-        )
-        .join("");
-
-      renderAdminPagination("adminEpisodePagination", totalItems, currentAdminEpisodePage, perPage, "changeAdminEpisodePage", "tập");
-
-      if (!isSingle) {
-          initEpisodesSortable();
-      }
-      
-      clearEpisodeSelection();
-  } catch (error) {
-      console.error("Error loading episodes Supabase:", error);
-      showNotification("Lỗi tải danh sách tập phim", "error");
-  }
-}
-
-/**
- * Chuyển trang Tập phim
- */
-window.changeAdminEpisodePage = function(page) {
-    currentAdminEpisodePage = page;
-    loadEpisodesForMovie(selectedMovieForEpisodes, false);
-};
-
-/**
- * Lưu tổng số tập vào Supabase
- */
-async function saveTotalEpisodes() {
-  const movieId = selectedMovieForEpisodes || document.getElementById("selectMovieForEpisodes").value;
-  if (!movieId || !supabase) return;
-  
-  const input = document.getElementById("totalEpisodesInput");
-  const totalEpisodes = parseInt(input.value) || 0;
-  
-  try {
-    const { error } = await supabase.from('movies').update({
-      total_episodes: totalEpisodes,
-      updated_at: new Date().toISOString()
-    }).eq('id', movieId);
-
-    if (error) throw error;
-    
-    // Cập nhật global allMovies
-    const movie = allMovies.find(m => m.id === movieId);
-    if (movie) {
-      movie.total_episodes = totalEpisodes;
-      const currentEps = (movie.episodes || []).length;
-      updateEpisodeStatusBadge(currentEps, totalEpisodes);
-    }
-    
-    showNotification(`Đã lưu tổng số tập: ${totalEpisodes}`, "success");
-    notifyDataChange("movies");
-  } catch (error) {
-    console.error("Lỗi lưu tổng số tập Supabase:", error);
-    showNotification("Không thể lưu tổng số tập!", "error");
-  }
-}
-
-/**
- * Cập nhật badge trạng thái tập hiện tại trong admin
- */
-function updateEpisodeStatusBadge(currentCount, totalEpisodes) {
-  const badge = document.getElementById("episodeStatusBadge");
-  if (!badge) return;
-  
-  if (!totalEpisodes || totalEpisodes <= 0) {
-    badge.textContent = `Đã có ${currentCount} tập (chưa set tổng)`;
-    badge.style.color = "#aaa";
-    badge.style.background = "rgba(255,255,255,0.05)";
-  } else if (currentCount >= totalEpisodes) {
-    badge.textContent = `✅ Hoàn Tất (${currentCount}/${totalEpisodes})`;
-    badge.style.color = "#51cf66";
-    badge.style.background = "rgba(81, 207, 102, 0.12)";
-  } else {
-    badge.textContent = `⏳ ${currentCount}/${totalEpisodes} tập`;
-    badge.style.color = "#ffc107";
-    badge.style.background = "rgba(255, 193, 7, 0.12)";
-  }
-}
-/**
- * Xử lý hiển thị gợi ý khi chọn loại video
- */
-/**
- * [NEW] Mở modal Import Nhiều Tập (API)
- */
-function openImportEpisodesModal() {
-  const movieId = selectedMovieForEpisodes || document.getElementById("selectMovieForEpisodes").value;
-  if (!movieId) {
-    showNotification("Vui lòng chọn phim trước khi thao tác!", "error");
-    return;
-  }
-  
-  document.getElementById("apiBatchEpisodesUrl").value = "";
-  clearImportBatchTable();
-  openModal("importEpisodesModal");
-}
-
-/**
- * [NEW] Lấy danh sách Tập từ API (Ví dụ: OPhim) hiển thị vào Bảng Preview
- */
-async function fetchBatchEpisodesFromAPI() {
-    const url = document.getElementById("apiBatchEpisodesUrl").value.trim();
-    if (!url) {
-        showNotification("Vui lòng nhập Link API!", "error");
-        return;
-    }
-
-    const tbody = document.getElementById("previewImportTable");
-    const statusText = document.getElementById("importBatchStatus");
-    const clrBtn = document.getElementById("btnClearBatchTable");
-
-    try {
-        statusText.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Đang tải dữ liệu...`;
-        statusText.style.color = "var(--warning-color)";
-        
-        let response = await fetch(url);
-        if (!response.ok) throw new Error("Lỗi mạng: " + response.status);
-
-        const resData = await response.json();
-        
-        let episodesData = null;
-        let movieData = null;
-        
-        // Hỗ trợ cả 2 chuẩn API: KKPhim (resData.data.item) và OPhim/PhimAPI (resData.movie)
-        if (resData.movie) {
-            movieData = resData.movie;
-            episodesData = resData.episodes; // OPhim/PhimAPI
-        } else if (resData.data && resData.data.item) {
-            movieData = resData.data.item;
-            episodesData = movieData.episodes || (resData.data && resData.data.episodes);
-        }
-
-        if (!movieData) {
-             throw new Error("Dữ liệu không đúng cấu trúc Phim của OPhim/KKPhim.");
-        }
-
-        if (!episodesData || episodesData.length === 0) {
-            throw new Error("Phim này chưa có tập nào được cập nhật trên API!");
-        }
-
-        const serverData = episodesData[0].server_data;
-        if (!serverData || serverData.length === 0) {
-            throw new Error("Không tìm thấy server_data (Link Video) hợp lệ!");
-        }
-
-        // Render lên bảng
-        tbody.innerHTML = ""; 
-        serverData.forEach((ep) => {
-            let m3u8Clean = typeof ep.link_m3u8 === 'string' && ep.link_m3u8.includes("http") && !ep.link_m3u8.startsWith("http")
-                ? ep.link_m3u8.substring(ep.link_m3u8.indexOf("http")).trim()
-                : (ep.link_m3u8 || '');
-                
-            let embedClean = typeof ep.link_embed === 'string' && ep.link_embed.includes("http") && !ep.link_embed.startsWith("http")
-                ? ep.link_embed.substring(ep.link_embed.indexOf("http")).trim()
-                : (ep.link_embed || '');
-
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td>
-                   <input type="text" class="form-input batch-ep-name" value="${ep.name || 'Tập ' + (serverData.indexOf(ep) + 1)}" placeholder="Tập..." />
-                </td>
-                <td>
-                   <select class="form-select batch-ep-hls-label" style="margin-bottom: 5px; font-size: 0.9em; padding: 4px;">
-                       <option value="Bản gốc" selected style="color: #2ecc71;">🟢 Bản gốc</option>
-                       <option value="Vietsub" style="color: #3498db;">🔵 Vietsub</option>
-                       <option value="Thuyết minh" style="color: #e67e22;">🟠 Thuyết minh</option>
-                       <option value="Lồng tiếng" style="color: #9b59b6;">🟣 Lồng tiếng</option>
-                       <option value="Dự phòng" style="color: #e74c3c;">🔴 Dự phòng</option>
-                   </select>
-                   <input type="text" class="form-input batch-ep-hls" value="${m3u8Clean}" placeholder="Link .m3u8..." />
-                </td>
-                <td>
-                   <select class="form-select batch-ep-embed-label" style="margin-bottom: 5px; font-size: 0.9em; padding: 4px;">
-                       <option value="Bản gốc" style="color: #2ecc71;">🟢 Bản gốc</option>
-                       <option value="Vietsub" style="color: #3498db;">🔵 Vietsub</option>
-                       <option value="Thuyết minh" style="color: #e67e22;">🟠 Thuyết minh</option>
-                       <option value="Lồng tiếng" style="color: #9b59b6;">🟣 Lồng tiếng</option>
-                       <option value="Dự phòng" selected style="color: #e74c3c;">🔴 Dự phòng</option>
-                   </select>
-                   <input type="text" class="form-input batch-ep-embed" value="${embedClean}" placeholder="Link Iframe (Tùy chọn)" />
-                </td>
-                <td style="text-align: center;">
-                    <button class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()"><i class="fas fa-trash"></i></button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-
-        statusText.innerHTML = `<i class="fas fa-check-circle"></i> Đã tải thành công <b>${serverData.length}</b> tập.`;
-        statusText.style.color = "var(--success-color)";
-        clrBtn.style.display = "inline-block";
-
-    } catch (err) {
-        console.error("Batch Import Fetch Error:", err);
-        statusText.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Lỗi: ${err.message}`;
-        statusText.style.color = "var(--danger-color)";
-    }
-}
-
-/**
- * [NEW] Đổi nhãn hàng loạt cho cả cột
- */
-function changeAllLabels(type, value) {
-    if (!value) return; // Nếu chọn dòng "-- Đổi Nhãn --" thì không làm gì
-    
-    // Xác định class name của các select dựa vào loại cột (hls hay embed)
-    const selectClass = type === 'hls' ? '.batch-ep-hls-label' : '.batch-ep-embed-label';
-    
-    // Lấy tất cả các thẻ select thuộc cột đó
-    const selectElements = document.querySelectorAll(`#previewImportTable ${selectClass}`);
-    
-    if (selectElements.length === 0) return;
-    
-    // Duyệt qua và gán giá trị mới
-    selectElements.forEach(select => {
-        select.value = value;
-    });
-    
-    // Báo nhẹ cho người dùng biết
-    showNotification(`Đã đổi đồng loạt ${selectElements.length} tập thành nhãn: ${value}`, "success");
-}
-
-/**
- * [NEW] Xóa sạch bảng Preview
- */
-function clearImportBatchTable() {
-    document.getElementById("previewImportTable").innerHTML = `<tr><td colspan="4" class="text-center text-muted" style="padding: 30px;">Dán Link API và bấm "Lấy Danh Sách" để xem trước các tập.</td></tr>`;
-    
-    // Đặt lại luôn 2 cái Header Select All về trạng thái mặc định
-    const selectHeaders = document.querySelectorAll("#importEpisodesModal th select");
-    selectHeaders.forEach(select => select.value = "");
-    const statusText = document.getElementById("importBatchStatus");
-    statusText.innerText = "Chưa có dữ liệu...";
-    statusText.style.color = "var(--text-secondary)";
-    document.getElementById("btnClearBatchTable").style.display = "none";
-}
-
-/**
- * [NEW] Lưu danh sách các tập từ Bảng Preview Lên Hệ Thống Database
- */
-async function saveBatchImportedEpisodes() {
-    const movieId = selectedMovieForEpisodes || document.getElementById("selectMovieForEpisodes").value;
-    if (!movieId || !supabase) {
-        showNotification("Lỗi: Không xác định được Phim hoặc Supabase chưa sẵn sàng!", "error");
-        return;
-    }
-
-    const rows = document.querySelectorAll("#previewImportTable tr");
-    if (rows.length === 0 || rows[0].querySelector("td[colspan]")) {
-        showNotification("Bảng tập phim trống! Vui lòng Lấy dữ liệu trước.", "error");
-        return;
-    }
-
-    const movie = allMovies.find(m => m.id === movieId);
-    if (!movie) return;
-
-    let existingCount = (movie.episodes || []).length;
-    let episodesToInsert = [];
-
-    // Duyệt qua từng hàng trong bảng
-    rows.forEach((row, idx) => {
-        const nameInput = row.querySelector(".batch-ep-name");
-        const hlsInput = row.querySelector(".batch-ep-hls");
-        const hlsLabelInput = row.querySelector(".batch-ep-hls-label");
-        const embedInput = row.querySelector(".batch-ep-embed");
-        const embedLabelInput = row.querySelector(".batch-ep-embed-label");
-
-        if (!nameInput || !hlsInput) return; 
-        
-        let labelName = nameInput.value.trim();
-        let m3u8Link = hlsInput.value.trim();
-        let m3u8Label = hlsLabelInput ? hlsLabelInput.value : "Bản gốc";
-        let embedLink = embedInput ? embedInput.value.trim() : "";
-        let embedLabel = embedLabelInput ? embedLabelInput.value : "Dự phòng";
-
-        if (!m3u8Link) return; 
-
-        const sources = [];
-        sources.push({
-            label: m3u8Label,
-            type: "hls", 
-            source: m3u8Link
-        });
-        
-        if (embedLink) {
-              sources.push({
-                label: embedLabel,
-                type: "embed", 
-                source: embedLink 
-            });
-        }
-
-        episodesToInsert.push({
-             movie_id: movieId,
-             episode_name: labelName,
-             episode_number: existingCount + idx,
-             duration: "0 giờ 45 phút", 
-             quality: "1080p",
-             sources: sources,
-             updated_at: new Date().toISOString()
-        });
-    });
-
-    if (episodesToInsert.length === 0) {
-        showNotification("Không có dòng dữ liệu hợp lệ nào để lưu!", "error");
-        return;
-    }
-
-    try {
-        showLoading(true, `Đang xử lý thêm ${episodesToInsert.length} tập phim...`);
-        
-        const { error } = await supabase.from('episodes').insert(episodesToInsert);
-        if (error) throw error;
-
-        showNotification("Import thành công " + episodesToInsert.length + " tập!", "success");
-        closeModal("importEpisodesModal");
-        
-        if (typeof loadMovies === 'function') await loadMovies();
-        await loadAdminMovies();
-        loadEpisodesForMovie(movieId);
-        notifyDataChange("movies"); 
-    } catch (err) {
-        console.error("Lỗi import episodes Supabase:", err);
-        showNotification("Không thể lưu các tập phim!", "error");
-    } finally {
-        showLoading(false);
-    }
-}
-
-/**
- * [NEW] Mở modal Bổ sung Link Lồng tiếng Hàng loạt
- */
-function openBulkAddDubbedModal() {
-    const movieId = selectedMovieForEpisodes || document.getElementById("selectMovieForEpisodes").value;
-    if (!movieId) {
-        showNotification("Vui lòng chọn phim trước khi thao tác!", "error");
-        return;
-    }
-    
-    document.getElementById("bulkDubbedInput").value = "";
-    document.getElementById("bulkDubbedStatus").innerText = "";
-    openModal("bulkAddDubbedModal");
-}
-
-/**
- * [NEW] Xử lý danh sách link lồng tiếng được dán vào và cập nhật vào Firebase
- */
-async function processBulkDubbedLinks() {
-    const movieId = selectedMovieForEpisodes || document.getElementById("selectMovieForEpisodes").value;
-    const input = document.getElementById("bulkDubbedInput")?.value.trim();
-    const statusEl = document.getElementById("bulkDubbedStatus");
-
-    if (!input) {
-        showNotification("Vui lòng nhập danh sách link!", "error");
-        return;
-    }
-
-    const movie = allMovies.find(m => m.id === movieId);
-    if (!movie) {
-        showNotification("Không tìm thấy thông tin phim!", "error");
-        return;
-    }
-
-    let episodes = [...(movie.episodes || [])];
-    if (episodes.length === 0) {
-        showNotification("Phim này chưa có tập nào để bổ sung!", "error");
-        return;
-    }
-
-    const lines = input.split('\n');
-    let updatedCount = 0;
-    let notFoundCount = 0;
-    const notFoundEps = [];
-    const updatePromises = [];
-
-    showLoading(true, "Đang xử lý dữ liệu...");
-
-    try {
-        for (let line of lines) {
-            line = line.trim();
-            if (!line) continue;
-
-            // Định dạng: "Tập 01|URL" hoặc "1|URL"
-            const parts = line.split('|');
-            if (parts.length < 2) continue;
-
-            let epText = parts[0].trim();
-            const dubbedLink = parts[1].trim();
-
-            // Chuẩn hóa epText: Lấy số tập
-            const epNumMatch = epText.match(/\d+/);
-            const searchNum = epNumMatch ? parseInt(epNumMatch[0]) : null;
-
-            if (searchNum === null) continue;
-
-            // Tìm tập tương ứng trong database
-            const targetEpisode = episodes.find(e => {
-                const dbEpNumStr = String(e.episode_number || e.episodeNumber || "");
-                const dbNumMatch = dbEpNumStr.match(/\d+/);
-                return dbNumMatch && parseInt(dbNumMatch[0]) === searchNum;
-            });
-
-            if (targetEpisode) {
-                const sources = [...(targetEpisode.sources || [])];
-                const label = "Lồng tiếng";
-                
-                // Kiểm tra xem đã có label này chưa
-                const existingIdx = sources.findIndex(s => s.label === label);
-                if (existingIdx !== -1) {
-                    sources[existingIdx].url = dubbedLink;
-                } else {
-                    sources.push({ type: "hls", url: dubbedLink, label: label });
-                }
-
-                updatePromises.push(
-                    supabase
-                        .from('episodes')
-                        .update({ sources: sources, updated_at: new Date().toISOString() })
-                        .eq('id', targetEpisode.id)
-                );
-                
-                targetEpisode.sources = sources; // Cập nhật local
-                updatedCount++;
-            } else {
-                notFoundCount++;
-                notFoundEps.push(epText);
-            }
-        }
-
-        if (updatedCount > 0) {
-            const results = await Promise.all(updatePromises);
-            const errors = results.filter(r => r.error);
-            if (errors.length > 0) throw errors[0].error;
-
-            showNotification(`Đã cập nhật nguồn Lồng tiếng cho ${updatedCount} tập!`, "success");
-            loadEpisodesForMovie(movieId);
-            
-            if (notFoundCount === 0) {
-                closeModal("bulkAddDubbedModal");
-            } else {
-                statusEl.innerHTML = `<span style="color: #e67e22;">⚠️ Cập nhật ${updatedCount} tập. Không tìm thấy ${notFoundCount} tập: ${notFoundEps.join(", ")}</span>`;
-            }
-            notifyDataChange("movies");
-        } else {
-            showNotification("Không tìm thấy tập nào khớp để cập nhật!", "warning");
-            statusEl.innerHTML = '<span style="color: #e74c3c;">❌ Không tìm thấy tập nào khớp!</span>';
-        }
-    } catch (error) {
-        console.error("Lỗi cập nhật lồng tiếng Supabase:", error);
-        showNotification("Có lỗi xảy ra khi cập nhật!", "error");
-        statusEl.innerHTML = '❌ Lỗi hệ thống.';
-    } finally {
-        showLoading(false);
-    }
-}
-
-/**
- * Thêm một dòng nhập source video
- */
-function addSourceInput(type = "hls", source = "", label = "") {
-  const container = document.getElementById("sourceListContainer");
-  const id = new Date().getTime() + Math.random().toString(36).substr(2, 9);
-  
-  // Tự động cập nhật preview buttons khi có thay đổi về số lượng source
-  setTimeout(() => updateAdminIntroPreview(), 100);
-
-  // Khởi tạo các nhãn mặc định
-  const standardLabels = [
-      { value: "Bản gốc", emoji: "🟢", color: "#2ecc71" },
-      { value: "Vietsub", emoji: "🔵", color: "#3498db" },
-      { value: "Thuyết minh", emoji: "🟠", color: "#e67e22" },
-      { value: "Lồng tiếng", emoji: "🟣", color: "#9b59b6" },
-      { value: "Dự phòng", emoji: "🔴", color: "#e74c3c" }
-  ];
-  let defaultLabel = label || "Bản gốc";
-  
-  let labelOptions = standardLabels.map(l => `<option value="${l.value}" ${defaultLabel === l.value ? 'selected' : ''} style="color: ${l.color};">${l.emoji} ${l.value}</option>`).join('');
-  
-  // Tránh mất Data cũ nếu Phim đang có Nhãn nào khác chuỗi Standard Mặc Định
-  if (defaultLabel && !standardLabels.some(l => l.value === defaultLabel)) {
-      labelOptions += `<option value="${defaultLabel}" selected>⚪ ${defaultLabel}</option>`;
-  }
-
-  const html = `
-    <div class="source-item" id="source-${id}" style="display: grid; grid-template-columns: 180px 100px 1fr auto; gap: 10px; align-items: center; background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px solid #ddd;">
-        <div>
-            <select class="form-select source-label">
-                ${labelOptions}
-            </select>
-        </div>
-        <div>
-            <select class="form-select source-type" onchange="updateSourcePlaceholder('${id}')">
-                <option value="youtube" ${type === "youtube" ? "selected" : ""}>YouTube</option>
-                <option value="hls" ${type === "hls" ? "selected" : ""}>HLS</option>
-                <option value="mp4" ${type === "mp4" ? "selected" : ""}>MP4</option>
-                <option value="embed" ${type === "embed" ? "selected" : ""}>Embed</option>
-            </select>
-        </div>
-        <div>
-            <input type="text" class="form-input source-url" placeholder="Nhập ID hoặc URL" value="${source}" required
-                oninput="autoDetectSourceType('${id}')"
-                onpaste="setTimeout(() => autoDetectSourceType('${id}'), 50)">
-        </div>
-        <button type="button" class="btn btn-danger btn-sm" onclick="removeSourceInput('${id}')">
-            <i class="fas fa-trash"></i>
-        </button>
-    </div>
-  `;
-  container.insertAdjacentHTML("beforeend", html);
-  updateSourcePlaceholder(id);
-}
-
-function removeSourceInput(id) {
-  document.getElementById(`source-${id}`)?.remove();
-  // Cập nhật lại danh sách nút preview
-  updateAdminIntroPreview();
-}
-
-function updateSourcePlaceholder(id) {
-  const item = document.getElementById(`source-${id}`);
-  if (!item) return;
-  const type = item.querySelector(".source-type").value;
-  const input = item.querySelector(".source-url");
-  
-  if (type === "youtube") input.placeholder = "ID YouTube (VD: dQw4...)";
-  else if (type === "hls") input.placeholder = "Link .m3u8";
-  else if (type === "embed") input.placeholder = "Link embed (iframe URL)";
-  else input.placeholder = "Link .mp4";
-}
-
-/**
- * Tự động nhận diện loại link khi admin nhập/paste URL
- * Hỗ trợ: YouTube, HLS (.m3u8), MP4, Embed (iframe/player URL)
- */
-function autoDetectSourceType(id) {
-  const item = document.getElementById(`source-${id}`);
-  if (!item) return;
-  const input = item.querySelector(".source-url");
-  const typeSelect = item.querySelector(".source-type");
-  if (!input || !typeSelect) return;
-  
-  const url = input.value.trim().toLowerCase();
-  if (!url) return;
-  
-  let detected = null;
-  
-  // 1. YouTube: chứa youtube.com, youtu.be, hoặc chỉ là ID ngắn (11 kí tự)
-  if (url.includes("youtube.com") || url.includes("youtu.be")) {
-    detected = "youtube";
-  }
-  // 2. HLS: chứa .m3u8
-  else if (url.includes(".m3u8")) {
-    detected = "hls";
-  }
-  // 3. MP4: chứa .mp4
-  else if (url.includes(".mp4")) {
-    detected = "mp4";
-  }
-  // 4. Embed: link có iframe, player, share, hoặc các trang embed video thông dụng
-  else if (
-    url.includes("<iframe") ||
-    url.includes("/player") ||
-    url.includes("/share/") ||
-    url.includes("/embed/") ||
-    url.includes("player.phimapi.com") ||
-    url.includes("ok.ru") ||
-    url.includes("drive.google.com") ||
-    url.includes("dailymotion.com") ||
-    url.includes("vimeo.com") ||
-    (url.startsWith("http") && !url.includes(".m3u8") && !url.includes(".mp4") && !url.includes("youtube"))
-  ) {
-    detected = "embed";
-  }
-  
-  // Chỉ thay đổi nếu phát hiện được và khác giá trị hiện tại
-  if (detected && typeSelect.value !== detected) {
-    typeSelect.value = detected;
-    updateSourcePlaceholder(id);
-  }
-}
-
-/**
- * Mở modal thêm/sửa tập (Hỗ trợ Multi-Source)
- */
-function openEpisodeModal(index = null) {
-  const title = document.getElementById("episodeModalTitle");
-  const form = document.getElementById("episodeForm");
-  const epNumGroup = document.getElementById("episodeNumberGroup");
-  const indexInput = document.getElementById("episodeIndex");
-  const sourceContainer = document.getElementById("sourceListContainer");
-
-  // Reset form
-  form.reset();
-  sourceContainer.innerHTML = ""; // Xóa các source cũ
-  adminPreviewSelectedIndex = 0; // Reset index preview về nguồn đầu tiên
-
-  // Sử dụng biến toàn cục selectedMovieForEpisodes thay vì đọc từ DOM (vì DOM select có thể bị ẩn/sai lệch)
-  const movieId = selectedMovieForEpisodes || document.getElementById("selectMovieForEpisodes").value;
-  const movie = allMovies.find((m) => m.id === movieId);
-  const isSingle = movie && movie.type === "single";
-
-  if (epNumGroup) {
-      epNumGroup.style.display = "block";
-      const label = epNumGroup.querySelector(".form-label");
-      if (label) {
-          label.textContent = isSingle ? "Nhãn hiển thị (VD: FULL, HD-Full) *" : "Số tập *";
-      }
-  }
-
-  if (index !== null) {
-    // === EDIT ===
-    title.textContent = isSingle ? "Cập Nhật Link Phim" : "Sửa Tập Phim";
-    indexInput.value = index;
-
-    const episode = movie?.episodes?.[index];
-
-    if (episode) {
-      // Đổ dữ liệu vào modal
-      if (document.getElementById("episodeNumber")) {
-          document.getElementById("episodeNumber").value = episode.episodeNumber || (isSingle ? "1" : "");
-      }
-      
-      // Xử lý tự động thêm "Tập" khi nhập số
-      const epNumInput = document.getElementById("episodeNumber");
-      if (epNumInput) {
-          epNumInput.onblur = function() {
-              const val = this.value.trim();
-              if (val && !isNaN(val)) {
-                  this.value = "Tập " + val;
-              }
-          };
-      }
-      
-      // Xử lý Thời lượng (Smart Input)
-      const dur = parseDuration(episode.duration || "");
-      document.getElementById("episodeDurationHour").value = dur.h || "";
-      document.getElementById("episodeDurationMinute").value = dur.m || "";
-
-      document.getElementById("episodeQuality").value = episode.quality || "1080p60";
-
-      // Load Sources
-      if (episode.sources && Array.isArray(episode.sources) && episode.sources.length > 0) {
-        // Dữ liệu mới (Multi-source)
-        episode.sources.forEach(src => {
-            addSourceInput(src.type, src.source, src.label);
-        });
-      } else {
-        // Dữ liệu cũ (Single source) -> Convert sang 1 dòng source
-        const oldType = episode.videoType || "youtube";
-        const oldSource = episode.videoSource || episode.youtubeId || "";
-        addSourceInput(oldType, oldSource, "Mặc định");
-      }
-    }
-  } else {
-    // === ADD NEW ===
-    title.textContent = isSingle ? "Cập Nhật Link Phim" : "Thêm Tập Mới";
-    indexInput.value = "";
-
-    if (isSingle) {
-      document.getElementById("episodeNumber").value = "FULL";
-    } else {
-      // FIX: Tìm số tập lớn nhất thay vì đếm số lượng (tránh trùng khi xóa tập giữa)
-      let maxEp = 0;
-      if (movie && movie.episodes && movie.episodes.length > 0) {
-          maxEp = Math.max(...movie.episodes.map(e => {
-              const num = parseInt(String(e.episodeNumber).replace(/\D/g, ''));
-              return isNaN(num) ? 0 : num;
-          }));
-      }
-      const nextEp = maxEp + 1;
-      document.getElementById("episodeNumber").value = "Tập " + nextEp;
-    }
-
-    // Xử lý tự động thêm "Tập" khi nhập số cho add mới
-    const epNumInput = document.getElementById("episodeNumber");
-    if (epNumInput) {
-        epNumInput.onblur = function() {
-            const val = this.value.trim();
-            if (val && !isNaN(val)) {
-                this.value = "Tập " + val;
-            }
-        };
-    }
-
-    document.getElementById("episodeQuality").value = "1080p60";
-    
-    // Reset Thời lượng
-    document.getElementById("episodeDurationHour").value = "";
-    document.getElementById("episodeDurationMinute").value = "";
-
-    // Reset Intro
-    document.getElementById("introEndMinute").value = "";
-    document.getElementById("introEndSecond").value = "";
-    
-    // Reset Outro
-    document.getElementById("outroStartMinute").value = "";
-    document.getElementById("outroStartSecond").value = "";
-    
-    // Reset checkbox áp dụng cho tất cả
-    const applyCheck = document.getElementById("applyIntroToAll");
-    if (applyCheck) applyCheck.checked = false;
-    
-    // Thêm 1 dòng source mặc định
-    addSourceInput("hls", "", "Bản gốc");
-  }
-
-  // Khởi tạo preview player và load dữ liệu intro sau khi modal mở
-  setTimeout(() => {
-      updateAdminIntroPreview();
-      
-      if (index !== null) {
-          const movieId = selectedMovieForEpisodes || document.getElementById("selectMovieForEpisodes").value;
-          const movie = allMovies.find((m) => m.id === movieId);
-          const episode = movie?.episodes?.[index];
-          if (episode) {
-              const introTime = Number((episode.extra_info && episode.extra_info.intro_end) || episode.intro_end || episode.introEndTime) || 0;
-              document.getElementById("introEndMinute").value = introTime > 0 ? Math.floor(introTime / 60) : "";
-              document.getElementById("introEndSecond").value = introTime > 0 ? (introTime % 60) : "";
-
-              const outroTime = Number((episode.extra_info && episode.extra_info.outro_start) || episode.outro_start || episode.outroStartTime) || 0;
-              document.getElementById("outroStartMinute").value = outroTime > 0 ? Math.floor(outroTime / 60) : "";
-              document.getElementById("outroStartSecond").value = outroTime > 0 ? (outroTime % 60) : "";
-          }
-      }
-  }, 300);
-
-  openModal("episodeModal");
-}
-
-/**
- * Xử lý submit form tập phim
- */
-async function handleEpisodeSubmit(event) {
-  event.preventDefault();
-
-  if (!supabase || !selectedMovieForEpisodes) return;
-
-  const index = document.getElementById("episodeIndex").value;
-  
-  // Thu thập sources từ UI
-  const sourceItems = document.querySelectorAll(".source-item");
-  const sources = [];
-  
-  sourceItems.forEach(item => {
-      sources.push({
-          label: item.querySelector(".source-label").value,
-          type: item.querySelector(".source-type").value,
-          source: item.querySelector(".source-url").value
-      });
-  });
-
-  if (sources.length === 0) {
-      showNotification("Phải có ít nhất 1 nguồn video!", "warning");
+async function deleteAllMoviesConfirm() {
+  if (!supabase) return;
+
+  // Lớp bảo mật cấp 2: Kiểm tra cứng trong logic phòng trường hợp F12 hiện nút
+  if (!currentUser || currentUser.email !== "huynhphutrong8223@gmail.com") {
+      showNotification("Truy cập từ chối: Chỉ Super Admin mới có quyền thực hiện hành động này!", "error");
       return;
   }
 
-  const introEnd = (() => {
-      const m = parseInt(document.getElementById("introEndMinute").value) || 0;
-      const s = parseInt(document.getElementById("introEndSecond").value) || 0;
-      return (m * 60) + s;
-  })();
+  const confirmText = await customPrompt("Bạn đang chuẩn bị xóa TOÀN BỘ phim trong hệ thống.\nHành động này KHÔNG THỂ HOÀN TÁC và sẽ xóa toàn bộ dữ liệu bao gồm cả Phim, Tập Phim, và File Ảnh R2 liên quan.\n\nể xác nhận, vui lòng gõ chính xác dòng chữ: XOA_TAT_CA", {
+      title: "CẢNH BO NGUY HIỂM",
+      placeholder: "Nhập XOA_TAT_CA",
+      confirmText: "Xóa Toàn Bộ",
+      cancelText: "Hủy"
+  });
   
-  const outroStart = (() => {
-      const m = parseInt(document.getElementById("outroStartMinute").value) || 0;
-      const s = parseInt(document.getElementById("outroStartSecond").value) || 0;
-      return (m * 60) + s;
-  })();
-
-  const episodeData = {
-    episode_name: document.getElementById("episodeNumber").value,
-    duration: (() => {
-        const h = parseInt(document.getElementById("episodeDurationHour").value) || 0;
-        const m = parseInt(document.getElementById("episodeDurationMinute").value) || 0;
-        return formatDuration(h, m);
-    })(),
-    quality: document.getElementById("episodeQuality").value,
-    sources: sources,
-    extra_info: {
-        intro_end: introEnd,
-        outro_start: outroStart
-    },
-    updated_at: new Date().toISOString()
-  };
-
-  if (introEnd > 0 && outroStart > 0 && introEnd >= outroStart) {
-      if (!await customConfirm("Thời gian Intro đang lớn hơn hoặc bằng thời gian Outro. Bạn có chắc chắn muốn lưu không?", { 
-          title: "Cảnh báo mốc thời gian", 
-          type: "warning",
-          confirmText: "Vẫn lưu" 
-      })) {
-          return;
-      }
+  if (confirmText !== "XOA_TAT_CA") {
+      if (confirmText !== null) showNotification("Hủy xóa vì nhập sai mã xác nhận.", "info");
+      return;
   }
 
   try {
-    showLoading(true, "Đang lưu...");
+    showLoading(true, "Đang xử lý dọn dẹp và xóa toàn bộ phim...");
 
-    // Tìm index thật trong allMovies để lấy ID nếu là update
-    const mIdx = allMovies.findIndex(m => m.id === selectedMovieForEpisodes);
-    const movieObj = allMovies[mIdx];
-    const episodes = movieObj?.episodes || [];
+    // 1. Phải lấy toàn bộ DB để có ID và Link ảnh R2
+    const { data: movies, error: fetchErr } = await supabase.from('movies').select('id, poster_url, background_url');
+    if (fetchErr) throw fetchErr;
 
-    if (index !== "") {
-      // Update
-      const episodeId = episodes[parseInt(index)]?.id;
-      if (!episodeId) throw new Error("Không tìm thấy ID tập để cập nhật");
-      
-      const { error } = await supabase.from('episodes').update(episodeData).eq('id', episodeId);
-      if (error) throw error;
-    } else {
-      // Create
-      episodeData.movie_id = selectedMovieForEpisodes;
-      episodeData.episode_number = episodes.length; // Lưu thứ tự chỉ mục tự động
-      
-      const { error } = await supabase.from('episodes').insert(episodeData);
-      if (error) throw error;
-    }
+    if (movies && movies.length > 0) {
+        // 2. Xóa ảnh R2 (Chạy batch song song 50 request cùng lúc)
+        showNotification(`Phát hiện ${movies.length} phim. Đang dọn dẹp file ảnh Cloudflare R2...`, "info");
+        const chunkSize = 50;
+        for (let i = 0; i < movies.length; i += chunkSize) {
+            const chunk = movies.slice(i, i + chunkSize);
+            await Promise.all(chunk.map(async (m) => {
+                if (m.poster_url) await window.deleteImageFromR2(m.poster_url);
+                if (m.background_url) await window.deleteImageFromR2(m.background_url);
+            }));
+        }
 
-    showNotification("Đã lưu tập phim!", "success");
-    notifyDataChange("movies"); 
-
-    // Kiểm tra nếu áp dụng cho tất cả tập
-    const applyIntroToAll = document.getElementById("applyIntroToAll")?.checked;
-    if (applyIntroToAll && episodes.length > 0) {
-        const { data: currentEpisodes, error: fetchErr } = await supabase.from('episodes')
-            .select('id, extra_info')
-            .eq('movie_id', selectedMovieForEpisodes);
+        // 3. Dn dẹp dữ liệu rác notifications (JSONB không hỗ trợ Cascade)
+        showNotification("Hoàn tất dọn R2. Đang xóa thông báo rác và bản ghi Database...", "info");
+        
+        // Supabase REST không cho phép delete all trực tiếp nếu thiếu where (bảo vệ an toàn). 
+        // Nên dùng `.in('id', chunkIDs)` để tuân thủ rule API nhưng với chunk size nhỏ (30).
+        for (let i = 0; i < movies.length; i += 30) {
+            const chunkIds = movies.slice(i, i + 30).map(m => m.id);
             
-        if (!fetchErr && currentEpisodes) {
-            for (const ep of currentEpisodes) {
-                const newExtraInfo = ep.extra_info || {};
-                newExtraInfo.intro_end = introEnd;
-                newExtraInfo.outro_start = outroStart;
-                await supabase.from('episodes')
-                    .update({ extra_info: newExtraInfo })
-                    .eq('id', ep.id);
+            // Xóa rác trong bảng notifications
+            try {
+                for (const mId of chunkIds) {
+                    await supabase.from('notifications').delete().contains('metadata', { movie_id: mId });
+                }
+            } catch (e) {
+                console.warn("Lỗi dọn rác notifications chunk:", e);
             }
-            console.log("✅ Đã áp dụng Intro/Outro cho tất cả tập");
-        } else {
-            console.error("Lỗi áp dụng intro hàng loạt:", fetchErr);
-        }
-    }
 
-    closeEpisodeModal(); 
-    if (typeof loadMovies === 'function') await loadMovies();
-    await loadEpisodesForMovie(selectedMovieForEpisodes);
-  } catch (error) {
-    console.error("Lỗi lưu episode Supabase:", error);
-    showNotification("Không thể lưu tập phim!", "error");
-  } finally {
-    showLoading(false);
-  }
-}
-
-function editEpisode(index) {
-  openEpisodeModal(index);
-}
-
-/**
- * [FIX] Hàm đóng modal tập phim chuyên biệt để dừng video review
- */
-window.closeEpisodeModal = function() {
-    console.log("🎬 Đang đóng Modal Episode và dừng video preview...");
-    
-    if (adminPreviewPlayer) {
-        try {
-            if (adminPreviewPlayer instanceof HTMLVideoElement) {
-                adminPreviewPlayer.pause();
-                adminPreviewPlayer.src = "";
-                adminPreviewPlayer.load();
-            } else if (typeof adminPreviewPlayer.stopVideo === 'function') {
-                // YouTube API
-                adminPreviewPlayer.stopVideo();
-            } else if (typeof adminPreviewPlayer.pauseVideo === 'function') {
-                adminPreviewPlayer.pauseVideo();
+            // 3b. Xóa error_reports liên quan (tránh lỗi foreign key constraint)
+            try {
+                await supabase.from('error_reports').delete().in('movie_id', chunkIds);
+            } catch (e) {
+                console.warn("Lỗi dọn rác error_reports chunk:", e);
             }
-        } catch (e) {
-            console.error("Lỗi khi dừng video preview:", e);
+
+            // 4. Bắt đầu xóa bộ phim
+            const { error: deleteErr } = await supabase.from('movies').delete().in('id', chunkIds);
+            if (deleteErr) {
+                console.error("Lỗi xóa db chunk phim:", deleteErr);
+                throw deleteErr;
+            }
         }
-        adminPreviewPlayer = null;
     }
 
-    // Xóa nội dung trong wrapper để chắc chắn video/iframe bị gỡ bỏ hoàn toàn
-    const wrapper = document.getElementById("adminIntroPlayerWrapper");
-    if (wrapper) {
-        wrapper.innerHTML = `
-            <div id="adminIntroPlayerPlaceholder" style="text-align: center; color: #666;">
-                <i class="fas fa-video-slash fa-2x mb-2"></i>
-                <p style="font-size: 0.9rem;">Chưa có video. Hãy nhập link video bên trên.</p>
-            </div>
-        `;
-    }
-
-    // Đóng modal giao diện
-    closeModal("episodeModal");
-};
-
-/**
- * Xóa tập phim
- */
-async function deleteEpisode(index) {
-  if (!await customConfirm("Bạn có chắc muốn xóa tập này?", { title: "Xóa tập phim", type: "danger", confirmText: "Xóa" })) return;
-
-  if (!supabase || !selectedMovieForEpisodes) return;
-
-  try {
-    showLoading(true, "Đang xóa...");
-
-    // Tìm ID tập từ cache
-    const mIdx = allMovies.findIndex(m => m.id === selectedMovieForEpisodes);
-    const episodeId = allMovies[mIdx]?.episodes[index]?.id;
-
-    if (!episodeId) throw new Error("Không tìm thấy ID tập để xóa");
-
-    const { error } = await supabase.from('episodes').delete().eq('id', episodeId);
-    if (error) throw error;
-
-    showNotification("Đã xóa tập phim!", "success");
-
-    // Reload
-    if (typeof loadMovies === 'function') await loadMovies();
-    loadEpisodesForMovie(selectedMovieForEpisodes);
+    showNotification("Thành công! Đã xóa sạch toàn bộ phim và dọn dẹp Database.", "success");
     notifyDataChange("movies"); 
+
+    if (typeof loadAdminMovies === 'function') await loadAdminMovies();
   } catch (error) {
-    console.error("Lỗi xóa episode Supabase:", error);
-    showNotification("Không thể xóa tập phim!", "error");
+    console.error("Lỗi xóa toàn bộ phim:", error);
+    showNotification("Lỗi quá trình xóa: " + (error.message || "Lỗi không xác định"), "error");
   } finally {
     showLoading(false);
   }
 }
 
 /**
- * Xóa tất cả tập phim
- */
-async function deleteAllEpisodes() {
-  if (!selectedMovieForEpisodes) {
-    showNotification("Vui lòng chọn một phim trước!", "warning");
-    return;
-  }
-
-  if (!await customConfirm("Bạn có chắc muốn xóa TẤT CẢ các tập của phim này? Hành động này không thể hoàn tác!", { title: "Xóa tất cả tập phim", type: "danger", confirmText: "Xóa tất cả" })) return;
-
-  if (!supabase) return;
-
-  try {
-    showLoading(true, "Đang xóa tất cả tập...");
-
-    const { error } = await supabase.from('episodes').delete().eq('movie_id', selectedMovieForEpisodes);
-    if (error) throw error;
-
-    showNotification("Đã xóa tất cả tập phim!", "success");
-
-    // Reload
-    if (typeof loadMovies === 'function') await loadMovies();
-    loadEpisodesForMovie(selectedMovieForEpisodes);
-    notifyDataChange("movies"); 
-  } catch (error) {
-    console.error("Lỗi xóa tất cả episodes Supabase:", error);
-    showNotification("Không thể xóa các tập phim!", "error");
-  } finally {
-    showLoading(false);
-  }
-}
-
-/**
- * ============================================================
- * SKIP INTRO & PREVIEW PLAYER LOGIC (ADMIN)
- * ============================================================
- */
-
-let adminPreviewPlayer = null; 
-let adminPreviewSelectedIndex = 0; // Lưu chỉ số source đang được preview
-
-/**
- * Tự động cập nhật danh sách nút chuyển và preview video
- */
-function updateAdminIntroPreview() {
-    const sourceList = document.getElementById("sourceListContainer");
-    const switchContainer = document.getElementById("adminPreviewSourceSwitch");
-    if (!sourceList || !switchContainer) return;
-
-    const sourceItems = sourceList.querySelectorAll(".source-item");
-    if (sourceItems.length === 0) {
-        switchContainer.innerHTML = "";
-        initAdminIntroPlayer(null, null);
-        return;
-    }
-
-    // Đảm bảo index hợp lệ
-    if (adminPreviewSelectedIndex >= sourceItems.length) {
-        adminPreviewSelectedIndex = 0;
-    }
-
-    // Render danh sách nút chuyển đổi
-    let switchHtml = "";
-    sourceItems.forEach((item, index) => {
-        const label = item.querySelector(".source-label").value || `Nguồn ${index + 1}`;
-        const isActive = index === adminPreviewSelectedIndex;
-        const btnClass = isActive ? "btn-primary" : "btn-outline-secondary";
-        const style = `padding: 4px 12px; font-size: 0.8rem; border-radius: 20px; text-transform: none;`;
-        
-        switchHtml += `
-            <button type="button" class="btn ${btnClass} btn-sm" style="${style}" onclick="changeAdminPreviewSource(${index})">
-                <i class="fas ${isActive ? 'fa-play-circle' : 'fa-link'}"></i> ${index + 1}. ${label}
-            </button>
-        `;
-
-        // Gán sự kiện oninput/onchange cho từng source nếu chưa có để update preview tức thì
-        const urlInput = item.querySelector(".source-url");
-        const typeSelect = item.querySelector(".source-type");
-        const labelSelect = item.querySelector(".source-label");
-
-        if (urlInput && !urlInput.dataset.hasPreviewListener) {
-            urlInput.addEventListener('input', () => {
-                if (index === adminPreviewSelectedIndex) updateAdminIntroPreview();
-            });
-            typeSelect.addEventListener('change', () => {
-                if (index === adminPreviewSelectedIndex) updateAdminIntroPreview();
-            });
-            labelSelect.addEventListener('change', () => updateAdminIntroPreview()); // Refresh labels
-            urlInput.dataset.hasPreviewListener = "true";
-        }
-    });
-    switchContainer.innerHTML = switchHtml;
-
-    // Lấy thông tin của source đang chọn để init player
-    const selectedItem = sourceItems[adminPreviewSelectedIndex];
-    const type = selectedItem.querySelector(".source-type").value;
-    const url = selectedItem.querySelector(".source-url").value.trim();
-
-    initAdminIntroPlayer(type, url);
-}
-
-/**
- * Hành động khi nhấn nút chuyển Source
- */
-window.changeAdminPreviewSource = function(index) {
-    adminPreviewSelectedIndex = index;
-    updateAdminIntroPreview();
-}
-
-/**
- * Khởi tạo trình phát preview
- */
-function initAdminIntroPlayer(type, source) {
-    const wrapper = document.getElementById("adminIntroPlayerWrapper");
-    if (!wrapper) return;
-
-    // Cleanup cũ
-    wrapper.innerHTML = "";
-    adminPreviewPlayer = null;
-
-    if (!source) {
-        wrapper.innerHTML = `
-            <div id="adminIntroPlayerPlaceholder" style="text-align: center; color: #666;">
-                <i class="fas fa-video-slash fa-2x mb-2"></i>
-                <p style="font-size: 0.9rem;">Chưa có video. Hãy nhập link video bên trên.</p>
-            </div>
-        `;
-        return;
-    }
-
-    if (type === "youtube") {
-        const videoId = extractYouTubeId(source) || source;
-        wrapper.innerHTML = `<div id="adminYoutubePreview"></div>`;
-        
-        // Cần đảm bảo YT API đã load (Thường đã load ở detail.js hoặc trang chủ)
-        if (window.YT && window.YT.Player) {
-            adminPreviewPlayer = new YT.Player('adminYoutubePreview', {
-                height: '100%',
-                width: '100%',
-                videoId: videoId,
-                playerVars: { 'autoplay': 0, 'controls': 1 }
-            });
-        } else {
-            wrapper.innerHTML = `<iframe width="100%" height="100%" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
-        }
-    } else if (type === "hls") {
-        const video = document.createElement("video");
-        video.style.width = "100%";
-        video.style.height = "100%";
-        video.controls = true;
-        wrapper.appendChild(video);
-        adminPreviewPlayer = video;
-
-        if (Hls.isSupported()) {
-            const hls = new Hls();
-            hls.loadSource(source);
-            hls.attachMedia(video);
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = source;
-        }
-    } else if (type === "embed") {
-        wrapper.innerHTML = `<iframe src="${source}" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
-        // Với Iframe thường không lấy được currentTime trừ khi cùng origin hoặc hỗ trợ API
-    }
-}
-
-/**
- * Lấy thời gian hiện tại từ trình phát để điền vào ô Intro
- */
-function getCurrentTimeFromPreview() {
-    let seconds = 0;
-    
-    if (!adminPreviewPlayer) {
-        showNotification("Không tìm thấy trình phát video để lấy thời gian!", "warning");
-        return;
-    }
-
-    if (adminPreviewPlayer instanceof HTMLVideoElement) {
-        seconds = Math.floor(adminPreviewPlayer.currentTime);
-    } else if (adminPreviewPlayer.getCurrentTime) {
-        // YouTube API
-        seconds = Math.floor(adminPreviewPlayer.getCurrentTime());
-    } else {
-        showNotification("Trình phát này không hỗ trợ lấy thời gian tự động. Vui lòng nhập tay.", "info");
-        return;
-    }
-
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-
-    // [NEW] Xác định mục tiêu đang chọn (Intro hay Outro)
-    const target = document.querySelector('input[name="timeCaptureTarget"]:checked')?.value || 'intro';
-    
-    if (target === 'intro') {
-        document.getElementById("introEndMinute").value = mins;
-        document.getElementById("introEndSecond").value = secs;
-        showNotification(`Đã lấy thời gian Intro: ${mins}p ${secs}s`, "success");
-    } else {
-        document.getElementById("outroStartMinute").value = mins;
-        document.getElementById("outroStartSecond").value = secs;
-        showNotification(`Đã lấy thời gian Outro: ${mins}p ${secs}s`, "success");
-    }
-}
-
-/**
- * Thử nhảy tới đoạn intro đã đánh dấu để kiểm tra
- */
-function previewSkipIntro() {
-    // [NEW] Xác định mục tiêu đang chọn để thử nhảy
-    const target = document.querySelector('input[name="timeCaptureTarget"]:checked')?.value || 'intro';
-    let mins, secs;
-
-    if (target === 'intro') {
-        mins = parseInt(document.getElementById("introEndMinute").value) || 0;
-        secs = parseInt(document.getElementById("introEndSecond").value) || 0;
-    } else {
-        mins = parseInt(document.getElementById("outroStartMinute").value) || 0;
-        secs = parseInt(document.getElementById("outroStartSecond").value) || 0;
-    }
-
-    const totalSeconds = (mins * 60) + secs;
-
-    if (totalSeconds <= 0) {
-        showNotification(`Vui lòng nhập thời gian ${target === 'intro' ? 'kết thúc intro' : 'bắt đầu outro'} trước!`, "warning");
-        return;
-    }
-
-    if (!adminPreviewPlayer) return;
-
-    if (adminPreviewPlayer instanceof HTMLVideoElement) {
-        adminPreviewPlayer.currentTime = totalSeconds;
-        adminPreviewPlayer.play();
-    } else if (adminPreviewPlayer.seekTo) {
-        adminPreviewPlayer.seekTo(totalSeconds, true);
-        adminPreviewPlayer.playVideo();
-    }
-}
-
-/**
- * Helper: Trích xuất YouTube ID
- */
-function extractYouTubeId(url) {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-}
-/**
- * Populate movie select cho quản lý tập
- */
-function populateMovieSelect() {
-  const select = document.getElementById("selectMovieForEpisodes");
-  select.innerHTML =
-    '<option value="">-- Chọn phim --</option>' +
-    allMovies
-      .map((m) => `<option value="${m.id}">${m.title}</option>`)
-      .join("");
-}
-/**
- * Load danh sách users cho Admin (Đã sửa: Hiện ảnh Avatar thật)
+ * Load danh sách users cho Admin (ã sửa: Hiện ảnh Avatar thật)
  */
 /**
  * Biến toàn cục lưu danh sách users để tìm kiếm
@@ -3355,7 +3163,7 @@ function populateMovieSelect() {
 let allAdminUsers = [];
 
 /**
- * Load danh sách users cho Admin (Đã sửa: Hiện ảnh Avatar thật + Tách hàm render)
+ * Load danh sách users cho Admin (ã sửa: Hiện ảnh Avatar thật + Tách hàm render)
  */
 async function loadAdminUsers() {
   if (!supabase) return;
@@ -3391,14 +3199,14 @@ async function loadAdminUsers() {
 }
 
 /**
- * Hàm lọc user theo tên/email và vai trò
+ * Hàm lc user theo tên/email và vai trò
  */
 function filterAdminUsers() {
-  const searchText = document.getElementById("adminSearchUsers").value.toLowerCase().trim();
+  const searchText = removeDiacritics(document.getElementById("adminSearchUsers").value);
   const roleFilter = document.getElementById("adminFilterRole").value;
 
   const filtered = allAdminUsers.filter(user => {
-    const matchName = (user.displayName || "").toLowerCase().includes(searchText);
+    const matchName = removeDiacritics(user.displayName || "").includes(searchText);
     const matchEmail = (user.email || "").toLowerCase().includes(searchText);
     const matchRole = roleFilter ? user.role === roleFilter : true;
 
@@ -3443,7 +3251,7 @@ function renderAdminUsersList(users) {
           ? `<img src="${user.avatar}" style="width:40px; height:40px; border-radius:50%; object-fit:cover;">`
           : `<div class="comment-avatar" style="width:40px;height:40px;font-size:14px;">${initial}</div>`;
 
-      // 👇 LOGIC TÍNH THỜI HẠN VIP 👇
+      // 👇 LOGIC TNH THỜI HẠN VIP 👇
       const isVip = user.is_vip === true;
       let expiryText = "-";
 
@@ -3457,10 +3265,10 @@ function renderAdminUsersList(users) {
           if (diffDays > 0) {
             expiryText = `<span style="color: #00d4ff; font-weight:bold;">Còn ${diffDays} ngày</span>`;
           } else {
-            expiryText = `<span style="color: #ff4444; font-weight:bold;">Đã hết hạn</span>`;
+            expiryText = `<span style="color: #ff4444; font-weight:bold;">ã hết hạn</span>`;
           }
         } else {
-          expiryText = `<span class="tag" style="background: linear-gradient(45deg, #00d4ff, #00ff88); color: #000; font-weight:800;">♾️ VĨNH VIỄN</span>`;
+          expiryText = `<span class="tag" style="background: linear-gradient(45deg, #00d4ff, #00ff88); color: #000; font-weight:800;">♾ VĨNH VIỄN</span>`;
         }
       }
 
@@ -3504,7 +3312,7 @@ function renderAdminUsersList(users) {
 }
 
 /**
- * Chuyển trang Người dùng
+ * Chuyển trang Ngưi dùng
  */
 window.changeAdminUserPage = function(page) {
     currentAdminUserPage = page;
@@ -3513,7 +3321,7 @@ window.changeAdminUserPage = function(page) {
     if (panel) panel.scrollIntoView({ behavior: 'smooth' });
 };
 // 👇 HÀM MỚI: CẤP VIP CÓ THỜI HẠN 👇
-// 👇 HÀM CẤP VIP (ĐÃ CÓ TÙY CHỌN VĨNH VIỄN) 👇
+// 👇 HÀM CẤP VIP (Ã CÓ TÙY CHỌN VĨNH VIỄN) 👇
 async function toggleUserVip(userId, setVip) {
   if (!supabase) return;
 
@@ -3535,11 +3343,11 @@ async function toggleUserVip(userId, setVip) {
 
     if (days === -1) {
       expiryDate = null;
-      message = "Đã cấp VIP VĨNH VIỄN! ♾️";
+      message = "Đã cấp VIP VĨNH VIỄN! ♾";
     } else if (days > 0) {
       const now = new Date();
       expiryDate = new Date(now.setDate(now.getDate() + days)).toISOString();
-      message = `Đã cấp VIP ${days} ngày!`;
+      message = `ã cấp VIP ${days} ngày!`;
     } else {
       await customAlert("Số ngày không hợp lệ!", { type: "warning" });
       return;
@@ -3550,7 +3358,7 @@ async function toggleUserVip(userId, setVip) {
   }
 
   try {
-    showLoading(true, "Đang cập nhật...");
+    showLoading(true, "ang cập nhật...");
 
     const { error } = await supabase.from('profiles').update({
         is_vip: setVip,
@@ -3575,7 +3383,7 @@ async function toggleUserStatus(userId, newStatus) {
   if (!await customConfirm(`Bạn có chắc muốn ${action} tài khoản này?`, { title: action === 'khóa' ? 'Khóa tài khoản' : 'Mở khóa', type: action === 'khóa' ? 'danger' : 'warning', confirmText: action.charAt(0).toUpperCase() + action.slice(1) })) return;
 
   try {
-    showLoading(true, "Đang xử lý...");
+    showLoading(true, "ang xử lý...");
 
     const { error } = await supabase.from('profiles').update({
         is_active: newStatus
@@ -3583,7 +3391,7 @@ async function toggleUserStatus(userId, newStatus) {
 
     if (error) throw error;
 
-    showNotification(`Đã ${action} tài khoản thành công!`, "success");
+    showNotification(`ã ${action} tài khoản thành công!`, "success");
     await loadAdminUsers();
   } catch (error) {
     console.error("Lỗi cập nhật trạng thái user Supabase:", error);
@@ -3598,7 +3406,7 @@ async function toggleUserStatus(userId, newStatus) {
 async function deleteUser(userId, userEmail) {
   const confirmMsg = `Bạn có chắc chắn muốn XÓA VĨNH VIỄN tài khoản: ${userEmail}? Hành động này sẽ xóa toàn bộ dữ liệu và KHÔNG THỂ khôi phục.`;
 
-  if (!await customConfirm(confirmMsg, { title: "⚠️ XÓA TÀI KHOẢN", type: "danger", confirmText: "Xóa vĩnh viễn" })) return;
+  if (!await customConfirm(confirmMsg, { title: "⚠ XÓA TÀI KHOẢN", type: "danger", confirmText: "Xóa vĩnh viễn" })) return;
 
   if (!supabase) return;
 
@@ -3643,7 +3451,7 @@ async function updateUserRole() {
   const newRole = document.getElementById("userRoleSelect").value;
 
   try {
-    showLoading(true, "Đang cập nhật...");
+    showLoading(true, "ang cập nhật...");
 
     const { error } = await supabase.from('profiles').update({
       role: newRole,
@@ -3663,7 +3471,7 @@ async function updateUserRole() {
   }
 }
 /**
- * Hiển thị bảng Thể loại (Đã cập nhật nút Sửa/Xóa)
+ * Hiển thị bảng Thể loại (ã cập nhật nút Sửa/Xóa)
  */
 function renderAdminCategories() {
   const tbody = document.getElementById("adminCategoriesTable");
@@ -3673,7 +3481,7 @@ function renderAdminCategories() {
 
   let categoriesToRender = allCategories;
 
-  // Lọc nếu có từ khóa tìm kiếm
+  // Lc nếu có từ khóa tìm kiếm
   if (searchInput) {
     const searchText = searchInput.value.toLowerCase().trim();
     if (searchText) {
@@ -3714,7 +3522,7 @@ function renderAdminCategories() {
 }
 
 // ==========================================
-// LOGIC QUẢN LÝ THỂ LOẠI (CATEGORY)
+// LOGIC QUẢN L THỂ LOẠI (CATEGORY)
 // ==========================================
 
 // 1. Mở Modal Thêm/Sửa Thể loại
@@ -3728,7 +3536,7 @@ function openCategoryModal(categoryId = null) {
   document.getElementById("categoryForm").reset();
 
   if (categoryId) {
-    // Chế độ Sửa: Điền dữ liệu cũ vào
+    // Chế độ Sửa: in dữ liệu cũ vào
     const category = allCategories.find((c) => c.id === categoryId);
     if (category) {
       modalTitle.textContent = "Cập nhật Thể Loại";
@@ -3745,7 +3553,7 @@ function openCategoryModal(categoryId = null) {
   openModal("categoryModal");
 }
 
-// 2. Hàm gọi từ nút Sửa
+// 2. Hàm gi từ nút Sửa
 function editCategory(categoryId) {
   openCategoryModal(categoryId);
 }
@@ -3840,54 +3648,90 @@ async function deleteCategory(categoryId) {
 // ============================================
 
 // ==========================================
-// LOGIC QUẢN LÝ QUỐC GIA (COUNTRY)
+// LOGIC QUẢN L QUC GIA (COUNTRY)
 // ==========================================
 /**
  * Hiển thị bảng Quốc gia (Admin) - CÓ NÚT SỬA/XÓA
  */
+// Biến trạng thái: true = hiện tất cả, false = chỉ hiện 10 quốc gia đầu
+let _showAllCountries = false;
+
 function renderAdminCountries() {
   const tbody = document.getElementById("adminCountriesTable");
   const searchInput = document.getElementById("adminSearchCountry");
   if (!tbody) return;
 
-  // Nếu không có dữ liệu thì báo trống
   let countriesToRender = allCountries;
 
+  // ếm số phim cho từng quốc gia
+  const movieCountByCountry = {};
+  if (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) {
+    allAdminMovies.forEach(m => {
+      const cId = m.countryId || m.country_id || m.country || '';
+      if (cId) {
+        movieCountByCountry[cId] = (movieCountByCountry[cId] || 0) + 1;
+      }
+    });
+  }
+
+  // Lọc theo ô tìm kiếm
   if (searchInput) {
     const searchText = searchInput.value.toLowerCase().trim();
     if (searchText) {
-      countriesToRender = allCountries.filter(c => 
-        (c.name && c.name.toLowerCase().includes(searchText)) || 
-        (c.id && c.id.toLowerCase().includes(searchText))
-      );
+      countriesToRender = allCountries.filter(c => {
+        const info = (typeof getCountryInfo === 'function') ? getCountryInfo(c.name) : {};
+        const codeStr = info.code ? info.code.toLowerCase() : '';
+        return (c.name && c.name.toLowerCase().includes(searchText)) || 
+               (c.id && c.id.toLowerCase().includes(searchText)) ||
+               (codeStr && codeStr.includes(searchText));
+      });
     }
   }
 
   if (countriesToRender.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="5" class="text-center">Không tìm thấy quốc gia nào</td></tr>';
+      '<tr><td colspan="6" class="text-center">Không tìm thấy quốc gia nào</td></tr>';
+    _renderCountryToggleBtn(0, 0);
     return;
   }
 
+  // Sắp xếp: nước có phim lên trước, sau đó theo tên
+  const sorted = [...countriesToRender].sort((a, b) => {
+    const ca = movieCountByCountry[a.id] || 0;
+    const cb = movieCountByCountry[b.id] || 0;
+    if (cb !== ca) return cb - ca;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  // Giới hạn 10 nếu không mở rộng và không đang tìm kiếm
+  const isSearching = searchInput && searchInput.value.trim() !== '';
+  const limit = (_showAllCountries || isSearching) ? sorted.length : Math.min(10, sorted.length);
+  const displayed = sorted.slice(0, limit);
+
   // Vẽ từng dòng
-  tbody.innerHTML = countriesToRender
+  tbody.innerHTML = displayed
     .map((country, index) => {
       const countryInfo = getCountryInfo(country.name);
-      
+      const numMovies = movieCountByCountry[country.id] || 0;
       return `
             <tr>
-                <td>${index + 1}</td>
-                <td>${country.id}</td>
+                <td style="text-align: center;">${index + 1}</td>
+                <td style="text-align: center;">${country.id}</td>
                 <td>
-                    <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; overflow: hidden;">
                         <span class="country-badge-v2" style="background: ${countryInfo.bg}; color: ${countryInfo.color}; border-color: ${countryInfo.color}33;">
                             ${countryInfo.code ? `<img src="https://flagcdn.com/w40/${countryInfo.code}.png" class="flag-icon-img" alt="${country.name}">` : `<span class="flag-icon">${countryInfo.icon}</span>`}
                         </span>
-                        <strong>${country.name}</strong>
+                        <strong style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${country.name}</strong>
                     </div>
                 </td>
-                <td><span class="badge badge-primary">${country.code || "N/A"}</span></td>
-                <td>
+                <td style="text-align: center;"><span class="badge badge-primary">${countryInfo.code ? countryInfo.code.toUpperCase() : "N/A"}</span></td>
+                <td style="text-align: center;">
+                    <span class="badge" style="background: ${numMovies > 0 ? 'rgba(77, 184, 255, 0.15)' : 'rgba(255,255,255,0.05)'}; color: ${numMovies > 0 ? '#4db8ff' : '#888'}; font-weight: 600; padding: 4px 10px; border-radius: 6px;">
+                        ${numMovies} phim
+                    </span>
+                </td>
+                <td style="text-align: center;">
                     <button class="btn btn-sm btn-primary" onclick="editCountry('${country.id}')" title="Sửa">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -3899,6 +3743,287 @@ function renderAdminCountries() {
         `;
     })
     .join("");
+
+  // Render nút toggle Xem tất cả / Thu gn
+  _renderCountryToggleBtn(sorted.length, limit);
+
+  // Tự động render biểu đồ thống kê khi load bảng quốc gia
+  if (typeof populateCountryStatsDropdown === 'function') populateCountryStatsDropdown();
+  if (typeof renderCountryStatsChart === 'function') {
+    const sel = document.getElementById('countryStatsSelect');
+    renderCountryStatsChart(sel ? sel.value : '', _countryStatsPeriod || 'all');
+  }
+}
+
+/**
+ * Render nút "Xem tất cả / Thu gn" bên dưới bảng quốc gia
+ */
+function _renderCountryToggleBtn(total, shown) {
+  // Tìm hoặc tạo container cho nút toggle
+  let btnContainer = document.getElementById('countryToggleBtnWrapper');
+  if (!btnContainer) {
+    const table = document.getElementById('adminCountriesTable');
+    if (!table) return;
+    // Tìm phần tử cha của table và thêm vào sau
+    const parentTable = table.closest('table') || table.parentElement;
+    btnContainer = document.createElement('div');
+    btnContainer.id = 'countryToggleBtnWrapper';
+    btnContainer.style.cssText = 'text-align: center; padding: 12px 0 4px;';
+    parentTable.insertAdjacentElement('afterend', btnContainer);
+  }
+
+  if (total <= 10) {
+    // Không cần nút nếu tổng ≤ 10
+    btnContainer.innerHTML = '';
+    return;
+  }
+
+  const remaining = total - shown;
+  btnContainer.innerHTML = _showAllCountries
+    ? `<button onclick="_toggleAllCountries()" class="btn btn-sm" style="background: rgba(255,255,255,0.07); color: #aaa; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 18px; cursor: pointer; font-size: 0.85rem;">
+          <i class="fas fa-chevron-up" style="margin-right:6px;"></i>Thu gn (hiện 10)
+       </button>`
+    : `<button onclick="_toggleAllCountries()" class="btn btn-sm" style="background: rgba(77,184,255,0.1); color: #4db8ff; border: 1px solid rgba(77,184,255,0.25); border-radius: 6px; padding: 6px 18px; cursor: pointer; font-size: 0.85rem;">
+          <i class="fas fa-chevron-down" style="margin-right:6px;"></i>Xem tất cả (còn ${remaining} quốc gia)
+       </button>`;
+}
+
+/**
+ * Toggle trạng thái hiển thị tất cả / thu gn
+ */
+window._toggleAllCountries = function() {
+  _showAllCountries = !_showAllCountries;
+  renderAdminCountries();
+};
+
+
+
+
+/* ============================================
+   BIỂU Ồ THNG KÊ QUC GIA - TOP 10 PHIM
+   ============================================ */
+
+// Biến lưu trạng thái chart hiện tại
+let _countryStatsChart = null;
+let _countryStatsPeriod = 'all';
+
+/**
+ * Populate dropdown chn quốc gia trong biểu đồ
+ */
+function populateCountryStatsDropdown() {
+  const select = document.getElementById('countryStatsSelect');
+  if (!select || !allCountries) return;
+
+  const currentVal = select.value;
+  select.innerHTML = '<option value=""> Tất cả quốc gia</option>' +
+    allCountries.map(c => {
+      const info = (typeof getCountryInfo === 'function') ? getCountryInfo(c.name) : {};
+      return `<option value="${c.id}">${c.name}</option>`;
+    }).join('');
+  
+  if (currentVal) select.value = currentVal;
+}
+
+/**
+ * Xử lý khi chn quốc gia trong dropdown
+ */
+window.onCountryStatsSelectChange = function() {
+  const select = document.getElementById('countryStatsSelect');
+  const countryId = select ? select.value : '';
+  renderCountryStatsChart(countryId, _countryStatsPeriod);
+};
+
+/**
+ * Xử lý khi click tab lọc thời gian (Tất cả / Ngày / Tuần / Tháng)
+ */
+window.changeCountryStatsPeriod = function(period) {
+  _countryStatsPeriod = period;
+
+  // Cập nhật active tab
+  document.querySelectorAll('.chart-period-tabs .chart-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.period === period);
+  });
+
+  const select = document.getElementById('countryStatsSelect');
+  const countryId = select ? select.value : '';
+  renderCountryStatsChart(countryId, period);
+};
+
+/**
+ * Render biểu đồ Top 10 phim xem nhiều nhất theo quốc gia + thi gian
+ * @param {string} countryId - ID quốc gia (rỗng = tất cả)
+ * @param {string} period - 'all' | 'day' | 'week' | 'month'
+ */
+async function renderCountryStatsChart(countryId, period) {
+  const ctx = document.getElementById('countryStatsChart');
+  const emptyEl = document.getElementById('countryChartEmpty');
+  if (!ctx || !supabase) return;
+
+  try {
+    // Tính mốc thi gian lc
+    let fromDate = null;
+    const now = new Date();
+    if (period === 'day') {
+      fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    } else if (period === 'week') {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      fromDate = d.toISOString();
+    } else if (period === 'month') {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 1);
+      fromDate = d.toISOString();
+    }
+
+    // Query view_logs từ Supabase
+    let query = supabase.from('view_logs').select('movie_id');
+
+    if (countryId) {
+      query = query.eq('country_id', countryId);
+    }
+    if (fromDate) {
+      query = query.gte('viewed_at', fromDate);
+    }
+
+    const { data: logs, error } = await query.limit(5000);
+    if (error) throw error;
+
+    // ếm lượt xem theo movie_id
+    const viewCounts = {};
+    (logs || []).forEach(log => {
+      viewCounts[log.movie_id] = (viewCounts[log.movie_id] || 0) + 1;
+    });
+
+    // Sắp xếp và lấy Top 10
+    const sorted = Object.entries(viewCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+
+    // Nếu không có dữ liệu view_logs, fallback sang allAdminMovies
+    if (sorted.length === 0 && period === 'all') {
+      // Dùng dữ liệu views từ allAdminMovies làm fallback
+      let moviesPool = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) 
+        ? allAdminMovies : (allMovies || []);
+      
+      if (countryId) {
+        moviesPool = moviesPool.filter(m => 
+          (m.countryId || m.country_id || m.country) === countryId
+        );
+      }
+
+      const fallback = moviesPool
+        .filter(m => (m.views || 0) > 0)
+        .sort((a, b) => (b.views || 0) - (a.views || 0))
+        .slice(0, 10);
+
+      if (fallback.length === 0) {
+        if (emptyEl) emptyEl.style.display = 'block';
+        ctx.style.display = 'none';
+        if (_countryStatsChart) { _countryStatsChart.destroy(); _countryStatsChart = null; }
+        return;
+      }
+
+      const labels = fallback.map(m => truncateText(m.title || 'N/A', 25));
+      const data = fallback.map(m => m.views || 0);
+      drawCountryChart(ctx, emptyEl, labels, data);
+      return;
+    }
+
+    if (sorted.length === 0) {
+      if (emptyEl) emptyEl.style.display = 'block';
+      ctx.style.display = 'none';
+      if (_countryStatsChart) { _countryStatsChart.destroy(); _countryStatsChart = null; }
+      return;
+    }
+
+    // Map movie_id sang tên phim
+    const allMoviesRef = (typeof allAdminMovies !== 'undefined' && allAdminMovies.length > 0) 
+      ? allAdminMovies : (allMovies || []);
+
+    const labels = sorted.map(([movieId]) => {
+      const movie = allMoviesRef.find(m => m.id === movieId);
+      return truncateText(movie ? movie.title : movieId, 25);
+    });
+    const data = sorted.map(([, count]) => count);
+
+    drawCountryChart(ctx, emptyEl, labels, data);
+
+  } catch (err) {
+    console.error('Lỗi render biểu đồ quốc gia:', err);
+  }
+}
+
+/**
+ * Vẽ Chart.js Horizontal Bar
+ */
+function drawCountryChart(ctx, emptyEl, labels, data) {
+  if (emptyEl) emptyEl.style.display = 'none';
+  ctx.style.display = 'block';
+
+  if (_countryStatsChart) _countryStatsChart.destroy();
+
+  // Gradient màu cho mỗi bar
+  const colors = [
+    '#4db8ff', '#ff6b6b', '#ffd700', '#51cf66', '#da77f2',
+    '#ff922b', '#20c997', '#748ffc', '#f06595', '#adb5bd'
+  ];
+
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const textColor = isDark ? '#ccc' : '#555';
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
+
+  _countryStatsChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Lượt xem',
+        data: data,
+        backgroundColor: colors.slice(0, data.length),
+        borderRadius: 6,
+        borderSkipped: false,
+        barThickness: 22,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)',
+          titleColor: isDark ? '#fff' : '#333',
+          bodyColor: isDark ? '#ddd' : '#555',
+          borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+          borderWidth: 1,
+          cornerRadius: 8,
+          padding: 10,
+          callbacks: {
+            label: (ctx) => `${ctx.parsed.x.toLocaleString()} lượt xem`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: gridColor },
+          ticks: { color: textColor, font: { size: 11 } }
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: textColor, font: { size: 11, weight: 500 } }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Helper: Cắt ngắn text
+ */
+function truncateText(text, maxLen) {
+  if (!text) return '';
+  return text.length > maxLen ? text.substring(0, maxLen) + '...' : text;
 }
 
 
@@ -3917,7 +4042,7 @@ function renderAdminMoviesList(movies) {
   const paginatedMovies = movies.slice(startIndex, startIndex + adminPerPage);
 
   if (totalItems === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center">Không tìm thấy phim nào.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center">Không tìm thấy phim nào.</td></tr>';
     const paginationContainer = document.getElementById("adminMoviePagination");
     if (paginationContainer) paginationContainer.innerHTML = "";
     return;
@@ -3933,16 +4058,25 @@ function renderAdminMoviesList(movies) {
       }
       const countryInfo = getCountryInfo(countryDisplayName);
       
-      // Tính toán số tập cho cột Tình trạng
+      // Tính toán số tập cho cột Tình trạng (dữ liệu thật từ DB)
       const currentEps = movie._episodeCount || (movie.episodes ? movie.episodes.length : 0);
-      const totalEps = movie.totalEpisodes || movie.total_episodes || "??";
+      const totalEps = movie.totalEpisodes || movie.total_episodes || null;
       let episodeStatus = "";
       
-      if (movie.type === "series") {
-        const isFull = totalEps !== "??" && currentEps >= parseInt(totalEps);
-        episodeStatus = `<span style="color: ${isFull ? '#2ecc71' : '#f1c40f'}; font-weight: 600;">${currentEps}/${totalEps} tập</span>`;
+      if (currentEps === 0) {
+        // Phim chưa có tập nào → cảnh báo đỏ
+        episodeStatus = '<span style="color: #e74c3c; font-weight: 600; font-size: 0.85rem;"><i class="fas fa-exclamation-triangle" style="margin-right: 4px;"></i>Chưa có tập</span>';
+      } else if (movie.type === "series") {
+        if (totalEps && currentEps >= parseInt(totalEps)) {
+          // Phim bộ đã hoàn tất
+          episodeStatus = `<span style="color: #2ecc71; font-weight: 600;">${currentEps}/${totalEps} tập ✓</span>`;
+        } else {
+          // Phim bộ đang chiếu
+          episodeStatus = `<span style="color: #f1c40f; font-weight: 600;">${currentEps}/${totalEps || '??'} tập</span>`;
+        }
       } else {
-        episodeStatus = '<span style="color: #e67e22; font-weight: 600;">Full</span>';
+        // Phim lẻ: hiển thị số tập thực tế (thưng là 1)
+        episodeStatus = `<span style="color: #2ecc71; font-weight: 600;">${currentEps} tập ✓</span>`;
       }
 
       const typeBadge =
@@ -3954,7 +4088,7 @@ function renderAdminMoviesList(movies) {
         movie.status === "public"
           ? '<span class="status-badge public">Công khai</span>'
           : movie.status === "hidden"
-          ? '<span class="status-badge hidden">Đã ẩn</span>'
+          ? '<span class="status-badge hidden">ã ẩn</span>'
           : '<span class="status-badge pending">Chờ duyệt</span>';
 
       // Resolve category IDs sang tên thể loại
@@ -3977,10 +4111,10 @@ function renderAdminMoviesList(movies) {
         <tr>
           <td><img src="${poster}" class="admin-table-poster" style="width: 50px; height: 75px; object-fit: cover; border-radius: 4px;" onerror="this.onerror=null; this.src='https://placehold.co/50x75/2a2a3a/FFFFFF?text=NO'"></td>
           <td>
-            <div style="display: flex; flex-direction: column;">
-                <strong style="font-size: 1.05rem;">${movie.title}</strong>
-                <small class="text-muted" style="font-size: 0.85rem; margin-top: 2px;">${movie.originTitle || movie.origin_title || movie.originalTitle || ""}</small>
-                <small class="text-muted" style="font-size: 0.75rem; opacity: 0.6;">ID: ${movie.id}</small>
+            <div style="display: flex; flex-direction: column; max-width: 220px;">
+                <strong style="font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${movie.title}">${movie.title}</strong>
+                <small class="text-muted" style="font-size: 0.85rem; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${movie.originTitle || movie.origin_title || movie.originalTitle || ""}</small>
+                <small class="text-muted" style="font-size: 0.75rem; opacity: 0.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${movie.id}">ID: ${movie.id}</small>
             </div>
           </td>
           <td>
@@ -3997,6 +4131,25 @@ function renderAdminMoviesList(movies) {
           <td>${movie.price ? `<span class="text-accent" style="color: #4db8ff; font-weight: 600;">${movie.price} CRO</span>` : '<span class="status-badge free">Miễn phí</span>'}</td>
           <td style="text-align: center;"><i class="fas fa-eye text-muted"></i> ${formatNumber(movie.views || 0)}</td>
           <td>${statusBadge}</td>
+          <td style="text-align: center; white-space: nowrap;">
+            ${(() => {
+              // Hiển thị thi gian phim được upload lên (ngày/tháng/năm + gi:phút:giây)
+              const rawDate = movie.created_at || movie.createdAt;
+              if (!rawDate) return '<span class="text-muted" style="font-size: 0.8rem;">N/A</span>';
+              const d = new Date(rawDate);
+              if (isNaN(d.getTime())) return '<span class="text-muted" style="font-size: 0.8rem;">N/A</span>';
+              const day = String(d.getDate()).padStart(2, '0');
+              const month = String(d.getMonth() + 1).padStart(2, '0');
+              const year = d.getFullYear();
+              const hours = String(d.getHours()).padStart(2, '0');
+              const mins = String(d.getMinutes()).padStart(2, '0');
+              const secs = String(d.getSeconds()).padStart(2, '0');
+              return `<div style="font-size: 0.82rem; line-height: 1.5;">`
+                + `<div style="font-weight: 600; color: var(--text-primary, #ddd);">${day}/${month}/${year}</div>`
+                + `<div style="color: var(--text-muted, #888); font-size: 0.75rem;"><i class="fas fa-clock" style="margin-right: 3px; font-size: 0.7rem;"></i>${hours}:${mins}:${secs}</div>`
+                + `</div>`;
+            })()}
+          </td>
           <td>
             <div class="admin-actions" style="display: flex; flex-direction: column; gap: 5px;">
               <button class="btn btn-sm btn-secondary" onclick="editMovie('${movie.id}')" title="Sửa" style="background: #34495e; border: none; padding: 6px;">
@@ -4022,7 +4175,9 @@ function renderAdminMoviesList(movies) {
  */
 window.changeAdminMoviePage = function(page) {
     currentAdminMoviePage = page;
-    filterAdminMovies(); // Gọi lại hàm lọc để render đúng dữ liệu trang mới
+    // Lưu trang vào sessionStorage để khôi phục khi quay lại
+    try { sessionStorage.setItem('adminMoviePage', page); } catch(e) {}
+    filterAdminMovies(true); // true = không reset trang về 1, giữ nguyên trang đã chn
     const panel = document.getElementById("moviesPanel");
     if (panel) panel.scrollIntoView({ behavior: 'smooth' });
 };
@@ -4195,7 +4350,7 @@ function renderAdminActors() {
       if (sortVal === "az") return (a.name || "").localeCompare(b.name || "");
       if (sortVal === "za") return (b.name || "").localeCompare(a.name || "");
       
-      // Sắp xếp theo thời gian (createdAt)
+      // Sắp xếp theo thi gian (createdAt)
       const timeA = a.createdAt ? (a.createdAt.seconds || new Date(a.createdAt).getTime() / 1000 || 0) : 0;
       const timeB = b.createdAt ? (b.createdAt.seconds || new Date(b.createdAt).getTime() / 1000 || 0) : 0;
       
@@ -4248,7 +4403,7 @@ function renderAdminActors() {
                     : (window.latestAddedActorIds || []).includes(actor.id) ? '<span class="badge-new">NEW</span>' : ''}
                   <br><small class="text-muted">ID: ${actor.id}</small>
                 </td>
-                <td><span style="font-size: 0.75rem; padding: 3px 6px; border-radius: 4px; font-weight: bold; background: ${actor.role === 'director' ? '#9c27b0' : '#4dabf7'}; color: #fff;">${actor.role === 'director' ? 'Đạo diễn' : 'Diễn viên'}</span></td>
+                <td><span style="font-size: 0.75rem; padding: 3px 6px; border-radius: 4px; font-weight: bold; background: ${actor.role === 'director' ? '#9c27b0' : '#4dabf7'}; color: #fff;">${actor.role === 'director' ? 'ạo diễn' : 'Diễn viên'}</span></td>
                 <td>${actor.gender || "Không rõ"}</td>
                 <td>${actor.dob ? new Date(actor.dob).toLocaleDateString('vi-VN') : "Không rõ"}</td>
                 <td>
@@ -4272,7 +4427,7 @@ function renderAdminActors() {
     })
     .join("");
 
-  // Kiểm tra trạng thái "Chọn tất cả" của trang hiện tại
+  // Kiểm tra trạng thái "Chn tất cả" của trang hiện tại
   const allCurrentSelected = paginatedActors.length > 0 && paginatedActors.every(a => selectedActorIds.includes(a.id));
   const selectAllCb = document.getElementById("selectAllActors");
   if (selectAllCb) selectAllCb.checked = allCurrentSelected;
@@ -4290,7 +4445,7 @@ function renderAdminActors() {
  * @param {number} totalItems - Tổng số mục
  * @param {number} currentPage - Trang hiện tại
  * @param {number} perPage - Số mục mỗi trang
- * @param {string} changePageFuncName - Tên hàm xử lý chuyển trang (dạng chuỗi để gọi qua window)
+ * @param {string} changePageFuncName - Tên hàm xử lý chuyển trang (dạng chuỗi để gi qua window)
  * @param {string} unitName - Tên đơn vị hiển thị (VD: "phim", "người dùng")
  */
 function renderAdminPagination(containerId, totalItems, currentPage, perPage, changePageFuncName, unitName = "mục") {
@@ -4335,14 +4490,15 @@ function renderAdminPagination(containerId, totalItems, currentPage, perPage, ch
       </button>
     </div>
     <div class="pagination-jump">
-      <span>Đến trang</span>
+      <span>Trang ${currentPage} / ${totalPages}</span>
       <input type="number" class="jump-input" min="1" max="${totalPages}" value="${currentPage}" 
+        placeholder="Số trang"
         onkeydown="if(event.key==='Enter') { 
           const val = parseInt(this.value); 
           if(val >= 1 && val <= ${totalPages}) window.${changePageFuncName}(val);
-          else showNotification('Số trang không hợp lệ', 'warning');
+          else showNotification('Số trang không hợp lệ (1-${totalPages})', 'warning');
         }">
-      <button class="btn-jump" onclick="const val = parseInt(this.previousElementSibling.value); if(val >= 1 && val <= ${totalPages}) window.${changePageFuncName}(val); else showNotification('Số trang không hợp lệ', 'warning');">Vào</button>
+      <button class="btn-jump" onclick="const val = parseInt(this.previousElementSibling.value); if(val >= 1 && val <= ${totalPages}) window.${changePageFuncName}(val); else showNotification('Số trang không hợp lệ (1-${totalPages})', 'warning');">Vào</button>
     </div>
   `;
 
@@ -4392,7 +4548,7 @@ function openActorModal(actorId = null) {
       if (typeof updateActorPreview === 'function') updateActorPreview();
     }
   } else {
-    modalTitle.textContent = "Thêm Mới Người Năng Khiếu";
+    modalTitle.textContent = "Thêm Mới Ngưi Năng Khiếu";
     idInput.value = "";
     roleInput.value = "actor";
   }
@@ -4412,7 +4568,7 @@ function createActorIdFromName(name) {
   return name.toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[đĐ]/g, 'd')
+    .replace(/[đ]/g, 'd')
     .replace(/([^0-9a-z-\s])/g, '')
     .replace(/(\s+)/g, '-')
     .replace(/-+/g, '-')
@@ -4469,14 +4625,14 @@ window.fetchActorsFromAPI = async function() {
     const API_URL = `https://ophim1.com/v1/api/phim/${slug}/peoples`;
     
     try {
-        showLoading(true, "Đang quét danh sách diễn viên & đạo diễn từ OPhim...");
+        showLoading(true, "ang quét danh sách diễn viên & đạo diễn từ OPhim...");
         
         const response = await fetch(API_URL);
         if (!response.ok) throw new Error(`Mã lỗi: ${response.status}`);
         
         const result = await response.json();
         if (!result.success || !result.data || !result.data.peoples) {
-            throw new Error("API không trả về dữ liệu diễn viên!");
+            throw new Error("API không trả v dữ liệu diễn viên!");
         }
         
         const peoples = result.data.peoples;
@@ -4578,9 +4734,9 @@ window.fetchActorsFromAPI = async function() {
         // Hiển thị kết quả
         let resultHtml = `
             <div style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px; font-size: 0.9rem; border: 1px solid rgba(77,171,247,0.3);">
-                <div style="color: #51cf66; font-weight: 600; margin-bottom: 5px;">✅ Đã thêm mới: ${imported}</div>
+                <div style="color: #51cf66; font-weight: 600; margin-bottom: 5px;">✅ ã thêm mới: ${imported}</div>
                 ${imported > 0 ? `<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 10px;">(${importedNames.join(", ")})</div>` : ""}
-                <div style="color: #aaa; margin-bottom: ${updatesAvailable.length > 0 ? '10px' : '0'};">⏭️ Đã bỏ qua (đã đầy đủ): ${skipped}</div>
+                <div style="color: #aaa; margin-bottom: ${updatesAvailable.length > 0 ? '10px' : '0'};"> ã b qua (đã đầy đủ): ${skipped}</div>
                 ${updatesAvailable.length > 0 ? `
                     <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; margin-top: 5px;">
                         <div style="color: var(--accent-secondary); font-weight: 600; margin-bottom: 8px;">✨ Có ${updatesAvailable.length} diễn viên có thể bổ sung thông tin!</div>
@@ -4593,7 +4749,7 @@ window.fetchActorsFromAPI = async function() {
         `;
         
         if (resultsDiv) resultsDiv.innerHTML = resultHtml;
-        showNotification(`Đã quét xong! Thêm mới: ${imported}, Chờ duyệt bổ sung: ${updatesAvailable.length}`, "success");
+        showNotification(`ã quét xong! Thêm mới: ${imported}, Chờ duyệt bổ sung: ${updatesAvailable.length}`, "success");
         
     } catch (err) {
         console.error("Lỗi fetch actors:", err);
@@ -4697,7 +4853,7 @@ async function handleActorSubmit(event) {
 }
 
 /**
- * XỬ LÝ GỢI Ý QUỐC GIA THÔNG MINH (SMART COUNTRY SUGGESTIONS)
+ * XỬ L GỢI  QUC GIA THÔNG MINH (SMART COUNTRY SUGGESTIONS)
  */
 let currentSuggestionIndex = -1;
 
@@ -4713,7 +4869,7 @@ function handleCountryInput(query) {
         return;
     }
 
-    // Lọc từ mảng allCountries (đã có sẵn trong hệ thống)
+    // Lc từ mảng allCountries (đã có sẵn trong hệ thống)
     const filtered = allCountries.filter(c => 
         (c.name && c.name.toLowerCase().includes(query)) || 
         (c.id && c.id.toLowerCase().includes(query))
@@ -4798,7 +4954,7 @@ document.addEventListener("click", function(e) {
 });
 
 /**
- * LOGIC HÀNH ĐỘNG HÀNG LOẠT (BULK ACTIONS)
+ * LOGIC HÀNH ỘNG HÀNG LOẠT (BULK ACTIONS)
  */
 
 window.toggleActorSelection = function(actorId, isChecked) {
@@ -4854,7 +5010,7 @@ function updateBulkActionsBar() {
 window.deleteSelectedActors = async function() {
     if (selectedActorIds.length === 0) return;
     
-    const confirm = await customConfirm(`Bạn có chắc chắn muốn xóa ${selectedActorIds.length} diễn viên đã chọn không?`, {
+    const confirm = await customConfirm(`Bạn có chắc chắn muốn xóa ${selectedActorIds.length} diễn viên đã chn không?`, {
         title: "Xóa hàng loạt",
         type: "danger",
         confirmText: "Xóa ngay"
@@ -4871,8 +5027,8 @@ window.deleteSelectedActors = async function() {
         
         if (error) throw error;
         
-        showNotification(`Đã xóa thành công ${selectedActorIds.length} diễn viên!`, "success");
-        notifyDataChange("actors"); // 📡 Đồng bộ cache
+        showNotification(`ã xóa thành công ${selectedActorIds.length} diễn viên!`, "success");
+        notifyDataChange("actors"); // 📡 ồng bộ cache
         
         selectedActorIds = [];
         updateBulkActionsBar();
@@ -4899,7 +5055,7 @@ window.openBulkUpdateModal = function(field) {
     const countLabel = document.getElementById("bulkUpdateCount");
     
     if (!modal || !fieldInput) {
-        console.error("Không tìm thấy modal hoặc input trường cập nhật hàng loạt!");
+        console.error("Không tìm thấy modal hoặc input trưng cập nhật hàng loạt!");
         return;
     }
 
@@ -4949,7 +5105,7 @@ window.handleBulkUpdateSubmit = async function(e) {
     if (!confirm) return;
     
     try {
-        showLoading(true, `Đang cập nhật ${selectedActorIds.length} diễn viên...`);
+        showLoading(true, `ang cập nhật ${selectedActorIds.length} diễn viên...`);
         
         const updateData = {
             [field]: newValue,
@@ -4963,7 +5119,7 @@ window.handleBulkUpdateSubmit = async function(e) {
             
         if (error) throw error;
         
-        showNotification(`Đã cập nhật xong ${selectedActorIds.length} diễn viên!`, "success");
+        showNotification(`ã cập nhật xong ${selectedActorIds.length} diễn viên!`, "success");
         notifyDataChange("actors");
         
         closeModal("bulkUpdateActorModal");
@@ -5044,7 +5200,7 @@ async function deleteActor(actorId) {
 }
 
 /**
- * Load danh sách bình luận (Đã sửa lỗi ID để xóa được ngay)
+ * Load danh sách bình luận (ã sửa lỗi ID để xóa được ngay)
  */
 async function loadAdminComments() {
   const tbody = document.getElementById("adminCommentsTable");
@@ -5062,10 +5218,10 @@ async function loadAdminComments() {
     
     if (error) throw error;
     
-    // Lưu vào biến toàn cục và map lại cho UI dễ đọc
+    // Lưu vào biến toàn cục và map lại cho UI dễ đc
     allAdminComments = (data || []).map(c => ({
         ...c,
-        userName: c.profiles?.display_name || "Ẩn danh",
+        userName: c.profiles?.display_name || "ẨẨn danh",
         userAvatar: c.profiles?.avatar,
         movieTitle: c.movies?.title || "N/A"
     }));
@@ -5079,7 +5235,7 @@ async function loadAdminComments() {
 }
 
 /**
- * Hàm lọc comment theo nội dung và đánh giá
+ * Hàm lc comment theo nội dung và đánh giá
  */
 function filterAdminComments() {
   const searchText = document.getElementById("adminSearchComments").value.toLowerCase().trim();
@@ -5140,12 +5296,12 @@ function renderAdminCommentsList(comments) {
               <td>
                   <div style="display:flex;align-items:center;gap:10px;">
                       ${avatarHtml}
-                      <span>${comment.userName || "Ẩn danh"}</span>
+                      <span>${comment.userName || "ẨẨn danh"}</span>
                   </div>
               </td>
               <td>${movieDisplay}</td>
               <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${comment.content}">${comment.content}</td>
-              <td style="color:#ffaa00; font-size:12px;">⭐ ${comment.rating}</td>
+              <td style="color:#ffaa00; font-size:12px;"> ${comment.rating}</td>
               <td>${date}</td>
               <td>
                   <button class="btn btn-sm btn-danger" onclick="deleteAdminComment('${comment.id}')">
@@ -5173,12 +5329,12 @@ async function deleteAdminComment(commentId) {
     // 2. Xóa dòng đó trên giao diện NGAY LẬP TỨC
     const row = document.getElementById(`row-comment-${commentId}`);
     if (row) {
-      // Hiệu ứng mờ dần cho đẹp
+      // Hiệu ứng m dần cho đẹp
       row.style.transition = "all 0.5s ease";
       row.style.opacity = "0";
       row.style.backgroundColor = "#ffcccc"; // Nháy đỏ nhẹ
 
-      // Đợi 0.5s rồi xóa hẳn khỏi HTML
+      // ợi 0.5s rồi xóa hẳn khi HTML
       setTimeout(() => row.remove(), 500);
     }
 
@@ -5191,7 +5347,7 @@ async function deleteAdminComment(commentId) {
   }
 }
 /**
- * Load lịch sử giao dịch (Đã cập nhật hiện giờ chi tiết)
+ * Load lịch sử giao dịch (ã cập nhật hiện gi chi tiết)
  */
 async function loadAdminTransactions() {
   const tbody = document.getElementById("adminTransactionsTable");
@@ -5227,7 +5383,7 @@ async function loadAdminTransactions() {
         if (tx.status === "completed")
           statusBadge = '<span class="status-badge active">Thành công</span>';
         else if (tx.status === "pending")
-          statusBadge = '<span class="status-badge warning">Đang chờ</span>';
+          statusBadge = '<span class="status-badge warning">ang ch</span>';
         else
           statusBadge = `<span class="status-badge blocked">${tx.status}</span>`;
 
@@ -5268,18 +5424,33 @@ window.updateSourceIndicator = function(url, previewId) {
     if (!indicator) return;
 
     const isCloudinary = url && (url.includes("cloudinary.com") || url.startsWith("blob:") || url.startsWith("data:"));
-    const isPending = url && url.startsWith("[File chờ tải lên]");
+    // Nhận dạng URL từ Cloudflare R2 Worker (workers.dev hoặc r2.dev)
+    const isCloudflare = url && (url.includes("workers.dev") || url.includes(".r2.dev"));
+    // Nhận dạng file đang ch upload lên R2
+    const isPendingR2 = url && url.startsWith("[File R2 ch tải lên]");
+    const isPending = url && url.startsWith("[File ch tải lên]");
 
     const icon = indicator.querySelector('i');
     
-    if (isCloudinary || isPending) {
+    if (isCloudflare || isPendingR2) {
+        indicator.className = "image-source-indicator cloudflare";
+        indicator.title = isPendingR2 ? "Ảnh ch tải lên Cloudflare R2 (sẽ upload khi bấm Lưu)" : "Ảnh lưu trên Cloudflare R2";
+        // Hiển thị logo Cloudflare (chữ CF)
+        if (icon) {
+            icon.className = "";
+            icon.textContent = "CF";
+            icon.style.fontWeight = "bold";
+            icon.style.fontSize = "8px";
+            icon.style.fontFamily = "Arial, sans-serif";
+        }
+    } else if (isCloudinary || isPending) {
         indicator.className = "image-source-indicator cloudinary";
         indicator.title = "Ảnh từ Cloudinary (Hoặc file cục bộ sẵn sàng upload)";
-        if (icon) icon.className = "fas fa-cloud";
+        if (icon) { icon.className = "fas fa-cloud"; icon.textContent = ""; icon.style = ""; }
     } else {
         indicator.className = "image-source-indicator direct-link";
         indicator.title = "Link ảnh trực tiếp từ bên ngoài";
-        if (icon) icon.className = "fas fa-link";
+        if (icon) { icon.className = "fas fa-link"; icon.textContent = ""; icon.style = ""; }
     }
 }
 
@@ -5298,8 +5469,8 @@ window.updateImagePreview = function(url, previewId) {
         return;
     }
 
-    // Nếu là file chọn từ máy (đang chờ), preview đã được set qua uploadMovieImage()
-    if (url.startsWith("[File chờ tải lên]")) return;
+    // Nếu là file chn từ máy (đang ch), preview đã được set qua uploadMovieImage()
+    if (url.startsWith("[File ch tải lên]")) return;
 
     // Nếu là link ảnh online, hiển thị luôn
     const img = previewContainer.querySelector('img');
@@ -5312,8 +5483,30 @@ window.updateImagePreview = function(url, previewId) {
 }
 
 /**
+ * Hoán đổi link Poster ↔ Background (khi API trả ảnh sai vị trí)
+ */
+window.swapPosterBackground = function() {
+    const posterInput = document.getElementById("moviePoster");
+    const bgInput = document.getElementById("movieBackground");
+    if (!posterInput || !bgInput) return;
+
+    // Hoán đổi giá trị
+    const temp = posterInput.value;
+    posterInput.value = bgInput.value;
+    bgInput.value = temp;
+
+    // Cập nhật preview 2 ảnh
+    if (typeof window.updateImagePreview === 'function') {
+        window.updateImagePreview(posterInput.value, 'posterPreview');
+        window.updateImagePreview(bgInput.value, 'bgPreview');
+    }
+
+    showNotification("Đã hoán đổi Poster ↔ Background!", "success");
+}
+
+/**
  * Tải ảnh lên Cloudinary và cập nhật URL vào input tương ứng
- * @param {HTMLInputElement} input - Input file vừa chọn
+ * @param {HTMLInputElement} input - Input file vừa chn
  * @param {string} targetUrlId - ID của ô input nhận URL ảnh
  * @param {string} previewId - ID của vùng chứa ảnh xem trước
  */
@@ -5325,7 +5518,7 @@ window.uploadMovieImage = async function(input, targetUrlId, previewId) {
 
   // 1. Kiểm tra định dạng
   if (!file.type.startsWith('image/')) {
-    showNotification("Vui lòng chọn file hình ảnh!", "error");
+    showNotification("Vui lòng chn file hình ảnh!", "error");
     return;
   }
 
@@ -5343,29 +5536,285 @@ window.uploadMovieImage = async function(input, targetUrlId, previewId) {
     reader.readAsDataURL(file);
   }
 
-  // 3. Lưu vào pendingUploads và hiển thị trạng thái chờ
+  // 3. Lưu vào pendingUploads và hiển thị trạng thái ch
   window.pendingUploads[targetUrlId] = file;
   
   const targetInput = document.getElementById(targetUrlId);
   if (targetInput) {
-    targetInput.value = `[File chờ tải lên] ${file.name}`;
-    targetInput.type = "text"; // Bỏ qua validate URL tạm thời
+    targetInput.value = `[File ch tải lên] ${file.name}`;
+    targetInput.type = "text"; // B qua validate URL tạm thi
     
-    // Nếu user sửa tay URL, tự động xoá ảnh khỏi hàng đợi
+    // Nếu user sửa tay URL, tự động xoá ảnh khi hàng đợi
     targetInput.oninput = () => {
-        if (!targetInput.value.startsWith("[File chờ tải lên]")) {
+        if (!targetInput.value.startsWith("[File ch tải lên]")) {
             delete window.pendingUploads[targetUrlId];
             targetInput.oninput = null; // Xóa listener
         }
     };
   }
 
-  input.value = ""; // Reset để có thể chọn lại cùng 1 file
+  input.value = ""; // Reset để có thể chn lại cùng 1 file
 }
 
 /**
- * Tải các ảnh đang chờ lên Cloudinary, có kiểm tra trùng lặp để tiết kiệm request
- * @returns {Promise<boolean>} Trả về true nếu thành công tất cả
+ * Chuyển chuỗi tiếng Việt có dấu thành không dấu, thay khoảng trắng + ký tự đặc biệt bằng _
+ * Ví dụ: "Venom: Kèo Chung Sống" → "venom_keo_chung_song"
+ * @param {string} str - Chuỗi cần chuyển
+ * @returns {string} Chuỗi không dấu, lowercase, nối bằng _
+ */
+function removeVietnameseDiacritics(str) {
+    if (!str) return '';
+    return str
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // B dấu
+        .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '') // Xóa ký tự đặc biệt (giữ chữ, số, khoảng trắng)
+        .replace(/\s+/g, '_') // Khoảng trắng → _
+        .replace(/_+/g, '_') // Gộp nhiu _ liên tiếp
+        .replace(/^_|_$/g, ''); // Xóa _ đầu/cuối
+}
+
+/**
+ * Chn ảnh để tải lên Cloudflare R2 - CHỈ PREVIEW CỤC BỘ, không upload ngay.
+ * Ảnh thực sự được upload khi Admin bấm nút "Lưu" (uploadPendingR2Images).
+ * @param {HTMLInputElement} input - Input file vừa chn
+ * @param {string} targetUrlId - ID của ô input nhận URL ảnh
+ * @param {string} previewId - ID của vùng chứa ảnh xem trước (nếu có)
+ * @param {string} folderMode - Loại ảnh trên R2: 'poster' hoặc 'background'
+ */
+window.uploadImageToR2 = function(input, targetUrlId, previewId, folderMode = 'poster') {
+  const file = input.files[0];
+  if (!file) return;
+
+  // 1. Kiểm tra định dạng
+  if (!file.type.startsWith('image/')) {
+    showNotification("Vui lòng chn file hình ảnh (Cloudflare R2)!", "error");
+    return;
+  }
+
+  // 2. Hiển thị Preview cục bộ ngay lập tức (không cần upload)
+  const previewContainer = document.getElementById(previewId);
+  if (previewContainer) {
+    const previewImg = previewContainer.querySelector('img');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (previewImg) previewImg.src = e.target.result;
+      previewContainer.style.display = "block";
+      // Hiển thị badge "CF" ch upload
+      window.updateSourceIndicator("[File R2 ch tải lên]", previewId);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // 3. Lưu file vào hàng đợi R2, ch khi bấm Lưu mới thực sự upload
+  window.pendingR2Uploads = window.pendingR2Uploads || {};
+  window.pendingR2Uploads[targetUrlId] = { file, folderMode, previewId };
+
+  // 4. ánh dấu input đang ch để b qua validate URL
+  const targetInput = document.getElementById(targetUrlId);
+  if (targetInput) {
+    targetInput.value = `[File R2 ch tải lên] ${file.name}`;
+    targetInput.type = "text";
+
+    // Nếu admin sửa tay URL thì hủy hàng đợi R2 cho field này
+    targetInput.oninput = () => {
+      if (!targetInput.value.startsWith("[File R2 ch tải lên]")) {
+        delete window.pendingR2Uploads[targetUrlId];
+        targetInput.oninput = null;
+      }
+    };
+  }
+
+  input.value = ""; // Reset để có thể chn lại cùng file
+  showNotification("Ảnh đã sẵn sàng! Bấm Lưu để tải lên Cloudflare R2. 🟠", "info");
+};
+
+/**
+ * Queue ảnh từ URL để upload lên Cloudflare R2 khi bấm Lưu
+ * Chỉ xếp hàng đợi + preview, KHÔNG upload ngay
+ * @param {string} targetUrlId - ID input chứa URL ảnh (moviePoster / movieBackground)
+ * @param {string} previewId - ID container preview ảnh
+ * @param {string} folderMode - Loại ảnh: 'poster' hoặc 'background'
+ */
+window.reuploadFromUrlToR2 = function(targetUrlId, previewId, folderMode) {
+    const targetInput = document.getElementById(targetUrlId);
+    if (!targetInput) return;
+
+    const imageUrl = targetInput.value.trim();
+    if (!imageUrl || imageUrl.startsWith("[File")) {
+        showNotification("Chưa có link ảnh để tải lên!", "warning");
+        return;
+    }
+
+    // Nếu ảnh đã trên Cloudflare R2 thì không cần re-upload
+    if (imageUrl.includes("workers.dev") || imageUrl.includes(".r2.dev")) {
+        showNotification("Ảnh này đã nằm trên Cloudflare R2 rồi!", "info");
+        return;
+    }
+
+    // ưa URL vào hàng đợi R2 (flag fromUrl để phân biệt với file upload)
+    window.pendingR2Uploads = window.pendingR2Uploads || {};
+    window.pendingR2Uploads[targetUrlId] = { fromUrl: true, url: imageUrl, folderMode, previewId };
+
+    // ánh dấu input đang ch upload
+    targetInput.value = `[File R2 ch tải lên] ${imageUrl.split('/').pop().split('?')[0]}`;
+    targetInput.type = "text";
+
+    // Cập nhật badge preview
+    window.updateSourceIndicator("[File R2 ch tải lên]", previewId);
+
+    // Nếu admin sửa tay URL thì hủy hàng đợi
+    targetInput.oninput = () => {
+        if (!targetInput.value.startsWith("[File R2 ch tải lên]")) {
+            delete window.pendingR2Uploads[targetUrlId];
+            targetInput.oninput = null;
+        }
+    };
+
+    showNotification("Ảnh đã sẵn sàng! Bấm Lưu để tải lên Cloudflare R2. 🟠", "info");
+};
+
+/**
+ * Thực sự upload tất cả ảnh đang ch trong hàng đợi R2 lên Cloudflare Worker.
+ * Gi khi admin bấm nút Lưu trong form phim.
+ * @returns {Promise<boolean>} true nếu upload hết thành công, false nếu có lỗi
+ */
+window.uploadPendingR2Images = async function() {
+  if (!window.pendingR2Uploads || Object.keys(window.pendingR2Uploads).length === 0) {
+    return true; // Không có gì cần upload R2
+  }
+
+  const WORKER_BASE = "https://r2-uploader.thinhnd-2003.workers.dev";
+  showLoading(true, "Đang tải ảnh lên Cloudflare R2...");
+
+  try {
+    // Lấy thông tin phim từ form để xây dựng folder + filename
+    const movieId = document.getElementById('movieId')?.value || window._preGeneratedMovieId || '';
+    const movieTitle = document.getElementById('movieTitle')?.value || '';
+    const titleSlug = removeVietnameseDiacritics(movieTitle);
+
+    for (const [targetUrlId, entry] of Object.entries(window.pendingR2Uploads)) {
+      const { folderMode, previewId } = entry;
+      
+      // Xây dựng folder và filename theo cấu trúc: movies/{ten_khong_dau}/{ten_khong_dau}_{poster|background}.ext
+      let folder = folderMode; // Fallback nếu không có thông tin phim
+      let customFilename = null;
+
+      if (titleSlug) {
+        // Dùng movieId + titleSlug nếu có ID, hoặc chỉ titleSlug nếu phim mới
+        const numericId = movieId ? (movieId.replace(/[^0-9]/g, '') || movieId) : '';
+        folder = numericId ? `movies/${numericId}_${titleSlug}` : `movies/${titleSlug}`;
+      }
+
+      let response;
+
+      if (entry.fromUrl) {
+        // === Upload từ URL: gi Worker endpoint /upload-from-url ===
+        const urlFilename = entry.url.split('/').pop().split('?')[0];
+        const ext = urlFilename.match(/\.(jpg|jpeg|png|gif|webp|avif)$/i)?.[1] || 'jpg';
+        customFilename = titleSlug ? `${titleSlug}_${folderMode}.${ext}` : null;
+
+        response = await fetch(WORKER_BASE + "/upload-from-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: entry.url,
+            folder: folder,
+            customFilename: customFilename
+          })
+        });
+      } else {
+        // === Upload file từ máy: gi Worker endpoint /upload (flow cũ) ===
+        const file = entry.file;
+        const ext = file.name.split('.').pop() || 'jpg';
+        customFilename = titleSlug ? `${titleSlug}_${folderMode}.${ext}` : null;
+
+        const formData = new FormData();
+        formData.append("file", file, customFilename || file.name);
+        formData.append("folder", folder);
+        if (customFilename) {
+          formData.append("customFilename", customFilename);
+        }
+
+        response = await fetch(WORKER_BASE + "/upload", {
+          method: "POST",
+          body: formData
+        });
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Lỗi HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      const downloadURL = data.url;
+
+      // Gán URL thực vào input
+      const targetInput = document.getElementById(targetUrlId);
+      if (targetInput) {
+        targetInput.value = downloadURL;
+        targetInput.type = "url";
+        targetInput.oninput = null;
+      }
+
+      // Cập nhật preview và badge thành Cloudflare chính thức
+      window.updateSourceIndicator(downloadURL, previewId);
+
+      console.log(`✅ R2 Upload OK [${folder}/${customFilename || 'auto'}]: ${downloadURL}`);
+    }
+
+    // Xóa hàng đợi sau khi upload xong
+    window.pendingR2Uploads = {};
+    return true;
+  } catch (error) {
+    console.error("Lỗi upload R2:", error);
+    showNotification("Lỗi khi tải ảnh lên Cloudflare R2: " + error.message, "error");
+    return false;
+  } finally {
+    showLoading(false);
+  }
+}
+
+/**
+ * Xóa ảnh khi Cloudflare R2 thông qua Worker DELETE endpoint
+ * @param {string} url - URL của ảnh cần xóa (phải là từ R2 Worker)
+ */
+window.deleteImageFromR2 = async function(url) {
+  if (!url || (!url.includes("workers.dev") && !url.includes(".r2.dev"))) return;
+
+  try {
+    const urlObj = new URL(url);
+    // Lấy key từ pathname (b dấu / ở đầu)
+    const key = urlObj.pathname.substring(1);
+    
+    if (!key) return;
+
+    const WORKER_DELETE_URL = "https://r2-uploader.thinhnd-2003.workers.dev/delete";
+    
+    console.log(`📡 ang gửi yêu cầu xóa file trên R2: ${key}`);
+
+    const response = await fetch(WORKER_DELETE_URL, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key })
+    });
+
+    if (response.ok) {
+      console.log(`✅ ã xóa file trên R2 thành công: ${key}`);
+    } else {
+      const errText = await response.text();
+      console.warn(`⚠ Không thể xóa file trên R2: ${key}`, errText);
+    }
+  } catch (error) {
+    console.warn("⚠ Lỗi khi thực hiện yêu cầu xóa ảnh R2:", error);
+  }
+};
+
+/**
+ * Tải các ảnh đang ch lên Cloudinary, có kiểm tra trùng lặp để tiết kiệm request
+ * @returns {Promise<boolean>} Trả v true nếu thành công tất cả
  */
 window.uploadPendingImages = async function() {
   if (!window.pendingUploads || Object.keys(window.pendingUploads).length === 0) {
@@ -5387,13 +5836,13 @@ window.uploadPendingImages = async function() {
           const fileHash = `${file.name}_${file.size}_${file.lastModified}`;
 
           if (uploadedFilesMap.has(fileHash)) {
-              // Đã upload file này trong đợt này, tái sử dụng URL
+              // ã upload file này trong đợt này, tái sử dụng URL
               const downloadURL = uploadedFilesMap.get(fileHash);
               const targetInput = document.getElementById(targetUrlId);
               if (targetInput) {
                   targetInput.value = downloadURL;
               }
-              continue; // Bỏ qua đoạn code upload bên dưới
+              continue; // B qua đoạn code upload bên dưới
           }
 
           // Phân loại thư mục
@@ -5448,9 +5897,9 @@ window.uploadPendingImages = async function() {
       return true;
   } catch (error) {
       console.error("Lỗi upload ảnh:", error);
-      let msg = "Lỗi khi tải ảnh lên Cloudinary. Đã hủy lưu dữ liệu!";
+      let msg = "Lỗi khi tải ảnh lên Cloudinary. ã hủy lưu dữ liệu!";
       if (error.name === 'AbortError') {
-          msg = "Quá thời gian tải lên (30s). Vui lòng kiểm tra mạng!";
+          msg = "Quá thi gian tải lên (30s). Vui lòng kiểm tra mạng!";
       } else if (error.message.includes('preset')) {
           msg = "Lỗi Preset Cloudinary!";
       }
@@ -5461,7 +5910,7 @@ window.uploadPendingImages = async function() {
 }
 
 /* ============================================
-   QUẢN LÝ THÔNG BÁO (ADMIN)
+   QUẢN L THÔNG BO (ADMIN)
    ============================================ */
 
 // (Đã được khai báo ở đầu file admin.js)
@@ -5497,7 +5946,7 @@ function loadAdminNotifications() {
 
     fetchNotifs();
 
-    // Đăng ký realtime
+    // ăng ký realtime
     adminNotifUnsubscribe = supabase
         .channel('admin-notifications-realtime')
         .on('postgres_changes', { 
@@ -5511,7 +5960,7 @@ function loadAdminNotifications() {
 }
 
 /**
- * Lọc và render danh sách thông báo
+ * Lc và render danh sách thông báo
  */
 function filterAdminNotifications() {
     const searchText = (document.getElementById("adminSearchNotif")?.value || "").toLowerCase().trim();
@@ -5555,7 +6004,7 @@ function renderAdminNotifications(notifications) {
     if (unreadEl) unreadEl.textContent = allUnread;
     if (readEl) readEl.textContent = allTotal - allUnread;
 
-    // GOM NHÓM THÔNG BÁO GỬI HÀNG LOẠT
+    // GOM NHÓM THÔNG BO GỬI HÀNG LOẠT
     let grouped = [];
     notifications.forEach(n => {
         let nTime = n.created_at ? new Date(n.created_at).getTime() : 0;
@@ -5583,7 +6032,7 @@ function renderAdminNotifications(notifications) {
                 count: 1,
                 readCount: n.is_read ? 1 : 0,
                 is_for_admin: n.is_for_admin,
-                user_id: n.user_id, // Cho trường hợp gửi cá nhân / hệ thống
+                user_id: n.user_id, // Cho trưng hợp gửi cá nhân / hệ thống
                 ids: [n.id]
             });
         }
@@ -5591,7 +6040,7 @@ function renderAdminNotifications(notifications) {
 
     currentGroupedNotifications = grouped; // Lưu ra biến global để dùng khi click
 
-    // --- LOGIC PHÂN TRANG TRÊN DỮ LIỆU ĐÃ NHÓM ---
+    // --- LOGIC PHÂN TRANG TRÊN DỮ LIỆU Ã NHÓM ---
     const totalItems = grouped.length;
     const totalPages = Math.ceil(totalItems / adminPerPage);
     
@@ -5612,17 +6061,17 @@ function renderAdminNotifications(notifications) {
     const typeMap = {
         system: { label: "🔔 Hệ thống", cls: "system" },
         new_movie: { label: "🎬 Phim mới", cls: "new_movie" },
-        promotion: { label: "🎁 Khuyến mãi", cls: "promotion" },
+        promotion: { label: " Khuyến mãi", cls: "promotion" },
         maintenance: { label: "🔧 Bảo trì", cls: "maintenance" },
         vip_request: { label: "⭐ VIP Request", cls: "vip_request" },
-        vip_approved: { label: "✅ VIP Approved", cls: "vip_approved" }
+        vip_approved: { label: "✅✅ VIP Approved", cls: "vip_approved" }
     };
 
     tbody.innerHTML = paginatedGrouped.map((g, index) => {
         // Loại thông báo
         const typeInfo = typeMap[g.type] || { label: g.type || "Khác", cls: "system" };
 
-        // Người nhận
+        // Ngưi nhận
         let recipientHtml = "—";
         if (g.is_for_admin) {
             recipientHtml = '<span style="color: #ff6b6b;">Admin</span>';
@@ -5632,14 +6081,14 @@ function renderAdminNotifications(notifications) {
             recipientHtml = `<span style="font-size: 0.8rem; color: var(--text-muted);" title="${g.user_id}">User: ${g.user_id.substring(0, 8)}...</span>`;
         }
 
-        // Trạng thái đã đọc
+        // Trạng thái đã đc
         let statusHtml = "";
         if (g.count > 1) {
-            statusHtml = `<span style="color: #51cf66; font-size: 0.85rem;">Đã đọc: ${g.readCount}/${g.count}</span>`;
+            statusHtml = `<span style="color: #51cf66; font-size: 0.85rem;">ã đc: ${g.readCount}/${g.count}</span>`;
         } else {
             statusHtml = g.readCount > 0
-                ? '<span style="color: #51cf66; font-size: 0.85rem;">Đã đọc</span>'
-                : '<span style="color: #ff6b6b; font-size: 0.85rem;">Chưa đọc</span>';
+                ? '<span style="color: #51cf66; font-size: 0.85rem;">ã đc</span>'
+                : '<span style="color: #ff6b6b; font-size: 0.85rem;">Chưa đc</span>';
         }
 
         // Thời gian
@@ -5698,7 +6147,7 @@ async function adminSendNotifToAll() {
     }
 
     try {
-        showLoading(true, "Đang gửi thông báo...");
+        showLoading(true, "ang gửi thông báo...");
         await sendNotificationToAllUsers(title, message, type);
         showNotification("Đã gửi thông báo tới tất cả người dùng!", "success");
 
@@ -5715,7 +6164,7 @@ async function adminSendNotifToAll() {
 }
 
 /**
- * Admin xóa cá nhân một nhóm thông báo (Ẩn khỏi bảng của tài khoản Admin)
+ * Admin xóa cá nhân một nhóm thông báo (Ẩn khi bảng của tài khoản Admin)
  */
 async function adminDeleteNotificationGroup(groupIndex) {
     if (!supabase) return;
@@ -5741,7 +6190,7 @@ async function adminDeleteNotificationGroup(groupIndex) {
 
         if (error) throw error;
 
-        showNotification(`Đã xóa ${count} thông báo!`, "success");
+        showNotification(`ã xóa ${count} thông báo!`, "success");
         loadAdminNotifications();
     } catch (err) {
         console.error("Lỗi xóa nhóm thông báo Supabase:", err);
@@ -5757,12 +6206,12 @@ async function adminDeleteNotificationGroup(groupIndex) {
 async function adminRecallNotification(notifId, title, type) {
     if (!supabase || !title) return;
 
-    if (!await customConfirm(`Bạn có chắc muốn THU HỒI thông báo "${title}" từ TẤT CẢ người dùng? Hành động này sẽ xóa thông báo đó khỏi hộp thư của mọi user!`, { title: "Thu hồi thông báo", type: "warning", confirmText: "Thu hồi" })) {
+    if (!await customConfirm(`Bạn có chắc muốn THU HỒI thông báo "${title}" từ TẤT CẢ người dùng? Hành động này sẽ xóa thông báo đó khi hộp thư của mỗi user!`, { title: "Thu hồi thông báo", type: "warning", confirmText: "Thu hồi" })) {
         return;
     }
 
     try {
-        showLoading(true, "Đang thu hồi thông báo...");
+        showLoading(true, "ang thu hồi thông báo...");
 
         // Xóa tất cả các thông báo của user có cùng title và type (không phải của admin)
         const { error, count } = await supabase
@@ -5800,11 +6249,11 @@ async function adminDeleteAllNotifications() {
     try {
         showLoading(true, "Đang xóa thông báo...");
 
-        // Xóa tất cả trong bảng notifications (Thường dùng cho admin cá nhân hoặc dọn dẹp)
+        // Xóa tất cả trong bảng notifications (Thưng dùng cho admin cá nhân hoặc dn dẹp)
         const { error } = await supabase.from('notifications').delete().neq('id', '0'); // Mẹo xóa tất cả
         if (error) throw error;
 
-        showNotification(`Đã xóa tất cả thông báo!`, "success");
+        showNotification(`ã xóa tất cả thông báo!`, "success");
         loadAdminNotifications();
     } catch (err) {
         console.error("Lỗi xóa tất cả thông báo Supabase:", err);
@@ -5815,7 +6264,7 @@ async function adminDeleteAllNotifications() {
 }
 
 /* ============================================
-   LẬP LỊCH GỬI THÔNG BÁO TỰ ĐỘNG
+   LẬP LỊCH GỬI THÔNG BO TỰ ỘNG
    ============================================ */
 
 // (Đã được khai báo ở đầu file admin.js)
@@ -5874,7 +6323,7 @@ function renderScheduledNotifications() {
     const typeMap = {
         system: { label: "🔔 Hệ thống", cls: "system" },
         new_movie: { label: "🎬 Phim mới", cls: "new_movie" },
-        promotion: { label: "🎁 Khuyến mãi", cls: "promotion" },
+        promotion: { label: " Khuyến mãi", cls: "promotion" },
         maintenance: { label: "🔧 Bảo trì", cls: "maintenance" }
     };
 
@@ -5913,9 +6362,9 @@ function renderScheduledNotifications() {
         if (s.status === "paused") {
             statusHtml = '<span class="sched-status paused"><i class="fas fa-pause"></i> Tạm dừng</span>';
         } else if (s.status === "sent" && s.repeat === "once") {
-            statusHtml = '<span class="sched-status sent"><i class="fas fa-check"></i> Đã gửi</span>';
+            statusHtml = '<span class="sched-status sent"><i class="fas fa-check"></i> ã gửi</span>';
         } else if (scheduledDate && scheduledDate > now) {
-            statusHtml = '<span class="sched-status pending"><i class="fas fa-clock"></i> Đang chờ</span>';
+            statusHtml = '<span class="sched-status pending"><i class="fas fa-clock"></i> ang ch</span>';
         } else {
             statusHtml = '<span class="sched-status pending"><i class="fas fa-sync"></i> Hoạt động</span>';
         }
@@ -5959,7 +6408,7 @@ async function adminCreateScheduledNotif() {
     const repeat = document.getElementById("schedNotifRepeat")?.value || "once";
 
     if (!title) {
-        showNotification("Vui lòng nhập tiêu đề!", "warning");
+        showNotification("Vui lòng nhập tiêu đ!", "warning");
         return;
     }
     if (!message) {
@@ -5967,11 +6416,11 @@ async function adminCreateScheduledNotif() {
         return;
     }
     if (!dateStr || !timeStr) {
-        showNotification("Vui lòng chọn ngày và giờ gửi!", "warning");
+        showNotification("Vui lòng chn ngày và gi gửi!", "warning");
         return;
     }
 
-    // Parse ngày giờ
+    // Parse ngày gi
     const scheduledDate = new Date(`${dateStr}T${timeStr}:00`);
     const now = new Date();
 
@@ -5981,7 +6430,7 @@ async function adminCreateScheduledNotif() {
     }
 
     try {
-        showLoading(true, "Đang tạo lịch hẹn...");
+        showLoading(true, "ang tạo lịch hẹn...");
 
         await supabase.from('scheduled_notifications').insert({
             title: title,
@@ -6068,7 +6517,7 @@ async function adminDeleteAllScheduled() {
         const { error } = await supabase.from('scheduled_notifications').delete().neq('id', '0');
         if (error) throw error;
 
-        showNotification(`Đã xóa tất cả lịch hẹn!`, "success");
+        showNotification(`ã xóa tất cả lịch hẹn!`, "success");
         loadScheduledNotifications();
     } catch (err) {
         console.error("Lỗi xóa tất cả scheduled Supabase:", err);
@@ -6078,7 +6527,7 @@ async function adminDeleteAllScheduled() {
     }
 }
 
-// Schedule checker đã chuyển sang notifications.js (chạy ngầm cho mọi user)
+// Schedule checker đã chuyển sang notifications.js (chạy ngầm cho mỗi user)
 
 window.copyApiUrlBackup = function() {
     const input = document.getElementById("movieApiUrlBackup");
@@ -6136,7 +6585,7 @@ window.initSmartActorsFromCastString = function(castString, castData = []) {
                 });
             } else {
                 window.selectedMovieActors.push({
-                    id: 'fallback-' + Date.now() + Math.random(),
+                    id: 'fallback-' + Date.now().toString().slice(-8) + Math.random(),
                     name: name,
                     avatar: null,
                     isFallback: true
@@ -6145,13 +6594,13 @@ window.initSmartActorsFromCastString = function(castString, castData = []) {
         });
     }
     
-    // Luôn gọi render để cập nhật UI
+    // Luôn gi render để cập nhật UI
     renderSelectedActors();
 }
 
 /**
  * Tự động tạo diễn viên mới vào collection actors nếu chưa tồn tại
- * Trả về mảng {id, name} của các diễn viên để lưu vào phim
+ * Trả v mảng {id, name} của các diễn viên để lưu vào phim
  */
 async function autoCreateNewActors(castString) {
     if (!castString || !supabase) return [];
@@ -6199,7 +6648,7 @@ async function autoCreateNewActors(castString) {
                 created_at: new Date().toISOString()
             };
             
-            console.log(`DEBUG: Đang tạo diễn viên ${name}...`, newActor);
+            console.log(`DEBUG: ang tạo diễn viên ${name}...`, newActor);
             const { error } = await supabase.from('actors').insert(newActor);
             if (error) {
                 console.error(`Chi tiết lỗi tạo diễn viên ${name}:`, error);
@@ -6216,7 +6665,7 @@ async function autoCreateNewActors(castString) {
         } catch (err) {
             console.error(`Lỗi tạo diễn viên mới "${name}":`, err);
             // Fallback nếu lỗi tạo
-            finalCastData.push({ id: 'fallback-' + Date.now(), name: name });
+            finalCastData.push({ id: 'fallback-' + Date.now().toString().slice(-8), name: name });
         }
     }
     
@@ -6231,8 +6680,8 @@ async function autoCreateNewActors(castString) {
             window.setLatestActorIds(createdIds, true); // Append vào list NEW chung
         }
 
-        console.log(`✅ Đã tự động tạo ${createdCount} diễn viên mới vào kho`);
-        showNotification(`Đã tự động thêm ${createdCount} diễn viên mới vào kho quản lý`, "info");
+        console.log(`✅ ã tự động tạo ${createdCount} diễn viên mới vào kho`);
+        showNotification(`ã tự động thêm ${createdCount} diễn viên mới vào kho quản lý`, "info");
         
         // Refresh bảng diễn viên và bắt buộc sort Newest để hiện lên đầu
         const sortSelect = document.getElementById("adminSortActor");
@@ -6249,7 +6698,7 @@ async function autoCreateNewActors(castString) {
 }
 
 /**
- * Đồng bộ hóa dữ liệu diễn viên cho tất cả các phim (Batch Update)
+ * ồng bộ hóa dữ liệu diễn viên cho tất cả các phim (Batch Update)
  * Quét toàn bộ phim, đối chiếu tên diễn viên với kho và cập nhật ID chính xác vào castData
  */
 window.syncAllMoviesActors = async function() {
@@ -6300,17 +6749,17 @@ window.syncAllMoviesActors = async function() {
                 if (updateErr) throw updateErr;
                 
                 updateCount++;
-                console.log(`✅ Đã đồng bộ phim: ${movie.title}`);
+                console.log(`✅ ã đồng bộ phim: ${movie.title}`);
             }
             
             // Cập nhật text loading
             const loadingText = document.getElementById("loadingText");
             if (loadingText) {
-                loadingText.textContent = `Đang đồng bộ: ${i + 1}/${totalMovies} phim... (Đã cập nhật ${updateCount})`;
+                loadingText.textContent = `Đang đồng bộ: ${i + 1}/${totalMovies} phim... (ã cập nhật ${updateCount})`;
             }
         }
         
-        showNotification(`Đồng bộ thành công! Đã chuẩn hóa dữ liệu cho ${updateCount} phim.`, "success");
+        showNotification(`ồng bộ thành công! ã chuẩn hóa dữ liệu cho ${updateCount} phim.`, "success");
         
         // Reload lại danh sách phim nếu đang ở trang quản lý
         if (typeof loadAdminMovies === 'function') await loadAdminMovies();
@@ -6333,7 +6782,7 @@ window.renderSelectedActors = function() {
         let isFallback = actor.isFallback;
         
         if (typeof allActors !== 'undefined' && allActors) {
-            // Tìm theo ID (bền vững) hoặc Tên (dự phòng)
+            // Tìm theo ID (bn vững) hoặc Tên (dự phòng)
             const dbActor = allActors.find(a => 
                 (actor.id && a.id === actor.id) || 
                 a.name.toLowerCase() === actor.name.toLowerCase() ||
@@ -6373,7 +6822,7 @@ window.searchActorInput = function(query) {
     }
     
     const q = query.toLowerCase().trim();
-    // Lọc diễn viên có tên hoặc tên gọi khác chứa query, và chưa được chọn
+    // Lc diễn viên có tên hoặc tên gi khác chứa query, và chưa được chn
     const results = allActors.filter(a => {
         const nameMatch = a.name.toLowerCase().includes(q);
         const altMatch = (a.altNames || []).some(alt => alt.toLowerCase().includes(q));
@@ -6425,7 +6874,7 @@ window.addFallbackActorToMovie = function(name) {
     if (window.selectedMovieActors.some(a => a.name.toLowerCase() === trimmed.toLowerCase())) return;
     
     window.selectedMovieActors.push({
-        id: 'fallback-' + Date.now() + Math.random(),
+        id: 'fallback-' + Date.now().toString().slice(-8) + Math.random(),
         name: trimmed,
         avatar: null,
         isFallback: true
@@ -6486,7 +6935,7 @@ window.fetchActorsFromRapChieuPhim = async function() {
         
         const actors = await response.json();
         if (!Array.isArray(actors)) {
-            throw new Error("Dữ liệu trả về không phải mảng diễn viên!");
+            throw new Error("Dữ liệu trả v không phải mảng diễn viên!");
         }
         
         let imported = 0;
@@ -6533,7 +6982,7 @@ window.fetchActorsFromRapChieuPhim = async function() {
             
             // Tạo ID từ slug
             const baseId = act.slug || createActorIdFromName(name);
-            const newId = `${baseId}-${Math.floor(Math.random() * 1000)}`;
+            const newId = `${baseId}-${Date.now()}`;
             
             const actorData = {
                 id: newId,
@@ -6566,9 +7015,9 @@ window.fetchActorsFromRapChieuPhim = async function() {
         // Hiển thị kết quả
         let resultHtml = `
             <div style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px; font-size: 0.9rem; border: 1px solid rgba(255,107,107,0.3);">
-                <div style="color: #51cf66; font-weight: 600; margin-bottom: 5px;">✅ Đã thêm mới: ${imported}</div>
+                <div style="color: #51cf66; font-weight: 600; margin-bottom: 5px;">✅ ã thêm mới: ${imported}</div>
                 ${imported > 0 ? `<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 10px;">(${importedNames.join(", ")})</div>` : ""}
-                <div style="color: #aaa; margin-bottom: ${updatesAvailable.length > 0 ? '10px' : '0'};">⏭️ Đã bỏ qua (đã đầy đủ): ${skipped}</div>
+                <div style="color: #aaa; margin-bottom: ${updatesAvailable.length > 0 ? '10px' : '0'};"> ã b qua (đã đầy đủ): ${skipped}</div>
                 ${updatesAvailable.length > 0 ? `
                     <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; margin-top: 5px;">
                         <div style="color: var(--accent-secondary); font-weight: 600; margin-bottom: 8px;">✨ Có ${updatesAvailable.length} diễn viên có thể bổ sung thông tin!</div>
@@ -6581,7 +7030,7 @@ window.fetchActorsFromRapChieuPhim = async function() {
         `;
         
         if (resultsDiv) resultsDiv.innerHTML = resultHtml;
-        showNotification(`Đã quét xong từ RapChieuPhim! Thêm mới: ${imported}, Chờ duyệt bổ sung: ${updatesAvailable.length}`, "success");
+        showNotification(`ã quét xong từ RapChieuPhim! Thêm mới: ${imported}, Chờ duyệt bổ sung: ${updatesAvailable.length}`, "success");
         
     } catch (error) {
         console.error("Lỗi RapChieuPhim API:", error);
@@ -6671,7 +7120,7 @@ window.copyRapApiKey = function() {
 }
 
 /**
- * Kiểm tra trùng lặp diễn viên thời gian thực
+ * Kiểm tra trùng lặp diễn viên thi gian thực
  */
 window.checkActorDuplicate = function(name) {
     const suggestionsDiv = document.getElementById("actorDuplicateSuggestions");
@@ -6685,7 +7134,7 @@ window.checkActorDuplicate = function(name) {
         return;
     }
 
-    // Tìm kiếm trong allActors (bao gồm cả tên gọi khác)
+    // Tìm kiếm trong allActors (bao gồm cả tên gi khác)
     const duplicates = (allActors || []).filter(a => {
         const primaryMatch = a.name && a.name.toLowerCase().includes(name);
         const altMatch = a.altNames && a.altNames.some(alt => alt.toLowerCase().includes(name));
@@ -6710,7 +7159,7 @@ window.checkActorDuplicate = function(name) {
                     <div style="font-weight: 600; font-size: 0.9rem;">${a.name}</div>
                     <div style="font-size: 0.75rem; opacity: 0.7;">${a.country || 'Nơi sống: Chưa rõ'} • ${a.gender || 'Giới tính: Chưa rõ'}</div>
                 </div>
-                <div style="color: var(--accent-secondary); font-size: 0.7rem; font-weight: bold; border: 1px solid currentColor; padding: 2px 6px; border-radius: 4px;">CHỌN ĐỂ SỬA</div>
+                <div style="color: var(--accent-secondary); font-size: 0.7rem; font-weight: bold; border: 1px solid currentColor; padding: 2px 6px; border-radius: 4px;">CHỌN Ể SỬA</div>
             </div>
         `).join("")}
     `;
@@ -6719,7 +7168,7 @@ window.checkActorDuplicate = function(name) {
 }
 
 /**
- * Chọn diễn viên trùng để chuyển sang chế độ chỉnh sửa
+ * Chn diễn viên trùng để chuyển sang chế độ chỉnh sửa
  */
 window.selectDuplicateActor = function(actorId) {
     const actor = (allActors || []).find(a => a.id === actorId);
@@ -6729,7 +7178,7 @@ window.selectDuplicateActor = function(actorId) {
     const suggestionsDiv = document.getElementById("actorDuplicateSuggestions");
     if (suggestionsDiv) suggestionsDiv.style.display = "none";
 
-    // Điền thông tin vào form
+    // in thông tin vào form
     document.getElementById("actorId").value = actor.id;
     document.getElementById("actorName").value = actor.name;
     document.getElementById("actorAvatar").value = actor.avatar || "";
@@ -6749,7 +7198,7 @@ window.selectDuplicateActor = function(actorId) {
     showNotification("Đã chuyển sang chế độ chỉnh sửa diễn viên đã có!", "info");
 }
 
-// --- LOGIC SO SÁNH & CẬP NHẬT DIỄN VIÊN TỪ API ---
+// --- LOGIC SO SNH & CẬP NHẬT DIỄN VIÊN TỪ API ---
 let pendingActorUpdates = [];
 let currentCompareIndex = 0;
 
@@ -6760,7 +7209,7 @@ function checkActorDataImprovement(current, incoming) {
     let improvements = {};
     let hasImprovement = false;
 
-    // Các trường cần so sánh
+    // Các trưng cần so sánh
     const fields = [
         { key: 'avatar', label: 'Ảnh đại diện', type: 'image' },
         { key: 'gender', label: 'Giới tính', type: 'text' },
@@ -6785,10 +7234,10 @@ function checkActorDataImprovement(current, incoming) {
         }
     });
 
-    // So sánh alt_names (tên gọi khác)
+    // So sánh alt_names (tên gi khác)
     const altOldRaw = current.alt_names || "";
     const altOld = altOldRaw.split(",").map(n => n.trim()).filter(n => n);
-    const altNew = incoming.altNames || []; // incoming từ API OPhim là mảng
+    const altNew = incoming.altNames || []; // incoming từ API OPhim lẻà mảng
     const missingAlts = altNew.filter(n => !altOld.map(x => x.toLowerCase()).includes(n.toLowerCase()));
     
     if (missingAlts.length > 0) {
@@ -6841,7 +7290,7 @@ function renderCompareTable() {
     let html = `
         <tr style="background: rgba(255,255,255,0.02);">
             <td colspan="3" style="text-align: center; font-weight: bold; color: var(--accent-secondary);">
-                Đối chiếu Diễn viên: ${item.current.name}
+                ối chiếu Diễn viên: ${item.current.name}
             </td>
         </tr>
     `;
@@ -6880,7 +7329,7 @@ function renderCompareTable() {
 }
 
 /**
- * Điều hướng giữa các diễn viên chờ duyệt
+ * iu hướng giữa các diễn viên ch duyệt
  */
 window.navigateCompare = function(dir) {
     const nextIdx = currentCompareIndex + dir;
@@ -6898,7 +7347,7 @@ window.applyCurrentActorUpdate = async function() {
     if (!item) return;
     
     try {
-        showLoading(true, "Đang cập nhật diễn viên...");
+        showLoading(true, "ang cập nhật diễn viên...");
         
         const updateData = {};
         Object.keys(item.improvements).forEach(key => {
@@ -6909,13 +7358,13 @@ window.applyCurrentActorUpdate = async function() {
         const { error } = await supabase.from('actors').update(updateData).eq('id', item.current.id);
         if (error) throw error;
         
-        showNotification(`Đã bổ sung thông tin cho ${item.current.name}!`, "success");
+        showNotification(`ã bổ sung thông tin cho ${item.current.name}!`, "success");
         
         if (typeof window.setLatestActorIds === 'function') window.setLatestActorIds(item.current.id, true);
         const sortSelect = document.getElementById("adminSortActor");
         if (sortSelect) sortSelect.value = "newest";
 
-        // Xóa khỏi danh sách chờ
+        // Xóa khi danh sách ch
         pendingActorUpdates.splice(currentCompareIndex, 1);
         
         if (pendingActorUpdates.length === 0) {
@@ -6937,7 +7386,7 @@ window.applyCurrentActorUpdate = async function() {
 }
 
 /**
- * Duyệt cập nhật cho tất cả diễn viên trong danh sách chờ
+ * Duyệt cập nhật cho tất cả diễn viên trong danh sách ch
  */
 window.applyAllActorUpdates = async function() {
     if (pendingActorUpdates.length === 0) return;
@@ -6946,7 +7395,7 @@ window.applyAllActorUpdates = async function() {
     if (!confirmed) return;
     
     try {
-        showLoading(true, `Đang cập nhật ${pendingActorUpdates.length} diễn viên...`);
+        showLoading(true, `ang cập nhật ${pendingActorUpdates.length} diễn viên...`);
         
         const updatedIds = []; 
 
@@ -6968,7 +7417,7 @@ window.applyAllActorUpdates = async function() {
             if (sortSelect) sortSelect.value = "newest";
         }
         
-        showNotification(`Đã hoàn tất bổ sung dữ liệu cho ${updatedIds.length} diễn viên!`, "success");
+        showNotification(`ã hoàn tất bổ sung dữ liệu cho ${updatedIds.length} diễn viên!`, "success");
         pendingActorUpdates = [];
         closeModal("actorImportCompareModal");
         
@@ -6983,10 +7432,10 @@ window.applyAllActorUpdates = async function() {
 }
 
 /**
- * QUẢN LÝ KHO AVATAR (AVATAR LIBRARY)
+ * QUẢN L KHO AVATAR (AVATAR LIBRARY)
  */
 let currentAvatarLibraryFilter = 'all'; 
-let selectedAvatarIds = []; // Danh sách IDs avatar đang được chọn
+let selectedAvatarIds = []; // Danh sách IDs avatar đang được chn
 
 // Load danh sách avatar trong trang Admin
 async function adminLoadAvatarLibrary() {
@@ -7000,10 +7449,11 @@ async function adminLoadAvatarLibrary() {
     grid.innerHTML = '<div class="loading-spinner" style="margin: 20px auto;"></div>';
 
     try {
+        // Query * và joined table nếu cần, nhưng ở đây ta map text từ cache cho nhanh
         let query = supabase.from('avatar_library').select('*').order('created_at', { ascending: false });
         
         if (currentAvatarLibraryFilter !== 'all') {
-            query = query.eq('category', currentAvatarLibraryFilter);
+            query = query.eq('category_id', currentAvatarLibraryFilter);
         }
 
         const { data: avatars, error } = await query;
@@ -7013,7 +7463,7 @@ async function adminLoadAvatarLibrary() {
 
         if (avatars.length === 0) {
             grid.innerHTML = `<p class="text-muted" style="grid-column: 1/-1; text-align: center; padding: 40px;">
-                Không tìm thấy ảnh nào trong danh mục "${currentAvatarLibraryFilter === 'all' ? 'Tất cả' : currentAvatarLibraryFilter}".
+                Không tìm thấy ảnh nào.
             </p>`;
             return;
         }
@@ -7029,7 +7479,7 @@ async function adminLoadAvatarLibrary() {
 
             return `
                 <div class="avatar-item" data-id="${item.id}" style="border-radius: 12px; border-color: rgba(255,255,255,0.05); cursor: default; position: relative; overflow: hidden;">
-                    <!-- Checkbox chọn nhiều -->
+                    <!-- Checkbox chn nhiu -->
                     <input type="checkbox" class="avatar-checkbox" 
                         ${selectedAvatarIds.includes(item.id) ? 'checked' : ''} 
                         onclick="adminToggleAvatarSelection('${item.id}', this.checked)" />
@@ -7041,11 +7491,11 @@ async function adminLoadAvatarLibrary() {
 
                     <img src="${item.url}" alt="Avatar">
                     
-                    <!-- Dropdown đổi danh mục trực tiếp -->
+                    <!-- Dropdown đổi danh mục trực tiếp (Dùng category_id UUID) -->
                     <select class="avatar-cat-select" onchange="adminChangeAvatarCategory('${item.id}', this.value)">
-                        <option value="Chưa phân loại" ${!item.category || item.category === 'Chưa phân loại' ? 'selected' : ''}>Chưa phân loại</option>
+                        <option value="Chưa phân loại" ${!item.category_id ? 'selected' : ''}>Chưa phân loại</option>
                         ${categories.map(cat => `
-                            <option value="${cat}" ${item.category === cat ? 'selected' : ''}>${cat}</option>
+                            <option value="${cat.id}" ${item.category_id === cat.id ? 'selected' : ''}>${cat.name}</option>
                         `).join("")}
                     </select>
 
@@ -7057,7 +7507,7 @@ async function adminLoadAvatarLibrary() {
             `;
         }).join("");
 
-        // Cập nhật trạng thái "Chọn tất cả" nếu có dữ liệu
+        // Cập nhật trạng thái "Chn tất cả" nếu có dữ liệu
         adminUpdateSelectAllState(avatars);
 
     } catch (error) {
@@ -7066,15 +7516,16 @@ async function adminLoadAvatarLibrary() {
     }
 }
 
-// Lọc avatar theo danh mục
+// Lc avatar theo danh mục
 function adminFilterAvatarsByCat(category) {
     currentAvatarLibraryFilter = category;
     
-    // Cập nhật class active cho nút lọc
+    // Cập nhật class active cho nút lc (Dùng thuộc tính onclick hoặc data để so sánh chính xác)
     const buttons = document.querySelectorAll(".avatar-filter-btn");
     buttons.forEach(btn => {
-        const btnText = btn.innerText.trim();
-        if ((category === 'all' && btnText === 'Tất cả') || btnText === category) {
+        // Lấy category từ hàm onclick: adminFilterAvatarsByCat('...')
+        const onclickAttr = btn.getAttribute("onclick") || "";
+        if (onclickAttr.includes(`'${category}'`)) {
             btn.classList.add("active");
         } else {
             btn.classList.remove("active");
@@ -7086,25 +7537,26 @@ function adminFilterAvatarsByCat(category) {
 }
 
 /**
- * Đổi danh mục cho avatar hiện có
+ * ổi danh mục cho avatar hiện có (ã đồng bộ UUID)
  * @param {string} avatarId 
- * @param {string} newCategory 
+ * @param {string} newCategoryId 
  */
-async function adminChangeAvatarCategory(avatarId, newCategory) {
+async function adminChangeAvatarCategory(avatarId, newCategoryId) {
     try {
-        showLoading(true, "Đang cập nhật danh mục...");
+        showLoading(true, "ang cập nhật danh mục...");
+        const val = newCategoryId === 'Chưa phân loại' ? null : newCategoryId;
+        
         const { error } = await supabase
             .from('avatar_library')
             .update({
-                category: newCategory,
-                updated_at: new Date().toISOString()
+                category_id: val
             })
             .eq('id', avatarId);
         
         if (error) throw error;
         
-        // Nếu đang ở chế độ lọc và danh mục mới khác danh mục hiện tại -> load lại để ẩn item đó
-        if (currentAvatarLibraryFilter !== 'all' && newCategory !== currentAvatarLibraryFilter) {
+        // Nếu đang ở chế độ lc và danh mục mới khác danh mục hiện tại -> load lại để ẩn item đó
+        if (currentAvatarLibraryFilter !== 'all' && newCategoryId !== currentAvatarLibraryFilter) {
             await adminLoadAvatarLibrary();
         }
         
@@ -7172,138 +7624,254 @@ function adminUpdateSelectAllState(currentAvatars) {
 }
 
 /**
- * Cập nhật danh mục hàng loạt cho các avatar đã chọn
+ * Cập nhật danh mục hàng loạt cho các avatar đã chn
+ */
+/**
+ * Cập nhật danh mục hàng loạt cho các avatar đã chn (ã đồng bộ UUID)
  */
 async function adminBulkUpdateAvatarCategory() {
-    const newCat = document.getElementById("adminBulkAvatarCategory").value;
-    if (!newCat) return;
+    const bulkSelect = document.getElementById("adminBulkAvatarCategory");
+    const categoryId = bulkSelect.value;
+    if (!categoryId) {
+        showNotification("Vui lòng chẨn danh mục!", "warning");
+        return;
+    }
 
-    const confirmed = await customConfirm(`Xác nhận đổi danh mục cho ${selectedAvatarIds.length} ảnh sang "${newCat}"?`, {
+    // Lấy têẨn danh mục để hiển thị thông báo
+    const categoryName = bulkSelect.options[bulkSelect.selectedIndex].text;
+    const finalCategoryId = categoryId === 'Chưa phân loại' ? null : categoryId;
+
+    const confirmed = await customConfirm(`Xác nhận đổi danh mục cho ${selectedAvatarIds.length} ảnh sang "${categoryName}"?`, {
         title: "Xác nhận cập nhật hàng loạt",
         type: "warning"
     });
     if (!confirmed) return;
 
     try {
-        showLoading(true, "Đang cập nhật hàng loạt...");
+        showLoading(true, "ang cập nhật hàng loạt...");
         
         const { error } = await supabase
             .from('avatar_library')
             .update({ 
-                category: newCat,
-                updated_at: new Date().toISOString()
+                category_id: finalCategoryId // Dùng UUID hoặc null
             })
             .in('id', selectedAvatarIds);
 
         if (error) throw error;
-        showNotification(`Đã cập nhật ${selectedAvatarIds.length} ảnh thành công!`, "success");
+        showNotification(`ã cập nhật ${selectedAvatarIds.length} ảnh sang danh mục "${categoryName}" thành công!`, "success");
         
         // Hoàn tất
         adminClearAvatarSelection();
         adminLoadAvatarLibrary();
     } catch (error) {
         console.error("Lỗi cập nhật hàng loạt avatar:", error);
-        showNotification("Lỗi khi cập nhật hàng loạt", "error");
+        showNotification("Lỗi khi cập nhật hàng loạt. Vui lòng thử lại.", "error");
     } finally {
         showLoading(false);
     }
 }
 
-// Biến tạm để lưu file được chọn
-let pendingAvatarFile = null;
+/**
+ * Xóa hàng loạt avatar đã chn
+ */
+async function adminBulkDeleteAvatars() {
+    if (selectedAvatarIds.length === 0) return;
+
+    const confirmed = await customConfirm(`Bạn có chắc chắn muốn xóa ${selectedAvatarIds.length} ảnh đã chn? Hành động này không thể hoàn tác!`, {
+        title: "Xác nhận xóa hàng loạt",
+        type: "danger"
+    });
+    if (!confirmed) return;
+
+    try {
+        showLoading(true, `Đang xóa ${selectedAvatarIds.length} ảnh...`);
+        
+        const { error } = await supabase
+            .from('avatar_library')
+            .delete()
+            .in('id', selectedAvatarIds);
+
+        if (error) throw error;
+
+        showNotification(`ã xóa ${selectedAvatarIds.length} ảnh thành công!`, "success");
+        
+        // Xóa cache để User load lại
+        if (typeof allAvatarsCache !== 'undefined') allAvatarsCache = [];
+        
+        adminClearAvatarSelection();
+        adminLoadAvatarLibrary();
+    } catch (error) {
+        console.error("Lỗi xóa hàng loạt avatar:", error);
+        showNotification("Lỗi khi xóa hàng loạt dữ liệu.", "error");
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Biến tạm để lưu file được chn
+// Biến tạm để lưu danh sách file được chn
+let pendingAvatarFiles = [];
 
 // Xử lý khi Admin dán URL
 function adminHandleAvatarUrlInput(input) {
     const url = input.value.trim();
     const previewBox = document.getElementById("adminAvatarPreviewBox");
-    const previewImg = document.getElementById("adminAvatarPreview");
+    const previewGrid = document.getElementById("adminAvatarPreviewGrid");
+    const previewCount = document.getElementById("adminAvatarPreviewCount");
     const saveBtn = document.getElementById("btnSaveAdminAvatar");
     const cancelBtn = document.getElementById("btnCancelAdminAvatar");
 
     if (url) {
-        previewImg.src = url;
+        // Nếu dán URL, xóa hết các file đang ch
+        pendingAvatarFiles = [];
+        document.getElementById("adminAvatarFileUpload").value = "";
+        
+        previewGrid.innerHTML = `
+            <div style="width: 70px; height: 70px; border-radius: 8px; overflow: hidden; border: 2px solid var(--accent-primary); position: relative;">
+                <img src="${url}" style="width: 100%; height: 100%; object-fit: cover;" />
+                <div onclick="adminCancelAvatarAdd()" style="position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; background: #ff4757; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; z-index: 10;">
+                    <i class="fas fa-times"></i>
+                </div>
+            </div>
+        `;
+        previewCount.innerText = "1";
         previewBox.style.display = "flex";
         saveBtn.style.display = "block";
         cancelBtn.style.display = "block";
-        pendingAvatarFile = null; // Xóa file nếu đang có bộ nhớ tạm
-    } else if (!pendingAvatarFile) {
+    } else if (pendingAvatarFiles.length === 0) {
         previewBox.style.display = "none";
         saveBtn.style.display = "none";
         cancelBtn.style.display = "none";
     }
 }
 
-// Xử lý khi Admin chọn tệp từ máy
+// Xử lý khi Admin chn tệp từ máy (Hỗ trợ nhiu tệp)
 function adminHandleAvatarFileSelect(input) {
-    if (!input.files || !input.files[0]) return;
+    if (!input.files || input.files.length === 0) return;
 
-    pendingAvatarFile = input.files[0];
+    // Chuyển FileList thành Array và cộng dồn vào danh sách đang ch (để có thể chn nhiu lần)
+    const newFiles = Array.from(input.files);
+    pendingAvatarFiles = [...pendingAvatarFiles, ...newFiles];
+    
+    // Clear input để có thể chn lại cùng 1 file nếu đã xóa
+    input.value = "";
+
+    // Xóa URL input nếu đang chn file
+    document.getElementById("newAdminAvatarUrl").value = "";
+    
+    renderAdminAvatarPreviews();
+}
+
+/**
+ * Hàm render danh sách ảnh xem trước với nút xóa từng ảnh
+ */
+function renderAdminAvatarPreviews() {
     const previewBox = document.getElementById("adminAvatarPreviewBox");
-    const previewImg = document.getElementById("adminAvatarPreview");
+    const previewGrid = document.getElementById("adminAvatarPreviewGrid");
+    const previewCount = document.getElementById("adminAvatarPreviewCount");
     const saveBtn = document.getElementById("btnSaveAdminAvatar");
     const cancelBtn = document.getElementById("btnCancelAdminAvatar");
 
-    // Tạo URL tạm để xem trước
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        previewImg.src = e.target.result;
-        previewBox.style.display = "flex";
-        saveBtn.style.display = "block";
-        cancelBtn.style.display = "block";
-        // Bỏ giá trị URL input nếu đang chọn file
-        document.getElementById("newAdminAvatarUrl").value = "";
+    if (pendingAvatarFiles.length === 0) {
+        previewBox.style.display = "none";
+        saveBtn.style.display = "none";
+        cancelBtn.style.display = "none";
+        previewGrid.innerHTML = "";
+        return;
     }
-    reader.readAsDataURL(pendingAvatarFile);
+
+    previewGrid.innerHTML = "";
+    previewCount.innerText = pendingAvatarFiles.length;
+
+    pendingAvatarFiles.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const thumb = document.createElement("div");
+            thumb.style.cssText = "width: 70px; height: 70px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.2); position: relative; group:";
+            thumb.className = "preview-thumb-container"; 
+            
+            thumb.innerHTML = `
+                <img src="${e.target.result}" style="width: 100%; height: 100%; object-fit: cover;" />
+                <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.6); font-size: 8px; color: white; text-align: center; padding: 2px;">
+                    ${(file.size / 1024).toFixed(0)}KB
+                </div>
+                <!-- Nút xóa từng ảnh -->
+                <div onclick="adminRemovePendingAvatar(${index})" style="position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; background: #ff4757; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10;">
+                    <i class="fas fa-times"></i>
+                </div>
+            `;
+            previewGrid.appendChild(thumb);
+        };
+        reader.readAsDataURL(file);
+    });
+
+    previewBox.style.display = "flex";
+    saveBtn.style.display = "block";
+    cancelBtn.style.display = "block";
 }
 
-// Hủy bỏ việc thêm avatar
+/**
+ * Xóa một ảnh cụ thể khi danh sách ch
+ */
+function adminRemovePendingAvatar(index) {
+    pendingAvatarFiles.splice(index, 1);
+    renderAdminAvatarPreviews();
+}
+
+// Hủy b việc thêm avatar
 function adminCancelAvatarAdd() {
     document.getElementById("newAdminAvatarUrl").value = "";
     document.getElementById("adminAvatarFileUpload").value = "";
     document.getElementById("adminAvatarPreviewBox").style.display = "none";
+    document.getElementById("adminAvatarPreviewGrid").innerHTML = "";
     document.getElementById("btnSaveAdminAvatar").style.display = "none";
     document.getElementById("btnCancelAdminAvatar").style.display = "none";
-    pendingAvatarFile = null;
+    pendingAvatarFiles = [];
 }
 
-// Lưu avatar vào kho (Xử lý upload nếu cần)
+// Lưu avatar vào kho (Xử lý upload hàng loạt - ã đồng bộ UUID)
 async function adminSaveAvatarToLibrary() {
     const urlInput = document.getElementById("newAdminAvatarUrl");
     const categorySelect = document.getElementById("newAdminAvatarCategory");
-    const category = categorySelect.value;
+    const categoryId = categorySelect.value; // ây là UUID hoặc 'Chưa phân loại'
     
-    let finalUrl = urlInput.value.trim();
+    const finalUrls = [];
+    const urlFromInput = urlInput.value.trim();
 
-    // 1. Nếu có file đang chờ, tải lên Cloudinary trước
-    if (pendingAvatarFile) {
-        showLoading(true, "Đang tải ảnh lên Cloudinary...");
-        try {
-            finalUrl = await adminPerformCloudinaryUpload(pendingAvatarFile);
-        } catch (error) {
-            console.error("Lỗi upload:", error);
-            showNotification("Không thể tải ảnh lên Cloudinary.", "error");
-            showLoading(false);
+    try {
+        // 1. Nếu có file đang ch, tải lên Cloudinary hàng loạt
+        if (pendingAvatarFiles.length > 0) {
+            showLoading(true, `Đang tải ${pendingAvatarFiles.length} ảnh lên Cloudinary...`);
+            
+            for (let i = 0; i < pendingAvatarFiles.length; i++) {
+                showLoading(true, `Đang tải ảnh (${i + 1}/${pendingAvatarFiles.length})...`);
+                const file = pendingAvatarFiles[i];
+                const uploadedUrl = await adminPerformCloudinaryUpload(file);
+                finalUrls.push(uploadedUrl);
+            }
+        } else if (urlFromInput) {
+            finalUrls.push(urlFromInput);
+        }
+
+        if (finalUrls.length === 0) {
+            showNotification("Vui lòng chn ảnh hoặc nhập link!", "warning");
             return;
         }
-        showLoading(false);
-    }
 
-    if (!finalUrl) {
-        showNotification("Vui lòng chọn ảnh hoặc nhập link!", "warning");
-        return;
-    }
-
-    // 2. Lưu vào Supabase
-    try {
-        const { error } = await supabase.from('avatar_library').insert({
-            url: finalUrl,
-            category: category,
+        // 2. Lưu vào Supabase hàng loạt
+        showLoading(true, `Đang lưu ${finalUrls.length} ảnh vào cơ sở dữ liệu...`);
+        
+        const insertData = finalUrls.map(url => ({
+            url: url,
+            category_id: categoryId === 'Chưa phân loại' ? null : categoryId,
             created_at: new Date().toISOString()
-        });
+        }));
+
+        const { error } = await supabase.from('avatar_library').insert(insertData);
 
         if (error) throw error;
 
-        showNotification(`Đã lưu avatar vào danh mục ${category}!`, "success");
+        showNotification(`Đã lưu thành công ${finalUrls.length} avatar!`, "success");
         adminCancelAvatarAdd(); // Reset UI
         
         // Xóa cache để User load lại danh sách mới nhất
@@ -7311,14 +7879,16 @@ async function adminSaveAvatarToLibrary() {
         
         adminLoadAvatarLibrary();
     } catch (error) {
-        console.error("Lỗi lưu avatar Supabase:", error);
-        showNotification("Lỗi khi lưu vào cơ sở dữ liệu.", "error");
+        console.error("Lỗi lưu avatar hàng loạt:", error);
+        showNotification("Lỗi khi tải lên hoặc lưu dữ liệu.", "error");
+    } finally {
+        showLoading(false);
     }
 }
 
-// Xóa avatar khỏi kho
+// Xóa avatar khi kho
 async function adminDeleteAvatar(id) {
-    const confirmed = await customConfirm("Bạn có chắc chắn muốn xóa avatar này khỏi kho?", {
+    const confirmed = await customConfirm("Bạn có chắc chắn muốn xóa avatar này khi kho?", {
         title: "Xóa Avatar",
         type: "danger",
         confirmText: "Xóa ngay"
@@ -7360,7 +7930,7 @@ async function adminPerformCloudinaryUpload(file) {
     return data.secure_url;
 }
 
-// --- QUẢN LÝ DANH MỤC AVATAR ---
+// --- QUẢN L DANH MỤC AVATAR ---
 
 /**
  * Load danh mục avatar từ Supabase
@@ -7370,15 +7940,16 @@ async function adminLoadAvatarCategories() {
     try {
         const { data, error } = await supabase
             .from('avatar_categories')
-            .select('name')
+            .select('id, name') // Lấy cả ID (UUID)
             .order('name', { ascending: true });
         
         if (error) throw error;
         
-        window.avatarCategoriesCache = (data || []).map(cat => cat.name);
+        window.avatarCategoriesCache = data || []; // Lưu object để có cả ID
         renderAvatarCategoriesTable(data || []);
     } catch (error) {
         console.error("Lỗi tải danh mục avatar Supabase:", error);
+        showNotification("Lỗi khi tải danh sách danh mục.", "error");
     }
 }
 
@@ -7386,318 +7957,120 @@ async function adminLoadAvatarCategories() {
  * Thêm danh mục mới
  */
 async function adminAddAvatarCategory() {
-    const input = document.getElementById("newAvatarCatName");
-    if (!input || !input.value.trim()) return;
+    const input = document.getElementById("newAvatarCategoryName"); // ã sửa ID cho đúng với HTML
+    if (!input || !input.value.trim()) {
+        showNotification("Vui lòng nhập têẨn danh mục!", "warning");
+        return;
+    }
     
     const name = input.value.trim();
     
     try {
+        showLoading(true, "ang thêm danh mục...");
         const { error } = await supabase.from('avatar_categories').insert({ name: name });
         if (error) throw error;
         
-        showNotification(`Đã thêm danh mục "${name}"`, "success");
+        showNotification(`ã thêm danh mục "${name}"`, "success");
         input.value = "";
-        adminLoadAvatarCategories();
+        await adminLoadAvatarCategories();
     } catch (error) {
         console.error("Lỗi thêm danh mục avatar Supabase:", error);
-        showNotification("Lỗi khi thêm danh mục.", "error");
+        showNotification("Lỗi khi thêm danh mục. Có thể tên đã tồn tại.", "error");
+    } finally {
+        showLoading(false);
+    }
+}
+
+/**
+ * Hiển thị danh sách danh mục dưới dạng Badge có nút xóa
+ */
+function renderAvatarCategoriesTable(categories) {
+    const listContainer = document.getElementById("adminAvatarCategoryList");
+    if (!listContainer) return;
+
+    if (categories.length === 0) {
+        listContainer.innerHTML = '<span class="text-muted" style="font-size: 0.85rem;">Chưa có danh mục nào.</span>';
+        return;
+    }
+
+    listContainer.innerHTML = categories.map(cat => `
+        <div class="category-badge" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 4px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); font-size: 0.85rem;">
+            <span>${cat.name}</span>
+            <i class="fas fa-times" onclick="adminDeleteAvatarCategory('${cat.id}', '${cat.name}')" style="cursor: pointer; color: #ff6b6b; font-size: 10px;" title="Xóa danh mục"></i>
+        </div>
+    `).join("");
+
+    // Cập nhật các dropdown chẨn danh mục trong modal thêm mới
+    const catSelect = document.getElementById("newAdminAvatarCategory");
+    if (catSelect) {
+        catSelect.innerHTML = `
+            <option value="Chưa phân loại">Sơ khai...</option>
+            ${categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join("")}
+        `;
+    }
+
+    // Cập nhật dropdown bulk update
+    const bulkCatSelect = document.getElementById("adminBulkAvatarCategory");
+    if (bulkCatSelect) {
+        bulkCatSelect.innerHTML = `
+            <option value="">ổi danh mục...</option>
+            <option value="Chưa phân loại">Chưa phân loại</option>
+            ${categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join("")}
+        `;
+    }
+
+    // Cập nhật bộ lc (Filter buttons)
+    const filterContainer = document.getElementById("adminAvatarFilters");
+    if (filterContainer) {
+        const currentFilter = currentAvatarLibraryFilter;
+        filterContainer.innerHTML = `
+            <button class="avatar-filter-btn ${currentFilter === 'all' ? 'active' : ''}" onclick="adminFilterAvatarsByCat('all')">Tất cả</button>
+            ${categories.map(cat => `
+                <button class="avatar-filter-btn ${currentFilter === cat.id ? 'active' : ''}" onclick="adminFilterAvatarsByCat('${cat.id}')">
+                    ${cat.name}
+                </button>
+            `).join("")}
+        `;
     }
 }
 
 /**
  * Xóa danh mục
  */
+// Xóa danh mục (Sửa để dùng ID - UUID)
 async function adminDeleteAvatarCategory(id, name) {
-    if (!await customConfirm(`Xóa danh mục "${name}"? Các avatar thuộc danh mục này sẽ chuyển về "Chưa phân loại".`, { title: "Xóa danh mục", type: "warning" })) return;
+    if (!await customConfirm(`Xóa danh mục "${name}"? Các avatar thuộc danh mục này sẽ chuyển v "Chưa phân loại".`, { title: "Xóa danh mục", type: "warning" })) return;
 
     try {
-        // 1. Cập nhật các avatar thuộc danh mục này về 'Chưa phân loại'
+        showLoading(true, "Đang xóa danh mục...");
+        // 1. Cập nhật các avatar thuộc danh mục này v 'null' (Chưa phân loại)
         const { error: updError } = await supabase
             .from('avatar_library')
-            .update({ category: 'Chưa phân loại' })
-            .eq('category', name);
+            .update({ category_id: null })
+            .eq('category_id', id);
             
         if (updError) throw updError;
 
         // 2. Xóa danh mục
-        const { error: delError } = await supabase.from('avatar_categories').delete().eq('name', name);
+        const { error: delError } = await supabase.from('avatar_categories').delete().eq('id', id);
         if (delError) throw delError;
 
-        showNotification(`Đã xóa danh mục "${name}"`, "success");
-        adminLoadAvatarCategories();
+        showNotification(`ã xóa danh mục "${name}"`, "success");
+        await adminLoadAvatarCategories();
         adminLoadAvatarLibrary();
     } catch (error) {
         console.error("Lỗi xóa danh mục avatar Supabase:", error);
         showNotification("Lỗi khi xóa danh mục.", "error");
-    }
-}
-
-// Bổ sung vào showAdminPanel (Hook) - ĐÃ DỜI VÀO index.html
-// Bổ sung vào showAdminPanel (Hook) - ĐÃ DỜI VÀO index.html
-
-/**
- * QUẢN LÝ TẬP PHIM: BULK ACTIONS & DRAG & DROP
- */
-
-// Chọn tất cả / Bỏ chọn tất cả tập phim
-function toggleAllEpisodes(checked) {
-    const checkboxes = document.querySelectorAll(".episode-checkbox");
-    checkboxes.forEach(cb => cb.checked = checked);
-    updateEpisodeSelection();
-}
-
-// Cập nhật trạng thái thanh công cụ bulk actions
-function updateEpisodeSelection() {
-    const checkboxes = document.querySelectorAll(".episode-checkbox:checked");
-    const bar = document.getElementById("episodeBulkActionsBar");
-    const countSpan = document.getElementById("episodeSelectedCount");
-    const selectAllBar = document.getElementById("episodeSelectAll");
-    const selectAllHeader = document.getElementById("episodeSelectAllHeader");
-
-    const totalCount = document.querySelectorAll(".episode-checkbox").length;
-    
-    if (checkboxes.length > 0) {
-        bar.classList.add("active");
-        countSpan.textContent = checkboxes.length;
-    } else {
-        bar.classList.remove("active");
-    }
-
-    const isAllSelected = (checkboxes.length === totalCount && totalCount > 0);
-    if (selectAllBar) selectAllBar.checked = isAllSelected;
-    if (selectAllHeader) selectAllHeader.checked = isAllSelected;
-}
-
-// Bỏ chọn tất cả
-function clearEpisodeSelection() {
-    toggleAllEpisodes(false);
-}
-
-// Xóa hàng loạt tập phim
-async function bulkDeleteEpisodes() {
-    const selectedCheckboxes = document.querySelectorAll(".episode-checkbox:checked");
-    const indicesToDelete = Array.from(selectedCheckboxes)
-        .map(cb => parseInt(cb.getAttribute("data-index")))
-        .sort((a, b) => b - a); // Sắp xếp giảm dần để xóa không bị lệch index
-
-    if (indicesToDelete.length === 0) return;
-
-    const confirmed = await customConfirm(`Bạn có chắc muốn xóa ${indicesToDelete.length} tập phim đã chọn?`, {
-        title: "Xóa tập hàng loạt",
-        type: "danger",
-        confirmText: "Xóa tất cả"
-    });
-
-    if (!confirmed) return;
-
-    try {
-        showLoading(true, "Đang xóa các tập đã chọn...");
-        const movieId = selectedMovieForEpisodes;
-        const movie = allMovies.find(m => m.id === movieId);
-        if (!movie || !movie.episodes) return;
-
-        const episodesToDelete = indicesToDelete.map(idx => movie.episodes[idx]).filter(Boolean);
-        const idsToDelete = episodesToDelete.map(ep => ep.id);
-
-        if (idsToDelete.length > 0) {
-            const { error } = await supabase.from('episodes').delete().in('id', idsToDelete);
-            if (error) throw error;
-        }
-
-        showNotification(`Đã xóa thành công ${idsToDelete.length} tập phim.`, "success");
-        loadEpisodesForMovie(movieId);
-    } catch (error) {
-        console.error("Lỗi xóa hàng loạt:", error);
-        showNotification("Lỗi khi xóa tập phim.", "error");
     } finally {
         showLoading(false);
     }
 }
 
-// Mở modal sửa hàng loạt
-function openBulkEpisodeEditModal() {
-    const selectedCount = document.querySelectorAll(".episode-checkbox:checked").length;
-    document.getElementById("bulkEditInfo").textContent = `Đang chỉnh sửa cho ${selectedCount} tập phim đã chọn`;
-    
-    // Reset form
-    document.getElementById("bulkEpisodeQuality").value = "";
-    document.getElementById("bulkEpisodeHour").value = "";
-    document.getElementById("bulkEpisodeMinute").value = "";
-    document.getElementById("bulkEpisodeIntroMinute").value = "";
-    document.getElementById("bulkEpisodeIntroSecond").value = "";
-    document.getElementById("bulkEpisodeOutroMinute").value = "";
-    document.getElementById("bulkEpisodeOutroSecond").value = "";
-    
-    openModal("bulkEpisodeEditModal");
-}
-
-// Lưu thay đổi hàng loạt
-async function saveBulkEpisodeChanges() {
-    const selectedCheckboxes = document.querySelectorAll(".episode-checkbox:checked");
-    const indicesToUpdate = Array.from(selectedCheckboxes).map(cb => parseInt(cb.getAttribute("data-index")));
-    
-    const newQuality = document.getElementById("bulkEpisodeQuality").value;
-    const h = parseInt(document.getElementById("bulkEpisodeHour").value);
-    const m = parseInt(document.getElementById("bulkEpisodeMinute").value);
-    
-    // [NEW] Lấy thông tin Intro mới
-    const introM = parseInt(document.getElementById("bulkEpisodeIntroMinute").value);
-    const introS = parseInt(document.getElementById("bulkEpisodeIntroSecond").value);
-    
-    // [NEW] Lấy thông tin Outro mới
-    const outroM = parseInt(document.getElementById("bulkEpisodeOutroMinute").value);
-    const outroS = parseInt(document.getElementById("bulkEpisodeOutroSecond").value);
-    
-    let newDuration = null;
-    if (!isNaN(h) || !isNaN(m)) {
-        newDuration = formatDuration(h || 0, m || 0);
-    }
-    
-    let newIntroEndTime = null;
-    if (!isNaN(introM) || !isNaN(introS)) {
-        newIntroEndTime = (introM || 0) * 60 + (introS || 0);
-    }
-
-    let newOutroStartTime = null;
-    if (!isNaN(outroM) || !isNaN(outroS)) {
-        newOutroStartTime = (outroM || 0) * 60 + (outroS || 0);
-    }
-
-    if (!newQuality && !newDuration && newIntroEndTime === null && newOutroStartTime === null) {
-        showNotification("Bạn chưa thay đổi thông tin nào!", "warning");
-        return;
-    }
-
-    try {
-        showLoading(true, "Đang áp dụng thay đổi...");
-        const movieId = selectedMovieForEpisodes;
-        const movie = allMovies.find(m => m.id === movieId);
-        if (!movie || !movie.episodes) {
-            showNotification("Không tìm thấy dữ liệu tập phim!", "error");
-            return;
-        }
-
-        const episodesToUpdate = indicesToUpdate.map(idx => movie.episodes[idx]).filter(Boolean);
-        if (episodesToUpdate.length === 0) {
-            showNotification("Không có tập nào được chọn!", "warning");
-            return;
-        }
-
-        const updates = episodesToUpdate.map(ep => {
-            const up = { id: ep.id };
-            if (newQuality) up.quality = newQuality;
-            if (newDuration) up.duration = newDuration;
-            if (newIntroEndTime !== null) up.intro_end = newIntroEndTime;
-            if (newOutroStartTime !== null) up.outro_start = newOutroStartTime;
-            up.updated_at = new Date().toISOString();
-            return up;
-        });
-
-        const { error } = await supabase.from('episodes').upsert(updates);
-        if (error) throw error;
-
-        showNotification(`Đã cập nhật thành công ${updates.length} tập phim.`, "success");
-        closeModal("bulkEpisodeEditModal");
-        loadEpisodesForMovie(movieId);
-    } catch (error) {
-        console.error("Lỗi cập nhật hàng loạt Supabase:", error);
-        showNotification("Lỗi khi cập nhật tập phim.", "error");
-    } finally {
-        showLoading(false);
-    }
-}
-
-// Khởi tạo kéo thả SortableJS
-let episodesSortable = null;
-function initEpisodesSortable() {
-    const tbody = document.getElementById("adminEpisodesTable");
-    if (!tbody || typeof Sortable === "undefined") return;
-
-    if (episodesSortable) {
-        episodesSortable.destroy();
-    }
-
-    episodesSortable = new Sortable(tbody, {
-        handle: '.drag-handle',
-        animation: 150,
-        ghostClass: 'sortable-ghost',
-        onEnd: async function() {
-            // Lấy thứ tự mới từ DOM
-            const newOrder = Array.from(tbody.querySelectorAll("tr")).map(tr => parseInt(tr.getAttribute("data-index")));
-            
-            // So sánh xem thứ tự có thực sự thay đổi không
-            const isChanged = newOrder.some((val, idx) => val !== idx);
-            if (!isChanged) return;
-
-            try {
-                showLoading(true, "Đang cập nhật vị trí tập phim...");
-                const movieId = selectedMovieForEpisodes;
-                const movie = allMovies.find(m => m.id === movieId);
-                if (!movie || !movie.episodes) return;
-
-                const oldEpisodes = movie.episodes || [];
-                const reordered = newOrder.map(oldIndex => oldEpisodes[oldIndex]);
-
-                // Update index in Supabase for each episode
-                const updates = reordered.map((ep, newIdx) => ({
-                    id: ep.id,
-                    episode_index: newIdx
-                }));
-
-                const { error } = await supabase.from('episodes').upsert(updates);
-                if (error) throw error;
-
-                movie.episodes = reordered;
-                showNotification("Đã cập nhật vị trí tập phim qua kéo thả!", "success");
-                loadEpisodesForMovie(movieId, false); // Reload để reset index trong DOM
-            } catch (error) {
-                console.error("Lỗi cập nhật vị trí Supabase:", error);
-                showNotification("Lỗi khi đổi vị trí tập phim.", "error");
-                loadEpisodesForMovie(); // Revert UI
-            } finally {
-                showLoading(false);
-            }
-        }
-    });
-}
-
-// Sửa nhanh số tập (Quick Edit)
-async function saveQuickEditEpisodeNumber(index, newNumber) {
-    const movieId = selectedMovieForEpisodes;
-    const movie = allMovies.find(m => m.id === movieId);
-    if (!movie || !movie.episodes) return;
-
-    const targetEpisode = movie.episodes[index];
-    if (!targetEpisode) return;
-
-    const oldNumber = targetEpisode.episode_name || targetEpisode.episode_number || targetEpisode.episodeNumber;
-    if (oldNumber === newNumber) return;
-
-    try {
-        const { error } = await supabase
-            .from('episodes')
-            .update({ 
-                episode_name: newNumber, 
-                updated_at: new Date().toISOString() 
-            })
-            .eq('id', targetEpisode.id);
-
-        if (error) throw error;
-
-        // Cập nhật local
-        targetEpisode.episode_name = newNumber;
-        targetEpisode.episodeNumber = newNumber;
-
-        showNotification(`Đã sửa tập ${oldNumber} thành ${newNumber}`, "success");
-    } catch (error) {
-        console.error("Lỗi sửa nhanh số tập Supabase:", error);
-        showNotification("Lỗi khi sửa số tập.", "error");
-        loadEpisodesForMovie(movieId); // Revert UI if needed
-    }
-}
+// Bổ sung vào showAdminPanel (Hook) - Ã DỜI VÀO index.html
+// Bổ sung vào showAdminPanel (Hook) - Ã DỜI VÀO index.html
 
 /* ============================================
-   QUẢN LÝ PHÒNG XEM CHUNG (ADMIN WATCH PARTY)
+   QUẢN L PHÒNG XEM CHUNG (ADMIN WATCH PARTY)
    ============================================ */
 
 let allAdminWatchRooms = [];
@@ -7710,6 +8083,11 @@ let adminWatchRoomsInterval = null;
  */
 function loadAdminWatchRooms() {
     if (!supabase) return;
+
+    // Đảm bảo watch-party.js được tải để dùng tính năng Tạo phòng
+    if (typeof openCreateRoomModal !== "function" && typeof lazyLoadScript === "function") {
+        lazyLoadScript('js/watch-party.js?v=7');
+    }
 
     // Hủy đăng ký realtime trước đó nếu có
     if (adminWatchRoomsInterval) {
@@ -7749,7 +8127,7 @@ function loadAdminWatchRooms() {
 
     fetchRooms();
 
-    // Đăng ký realtime
+    // ăng ký realtime
     adminWatchRoomsInterval = supabase
         .channel('admin-watch-rooms-realtime')
         .on('postgres_changes', { 
@@ -7824,7 +8202,7 @@ function initOrUpdateCharts(publicCount, privateCount, topMovies) {
                 roomTypeChart = new Chart(ctxType, {
                     type: 'doughnut',
                     data: {
-                        labels: ['Công khai', 'Riêng tư'],
+                        labels: ['Công khai', 'Riêng tưư'],
                         datasets: [{
                             data: [publicCount, privateCount],
                             backgroundColor: ['#33cf66', '#ff4444'],
@@ -7865,7 +8243,7 @@ function initOrUpdateCharts(publicCount, privateCount, topMovies) {
             const labels = topMovies.map(m => {
                 let title = m[0] || 'Phòng không tên';
                 if (title.startsWith(':')) title = title.substring(1).trim();
-                // Tăng lên 50 ký tự vì tên phim nằm trên thanh bar nên có nhiều diện tích
+                // Tăng lên 50 ký tự vì tên phim nằm trên thanh bar nên có nhiu diện tích
                 return title.length > 50 ? title.substring(0, 48) + '...' : title;
             });
             const data = topMovies.map(m => m[1]);
@@ -7972,13 +8350,13 @@ function renderAdminWatchRooms(rooms) {
     tableBody.innerHTML = paginatedRooms.map(room => {
         const createdDate = room.created_at ? new Date(room.created_at).toLocaleString('vi-VN') : 'N/A'; // Changed from createdAt
         const typeBadge = room.type === 'private' 
-            ? '<span class="badge bg-danger"><i class="fas fa-lock"></i> Riêng tư</span>' 
+            ? '<span class="badge bg-danger"><i class="fas fa-lock"></i> Riêng tưư</span>' 
             : '<span class="badge bg-success"><i class="fas fa-globe"></i> Công khai</span>';
         
         // --- Xử lý trạng thái / Lên lịch ---
         let scheduleBadge = `<span class="badge bg-danger" style="animation: wp-live-pulse 2s infinite;"><i class="fas fa-circle" style="font-size: 8px;"></i> LIVE</span>`;
         if (room.status === 'ended' || (room.current_time && room.status === 'paused' && room.duration && room.current_time >= room.duration)) { // Changed from currentTime
-            scheduleBadge = `<span class="badge bg-secondary">Đã Kết Thúc</span>`;
+            scheduleBadge = `<span class="badge bg-secondary">ã Kết Thúc</span>`;
         } else if (room.scheduled_time) { // Changed from scheduledTime
             const now = new Date();
             const targetDate = new Date(room.scheduled_time); // Changed from scheduledTime
@@ -7988,7 +8366,7 @@ function renderAdminWatchRooms(rooms) {
             }
         }
 
-        // --- Tính toán thời gian xóa tự động ---
+        // --- Tính toán thi gian xóa tự động ---
         let deleteStatusHTML = '<span class="text-muted">-</span>';
         const { isActuallyEnded, endedAt } = checkIfRoomEnded(room);
         
@@ -7996,7 +8374,7 @@ function renderAdminWatchRooms(rooms) {
             const now = new Date();
             const endDate = new Date(endedAt); // Changed from endedAt.toDate()
             
-            // Lấy giới hạn thời gian (đọc từ input nếu có, nếu không lấy mặc định 6)
+            // Lấy giới hạn thi gian (đc từ input nếu có, nếu không lấy mặc định 6)
             const autoDeleteHoursInput = document.getElementById('autoDeleteHoursInput');
             const autoDeleteHoursLimit = autoDeleteHoursInput ? (parseInt(autoDeleteHoursInput.value) || 6) : 6;
             
@@ -8005,7 +8383,7 @@ function renderAdminWatchRooms(rooms) {
             const remainingMs = limitMs - diffMs;
             
             if (remainingMs <= 0) {
-               deleteStatusHTML = '<span class="text-danger" style="font-weight: 500;"><i class="fas fa-spinner fa-spin"></i> Đang xóa...</span>';
+               deleteStatusHTML = '<span class="text-danger" style="font-weight: 500;"><i class="fas fa-spinner fa-spin"></i> ĐĐĐang xóa...</span>';
             } else {
                const rh = Math.floor(remainingMs / (1000 * 60 * 60));
                const rm = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -8022,7 +8400,7 @@ function renderAdminWatchRooms(rooms) {
                 <td><img src="${posterUrl}" style="width: 40px; height: 60px; object-fit: cover; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></td>
                 <td><strong>${room.name || 'Phòng không tên'}</strong></td>
                 <td>${room.movie ? room.movie.title : 'Chưa chọn phim'}</td>
-                <td>${room.host ? room.host.display_name : 'Ẩn danh'}</td>
+                <td>${room.host ? room.host.display_name : 'ẨẨn danh'}</td>
                 <td><span class="badge bg-info">${room.member_count || 0}</span></td>
                 <td>${typeBadge}</td>
                 <td>${scheduleBadge}</td>
@@ -8102,7 +8480,7 @@ async function saveUserRoomLimit() {
     const autoDeleteHours = parseInt(deleteInput.value);
 
     if (isNaN(userLimit) || userLimit < 1 || isNaN(totalLimit) || totalLimit < 1 || isNaN(autoDeleteHours) || autoDeleteHours < 1) {
-        showNotification("Cấu hình giới hạn và thời gian phải là số dương!", "error");
+        showNotification("Cấu hình giới hạn và thi gian phải là số dương!", "error");
         return;
     }
 
@@ -8131,18 +8509,18 @@ async function saveUserRoomLimit() {
 }
 
 function filterAdminWatchRooms() {
-    const searchTerm = document.getElementById("adminSearchRooms").value.toLowerCase().trim();
+    const searchTerm = removeDiacritics(document.getElementById("adminSearchRooms").value);
     const filterType = document.getElementById("adminFilterRoomType") ? document.getElementById("adminFilterRoomType").value : 'all';
     const sortBy = document.getElementById("adminSortRooms") ? document.getElementById("adminSortRooms").value : 'newest';
     
     let filtered = [...allAdminWatchRooms];
 
-    // 1. Phân loại theo text
+    // 1. Phân loại theo text (hỗ trợ không dấu)
     if (searchTerm) {
         filtered = filtered.filter(room => {
-            return (room.name && room.name.toLowerCase().includes(searchTerm)) ||
-                   (room.movie && room.movie.title && room.movie.title.toLowerCase().includes(searchTerm)) || // Changed from room.movieTitle
-                   (room.host && room.host.display_name && room.host.display_name.toLowerCase().includes(searchTerm)); // Changed from room.hostName
+            return (room.name && removeDiacritics(room.name).includes(searchTerm)) ||
+                   (room.movie && room.movie.title && removeDiacritics(room.movie.title).includes(searchTerm)) ||
+                   (room.host && room.host.display_name && removeDiacritics(room.host.display_name).includes(searchTerm));
         });
     }
 
@@ -8190,7 +8568,7 @@ async function adminDeleteAllWatchRooms() {
     try {
         if (btn) {
             btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xóa...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ĐĐĐang xóa...';
         }
 
         // Supabase doesn't have a direct "delete all" without a condition.
@@ -8227,7 +8605,7 @@ async function adminDeleteRoom(roomId) {
     if (!confirmDelete) return;
 
     try {
-        showLoading(true, "Đang xóa phòng...");
+        showLoading(true, "ĐĐĐang xóa phòng...");
         const { error } = await supabase.from('watch_rooms').delete().eq('id', roomId);
         if (error) throw error;
         
@@ -8262,3 +8640,2496 @@ async function adminJoinRoom(roomId, type) {
         }, 100);
     }
 }
+
+/* ============================================
+   QUẢN L GIAO DIỆN & HIỆU ỨNG (VISUAL EFFECTS)
+   ============================================ */
+
+// Cache settings hiện tại
+let currentVisualEffects = { snow: false, stars: false, firework: false, bubbles: false, hearts: false, leaves: false, rain: false, confetti: false };
+
+/**
+ * Load cài đặt hiệu ứng từ Supabase
+ */
+async function loadVisualEffectsSettings() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings')
+            .select('value')
+            .eq('key', 'visual_effects')
+            .single();
+
+        if (error) throw error;
+
+        currentVisualEffects = data.value || { snow: false, stars: false, firework: false, bubbles: false, hearts: false, leaves: false, rain: false, confetti: false };
+
+        // Cập nhật UI toggle cho tất cả hiệu ứng
+        const effectKeys = ['snow', 'stars', 'firework', 'bubbles', 'hearts', 'leaves', 'rain', 'confetti'];
+        effectKeys.forEach(key => {
+            const toggleId = 'veToggle' + key.charAt(0).toUpperCase() + key.slice(1);
+            const toggle = document.getElementById(toggleId);
+            if (toggle) toggle.checked = !!currentVisualEffects[key];
+
+            const cardId = 'veCard' + key.charAt(0).toUpperCase() + key.slice(1);
+            updateEffectCardState(cardId, !!currentVisualEffects[key]);
+        });
+
+        console.log('✅ Loaded visual effects settings:', currentVisualEffects);
+    } catch (err) {
+        console.error(' Lỗi load visual effects:', err);
+    }
+}
+
+/**
+ * Cập nhật class active cho card hiệu ứng
+ */
+function updateEffectCardState(cardId, isActive) {
+    const card = document.getElementById(cardId);
+    if (card) {
+        if (isActive) card.classList.add('active');
+        else card.classList.remove('active');
+    }
+}
+
+/**
+ * Toggle bật/tắt hiệu ứng + lưu Supabase
+ */
+async function toggleVisualEffect(effectName, isEnabled) {
+    if (!supabase) return;
+    try {
+        // Cập nhật local
+        currentVisualEffects[effectName] = isEnabled;
+
+        // Cập nhật card active
+        const cardId = 'veCard' + effectName.charAt(0).toUpperCase() + effectName.slice(1);
+        updateEffectCardState(cardId, isEnabled);
+
+        // Lưu lên Supabase
+        const { error } = await supabase
+            .from('site_settings')
+            .update({ 
+                value: currentVisualEffects,
+                updated_at: new Date().toISOString()
+            })
+            .eq('key', 'visual_effects');
+
+        if (error) throw error;
+
+        const effectNames = { snow: 'Tuyết rơi', stars: 'Sao rơi', firework: 'Pháo hoa', bubbles: 'Bong bóng', hearts: 'Trái tim', leaves: 'Lá rơi', rain: 'Mưa rơi', confetti: 'Confetti' };
+        showNotification(
+            `${isEnabled ? '✅ Đã bật' : '⛔ Đã tắt'} hiệu ứng "${effectNames[effectName]}"`,
+            isEnabled ? 'success' : 'info'
+        );
+
+        // Render/Remove hiệu ứng ngay trên trang chủ nếu đang mở
+        if (isEnabled) {
+            renderHomeEffect(effectName);
+        } else {
+            removeHomeEffect(effectName);
+        }
+
+    } catch (err) {
+        console.error('❌ Lỗi toggle visual effect:', err);
+        showNotification('Lỗi khi cập nhật hiệu ứng!', 'error');
+        // Revert toggle
+        const toggle = document.getElementById(`veToggle${effectName.charAt(0).toUpperCase() + effectName.slice(1)}`);
+        if (toggle) toggle.checked = !isEnabled;
+    }
+}
+
+/**
+ * Render hiệu ứng trên banner trang chủ
+ */
+function renderHomeEffect(effectName) {
+    // Tìm banner container
+    const banner = document.querySelector('.banner-slider') || document.querySelector('.hero-section') || document.querySelector('#homePage');
+    if (!banner) return;
+
+    // Xóa hiệu ứng cũ nếu có
+    removeHomeEffect(effectName);
+
+    // Tạo canvas cho hiệu ứng
+    const canvas = document.createElement('canvas');
+    canvas.id = `effect-${effectName}`;
+    canvas.className = 'home-effect-canvas';
+    canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;';
+    
+    // Đảm bảo banner có position relative
+    if (getComputedStyle(banner).position === 'static') {
+        banner.style.position = 'relative';
+    }
+    banner.appendChild(canvas);
+
+    // Khởi tạo animation
+    const ctx = canvas.getContext('2d');
+    canvas.width = banner.offsetWidth;
+    canvas.height = banner.offsetHeight;
+
+    const particles = [];
+    const config = getEffectConfig(effectName, canvas);
+
+    // Tạo particles
+    for (let i = 0; i < config.count; i++) {
+        particles.push(createParticle(config, canvas));
+    }
+
+    // Animation loop
+    function animate() {
+        if (!document.getElementById(`effect-${effectName}`)) return; // Dừng nếu canvas bị xóa
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        particles.forEach((p, i) => {
+            config.update(p, canvas);
+            config.draw(ctx, p);
+
+            // Reset khi ra ngoài
+            if (p.y > canvas.height + 10 || p.x > canvas.width + 10 || p.x < -10) {
+                particles[i] = createParticle(config, canvas);
+                particles[i].y = -10;
+            }
+        });
+
+        requestAnimationFrame(animate);
+    }
+    animate();
+
+    // Resize handler
+    const resizeHandler = () => {
+        const currentCanvas = document.getElementById(`effect-${effectName}`);
+        if (currentCanvas && banner) {
+            currentCanvas.width = banner.offsetWidth;
+            currentCanvas.height = banner.offsetHeight;
+        }
+    };
+    window.addEventListener('resize', resizeHandler);
+    canvas._resizeHandler = resizeHandler;
+}
+
+/**
+ * Cấu hình cho mỗi loại hiệu ứng
+ */
+function getEffectConfig(type, canvas) {
+    switch (type) {
+        case 'snow':
+            return {
+                count: 60,
+                update: (p) => {
+                    p.y += p.speed;
+                    p.x += Math.sin(p.angle) * 0.5;
+                    p.angle += 0.01;
+                },
+                draw: (ctx, p) => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
+                    ctx.fill();
+                }
+            };
+        case 'stars':
+            return {
+                count: 30,
+                update: (p) => {
+                    p.y += p.speed;
+                    p.x += p.speedX;
+                    p.opacity = 0.3 + Math.abs(Math.sin(p.angle)) * 0.7;
+                    p.angle += 0.03;
+                },
+                draw: (ctx, p) => {
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.rotation);
+                    ctx.fillStyle = `rgba(255, 215, 0, ${p.opacity})`;
+                    drawStar(ctx, 0, 0, 5, p.size, p.size / 2);
+                    ctx.restore();
+                    p.rotation += 0.02;
+                }
+            };
+        case 'firework':
+            return {
+                count: 40,
+                update: (p) => {
+                    p.y += p.speed;
+                    p.x += p.speedX;
+                    p.opacity -= 0.005;
+                    p.size *= 0.99;
+                    if (p.opacity <= 0) {
+                        p.opacity = 0.8;
+                        p.x = Math.random() * canvas.width;
+                        p.y = Math.random() * canvas.height * 0.5;
+                        p.speed = (Math.random() - 0.5) * 2;
+                        p.speedX = (Math.random() - 0.5) * 3;
+                        p.size = Math.random() * 3 + 1;
+                    }
+                },
+                draw: (ctx, p) => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(${p.r}, ${p.g}, ${p.b}, ${p.opacity})`;
+                    ctx.fill();
+                }
+            };
+        case 'bubbles':
+            return {
+                count: 25,
+                update: (p) => {
+                    p.y -= p.speed; // Bay lên
+                    p.x += Math.sin(p.angle) * 0.8;
+                    p.angle += 0.02;
+                    p.opacity = 0.15 + Math.abs(Math.sin(p.angle * 2)) * 0.25;
+                },
+                draw: (ctx, p) => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
+                    ctx.strokeStyle = `rgba(150, 220, 255, ${p.opacity})`;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    // nh sáng nh trong bong bóng
+                    ctx.beginPath();
+                    ctx.arc(p.x - p.size, p.y - p.size, p.size * 0.5, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity * 0.6})`;
+                    ctx.fill();
+                }
+            };
+        case 'hearts':
+            return {
+                count: 20,
+                update: (p) => {
+                    p.y -= p.speed * 0.8; // Bay lên
+                    p.x += Math.sin(p.angle) * 0.6;
+                    p.angle += 0.02;
+                    p.scale = 0.8 + Math.sin(p.angle * 3) * 0.2;
+                },
+                draw: (ctx, p) => {
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    const s = p.size * (p.scale || 1);
+                    ctx.fillStyle = `rgba(255, ${80 + Math.floor(p.r * 0.3)}, ${120 + Math.floor(p.g * 0.2)}, ${p.opacity})`;
+                    ctx.beginPath();
+                    ctx.moveTo(0, s * 0.3);
+                    ctx.bezierCurveTo(-s, -s * 0.5, -s * 0.5, -s * 1.2, 0, -s * 0.5);
+                    ctx.bezierCurveTo(s * 0.5, -s * 1.2, s, -s * 0.5, 0, s * 0.3);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            };
+        case 'leaves':
+            return {
+                count: 20,
+                update: (p) => {
+                    p.y += p.speed * 0.6;
+                    p.x += Math.sin(p.angle) * 1.2;
+                    p.angle += 0.015;
+                    p.rotation += 0.03;
+                },
+                draw: (ctx, p) => {
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.rotation);
+                    // Vẽ lá hình oval
+                    const leafColors = ['rgba(200, 150, 50,', 'rgba(180, 100, 30,', 'rgba(220, 180, 60,', 'rgba(160, 80, 20,'];
+                    const colorBase = leafColors[Math.floor(p.r / 70) % leafColors.length];
+                    ctx.fillStyle = `${colorBase} ${p.opacity})`;
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, p.size * 2.5, p.size, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Gân lá
+                    ctx.strokeStyle = `${colorBase} ${p.opacity * 0.5})`;
+                    ctx.lineWidth = 0.5;
+                    ctx.beginPath();
+                    ctx.moveTo(-p.size * 2, 0);
+                    ctx.lineTo(p.size * 2, 0);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            };
+        case 'rain':
+            return {
+                count: 80,
+                update: (p) => {
+                    p.y += p.speed * 3;
+                    p.x += 1.5; // Xiên
+                },
+                draw: (ctx, p) => {
+                    ctx.beginPath();
+                    ctx.moveTo(p.x, p.y);
+                    ctx.lineTo(p.x + 1.5, p.y + p.size * 5);
+                    ctx.strokeStyle = `rgba(174, 194, 224, ${p.opacity * 0.5})`;
+                    ctx.lineWidth = 0.8;
+                    ctx.stroke();
+                }
+            };
+        case 'confetti':
+            return {
+                count: 45,
+                update: (p) => {
+                    p.y += p.speed;
+                    p.x += Math.sin(p.angle) * 1.5;
+                    p.angle += 0.04;
+                    p.rotation += 0.08;
+                },
+                draw: (ctx, p) => {
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.rotation);
+                    ctx.fillStyle = `rgba(${p.r}, ${p.g}, ${p.b}, ${p.opacity})`;
+                    ctx.fillRect(-p.size * 1.5, -p.size * 0.5, p.size * 3, p.size);
+                    ctx.restore();
+                }
+            };
+        default:
+            return { count: 0, update: () => {}, draw: () => {} };
+    }
+}
+
+/**
+ * Tạo 1 particle mới
+ */
+function createParticle(config, canvas) {
+    const colors = [
+        [255, 100, 100], [100, 200, 255], [255, 215, 0],
+        [150, 255, 150], [255, 150, 255], [255, 180, 100]
+    ];
+    const c = colors[Math.floor(Math.random() * colors.length)];
+    return {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 3 + 1,
+        speed: Math.random() * 1.5 + 0.5,
+        speedX: (Math.random() - 0.5) * 1,
+        opacity: Math.random() * 0.6 + 0.2,
+        angle: Math.random() * Math.PI * 2,
+        rotation: Math.random() * Math.PI * 2,
+        r: c[0], g: c[1], b: c[2]
+    };
+}
+
+/**
+ * Vẽ ngôi sao 5 cánh
+ */
+function drawStar(ctx, cx, cy, spikes, outerR, innerR) {
+    let rot = Math.PI / 2 * 3;
+    let step = Math.PI / spikes;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - outerR);
+    for (let i = 0; i < spikes; i++) {
+        ctx.lineTo(cx + Math.cos(rot) * outerR, cy + Math.sin(rot) * outerR);
+        rot += step;
+        ctx.lineTo(cx + Math.cos(rot) * innerR, cy + Math.sin(rot) * innerR);
+        rot += step;
+    }
+    ctx.lineTo(cx, cy - outerR);
+    ctx.closePath();
+    ctx.fill();
+}
+
+/**
+ * Xóa hiệu ứng khi DOM
+ */
+function removeHomeEffect(effectName) {
+    const canvas = document.getElementById(`effect-${effectName}`);
+    if (canvas) {
+        if (canvas._resizeHandler) {
+            window.removeEventListener('resize', canvas._resizeHandler);
+        }
+        canvas.remove();
+    }
+}
+
+/**
+ * Load hiệu ứng khi mở trang chủ (gi từ home.js hoặc main.js)
+ */
+async function loadAndApplyHomeEffects() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings')
+            .select('value')
+            .eq('key', 'visual_effects')
+            .single();
+
+        if (error || !data) return;
+
+        const effects = data.value || {};
+        // Tự động render tất cả hiệu ứng đang bật
+        Object.keys(effects).forEach(key => {
+            if (effects[key]) renderHomeEffect(key);
+        });
+    } catch (err) {
+        console.error('Lỗi load home effects:', err);
+    }
+}
+
+/* ============================================
+   TÙY CHỈNH GIAO DIỆN (APPEARANCE SETTINGS)
+   ============================================ */
+
+// Biến tạm lưu cài đặt đang chỉnh
+let pendingAppearance = {
+    accentColor: '#4db8ff',
+    fontFamily: 'Inter',
+    defaultTheme: 'dark'
+};
+
+/**
+ * Chn màu accent chính — preview ngay trên trang
+ */
+function selectAccentColor(color) {
+    pendingAppearance.accentColor = color;
+
+    // Cập nhật UI preset buttons
+    document.querySelectorAll('.ve-color-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.color === color);
+    });
+
+    // Cập nhật color input + text
+    const customInput = document.getElementById('veCustomColor');
+    const codeText = document.getElementById('veCurrentColorCode');
+    if (customInput) customInput.value = color;
+    if (codeText) codeText.textContent = color;
+
+    // Preview realtime — áp dụng CSS variables tạm
+    applyAccentColor(color);
+}
+
+/**
+ * Áp dụng màu accent lên CSS variables
+ */
+function applyAccentColor(color) {
+    const root = document.documentElement;
+    root.style.setProperty('--accent-primary', color);
+
+    // Tính accent-secondary (đậm hơn 20%)
+    const secondary = adjustBrightness(color, -30);
+    root.style.setProperty('--accent-secondary', secondary);
+
+    // Tính accent-tertiary (sáng hơn 20%)
+    const tertiary = adjustBrightness(color, 30);
+    root.style.setProperty('--accent-tertiary', tertiary);
+
+    // Cập nhật gradient
+    root.style.setProperty('--accent-gradient', `linear-gradient(135deg, ${secondary} 0%, ${color} 100%)`);
+    root.style.setProperty('--accent-neon', `linear-gradient(135deg, ${color}, ${secondary})`);
+    root.style.setProperty('--shadow-neon', `0 0 20px ${color}80`);
+}
+
+/**
+ * iu chỉnh độ sáng hex color
+ */
+function adjustBrightness(hex, amount) {
+    hex = hex.replace('#', '');
+    const r = Math.max(0, Math.min(255, parseInt(hex.substr(0, 2), 16) + amount));
+    const g = Math.max(0, Math.min(255, parseInt(hex.substr(2, 2), 16) + amount));
+    const b = Math.max(0, Math.min(255, parseInt(hex.substr(4, 2), 16) + amount));
+    return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+/**
+ * Chn font chữ — preview ngay
+ */
+function selectSiteFont(fontName) {
+    pendingAppearance.fontFamily = fontName;
+
+    // Load font từ Google Fonts
+    loadGoogleFont(fontName);
+
+    // Preview
+    const preview = document.getElementById('veFontPreview');
+    if (preview) preview.style.fontFamily = `'${fontName}', sans-serif`;
+}
+
+/**
+ * Load Google Font động
+ */
+function loadGoogleFont(fontName) {
+    const linkId = 'dynamic-google-font';
+    let link = document.getElementById(linkId);
+    if (!link) {
+        link = document.createElement('link');
+        link.id = linkId;
+        link.rel = 'stylesheet';
+        document.head.appendChild(link);
+    }
+    const encodedFont = fontName.replace(/ /g, '+');
+    link.href = `https://fonts.googleapis.com/css2?family=${encodedFont}:wght@300;400;500;600;700&display=swap`;
+}
+
+/**
+ * Áp dụng font cho toàn trang
+ */
+function applySiteFont(fontName) {
+    loadGoogleFont(fontName);
+    document.documentElement.style.setProperty('font-family', `'${fontName}', sans-serif`);
+    document.body.style.fontFamily = `'${fontName}', sans-serif`;
+}
+
+/**
+ * Chọn theme mặc định
+ */
+function selectDefaultTheme(theme) {
+    pendingAppearance.defaultTheme = theme;
+}
+
+/**
+ * Lưu tất cả cài đặt giao diện lên Supabase
+ */
+async function saveAppearanceSettings() {
+    if (!supabase) return;
+    try {
+        // Kiểm tra đã có row 'appearance' chưa
+        const { data: existing } = await supabase
+            .from('site_settings')
+            .select('key')
+            .eq('key', 'appearance')
+            .single();
+
+        let error;
+        if (existing) {
+            // Update
+            const result = await supabase
+                .from('site_settings')
+                .update({
+                    value: pendingAppearance,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('key', 'appearance');
+            error = result.error;
+        } else {
+            // Insert
+            const result = await supabase
+                .from('site_settings')
+                .insert({
+                    key: 'appearance',
+                    value: pendingAppearance
+                });
+            error = result.error;
+        }
+
+        if (error) throw error;
+
+        showNotification('✅ Đã lưu cài đặt giao diện thành công!', 'success');
+
+        // Áp dụng ngay
+        applyAccentColor(pendingAppearance.accentColor);
+        applySiteFont(pendingAppearance.fontFamily);
+
+    } catch (err) {
+        console.error(' Lỗi lưu appearance:', err);
+        showNotification('Lỗi khi lưu cài đặt giao diện!', 'error');
+    }
+}
+
+/**
+ * Load cài đặt giao diện từ Supabase (Gọi khi mở tab admin)
+ */
+async function loadAppearanceSettings() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings')
+            .select('value')
+            .eq('key', 'appearance')
+            .single();
+
+        if (error || !data) return;
+
+        const settings = data.value || {};
+        pendingAppearance = {
+            accentColor: settings.accentColor || '#4db8ff',
+            fontFamily: settings.fontFamily || 'Inter',
+            defaultTheme: settings.defaultTheme || 'dark'
+        };
+
+        // Cập nhật UI
+        selectAccentColor(pendingAppearance.accentColor);
+
+        const fontSelect = document.getElementById('veFontSelect');
+        if (fontSelect) fontSelect.value = pendingAppearance.fontFamily;
+        selectSiteFont(pendingAppearance.fontFamily);
+
+        const themeRadio = document.querySelector(`input[name="veDefaultTheme"][value="${pendingAppearance.defaultTheme}"]`);
+        if (themeRadio) themeRadio.checked = true;
+
+        console.log('✅ Loaded appearance settings:', pendingAppearance);
+    } catch (err) {
+        console.error('❌ Lỗi load appearance:', err);
+    }
+}
+
+/**
+ * Áp dụng cài đặt giao diện khi load trang (Gọi từ main.js hoặc utils.js)
+ */
+async function applyAppearanceOnLoad() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings')
+            .select('value')
+            .eq('key', 'appearance')
+            .single();
+
+        if (error || !data) return;
+
+        const s = data.value || {};
+
+        // Áp dụng màu accent
+        if (s.accentColor && s.accentColor !== '#4db8ff') {
+            applyAccentColor(s.accentColor);
+        }
+
+        // Áp dụng font
+        if (s.fontFamily && s.fontFamily !== 'Inter') {
+            applySiteFont(s.fontFamily);
+        }
+
+        // Áp dụng theme mặc định cho user mới (chưa chọn theme)
+        if (s.defaultTheme && !localStorage.getItem('theme')) {
+            document.documentElement.setAttribute('data-theme', s.defaultTheme);
+            const icon = document.getElementById('themeIcon');
+            if (icon) icon.className = s.defaultTheme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
+        }
+    } catch (err) {
+        console.error('Lỗi apply appearance on load:', err);
+    }
+}
+
+/* ============================================
+   MARQUEE — THÔNG BÁO CHẠY CHỮ
+   ============================================ */
+
+/**
+ * Lưu cài đặt Marquee lên Supabase
+ */
+/**
+ * Cập nhật preview Marquee realtime khi chỉnh tốc độ/màu
+ */
+function updateMarqueePreview() {
+    const preview = document.getElementById('veMarqueePreview');
+    const previewText = document.getElementById('veMarqueePreviewText');
+    const bg = document.getElementById('veMarqueeBg');
+    const color = document.getElementById('veMarqueeColor');
+    const speed = document.getElementById('veMarqueeSpeed');
+    const alignInput = document.getElementById('veMarqueeAlign');
+    const posInput = document.getElementById('veMarqueePosition');
+
+    if (preview && bg) preview.style.background = bg.value;
+    if (previewText && color) previewText.style.color = color.value;
+
+    const alignVal = alignInput ? alignInput.value : 'scroll';
+
+    if (previewText) {
+        if (alignVal === 'scroll') {
+            // Chạy ngang — bật animation
+            previewText.style.animation = '';
+            previewText.style.display = 'inline-block';
+            previewText.style.textAlign = '';
+            previewText.style.width = '';
+            previewText.style.whiteSpace = 'nowrap';
+            previewText.style.transform = '';
+            previewText.style.position = '';
+            previewText.style.left = '';
+            if (speed) {
+                const durations = { slow: '20s', normal: '12s', fast: '5s' };
+                previewText.style.animationDuration = durations[speed.value] || '12s';
+            }
+        } else {
+            // Căn cố định — tắt animation, dùng vị trí tùy chỉnh
+            previewText.style.animation = 'none';
+            previewText.style.display = 'block';
+            previewText.style.whiteSpace = 'nowrap';
+            previewText.style.width = 'auto';
+            previewText.style.position = 'relative';
+
+            // Tính vị trí từ slider (0-100%)
+            const pos = posInput ? parseInt(posInput.value) : 50;
+            // Dùng text-align cho các vị trí preset, hoặc transform cho custom
+            if (alignVal === 'left') {
+                previewText.style.transform = `translateX(${pos}%)`;
+                previewText.style.textAlign = 'left';
+            } else if (alignVal === 'center') {
+                // 50% = giữa, 0% = trái, 100% = phải
+                const offset = pos - 50; // -50 -> +50
+                previewText.style.transform = `translateX(${offset}%)`;
+                previewText.style.textAlign = 'center';
+            } else if (alignVal === 'right') {
+                previewText.style.transform = `translateX(-${100 - pos}%)`;
+                previewText.style.textAlign = 'right';
+            }
+        }
+    }
+}
+
+/**
+ * Chọn chế độ căn chỉnh vị trí chữ Marquee (gọi từ nút bấm)
+ */
+function setMarqueeAlign(mode) {
+    // Cập nhật hidden input
+    const alignInput = document.getElementById('veMarqueeAlign');
+    if (alignInput) alignInput.value = mode;
+
+    // Highlight nút active
+    document.querySelectorAll('.ve-align-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.align === mode);
+    });
+
+    // Hiện/ẩn slider
+    const sliderWrap = document.getElementById('veMarqueeSliderWrap');
+    if (sliderWrap) {
+        sliderWrap.style.display = mode === 'scroll' ? 'none' : 'block';
+    }
+
+    // Reset slider về giá trị mặc định theo chế độ
+    const slider = document.getElementById('veMarqueePosition');
+    const label = document.getElementById('veMarqueePosLabel');
+    if (slider && mode !== 'scroll') {
+        const defaults = { left: 0, center: 50, right: 100 };
+        slider.value = defaults[mode] || 50;
+        if (label) label.textContent = slider.value + '%';
+    }
+
+    // Cập nhật preview
+    updateMarqueePreview();
+}
+
+/**
+ * Cập nhật vị trí từ slider kéo thả (gọi khi kéo thanh range)
+ */
+function updateMarqueePositionFromSlider(val) {
+    const label = document.getElementById('veMarqueePosLabel');
+    const posInput = document.getElementById('veMarqueePositionValue');
+    if (label) label.textContent = val + '%';
+    if (posInput) posInput.value = val;
+    updateMarqueePreview();
+}
+
+/**
+ * Cập nhật vị trí chiều dọc từ slider (gọi khi kéo thanh range dọc)
+ */
+function updateMarqueeVOffset(val) {
+    const label = document.getElementById('veMarqueeVLabel');
+    if (label) label.textContent = val + 'px';
+
+    // Cập nhật preview và frontend
+    const previewText = document.getElementById('veMarqueePreviewText');
+    if (previewText) {
+        previewText.style.position = 'relative';
+        previewText.style.top = val + 'px';
+    }
+}
+
+async function saveMarqueeSettings() {
+    if (!supabase) return;
+    try {
+        const settings = {
+            enabled: document.getElementById('veMarqueeEnabled')?.checked || false,
+            text: document.getElementById('veMarqueeText')?.value || '',
+            speed: document.getElementById('veMarqueeSpeed')?.value || 'normal',
+            textAlign: document.getElementById('veMarqueeAlign')?.value || 'scroll',
+            textPosition: parseInt(document.getElementById('veMarqueePosition')?.value || '50'),
+            vOffset: parseInt(document.getElementById('veMarqueeVOffset')?.value || '0'),
+            bgColor: document.getElementById('veMarqueeBg')?.value || '#1a1a2e',
+            textColor: document.getElementById('veMarqueeColor')?.value || '#fbbf24'
+        };
+
+        // Upsert (insert nếu chưa có, update nếu có)
+        const { data: existing } = await supabase
+            .from('site_settings').select('key').eq('key', 'marquee').single();
+
+        let error;
+        if (existing) {
+            const r = await supabase.from('site_settings')
+                .update({ value: settings, updated_at: new Date().toISOString() })
+                .eq('key', 'marquee');
+            error = r.error;
+        } else {
+            const r = await supabase.from('site_settings')
+                .insert({ key: 'marquee', value: settings });
+            error = r.error;
+        }
+
+        if (error) throw error;
+        showNotification('✅ Đã lưu cài đặt Marquee!', 'success');
+    } catch (err) {
+        console.error(' Lỗi lưu marquee:', err);
+        showNotification('Lỗi khi lưu Marquee!', 'error');
+    }
+}
+
+/**
+ * Load cài đặt Marquee (gọi khi mở tab admin)
+ */
+async function loadMarqueeSettings() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings').select('value').eq('key', 'marquee').single();
+        if (error || !data) return;
+
+        const s = data.value || {};
+        const toggle = document.getElementById('veMarqueeEnabled');
+        const text = document.getElementById('veMarqueeText');
+        const speed = document.getElementById('veMarqueeSpeed');
+        const align = document.getElementById('veMarqueeAlign');
+        const bg = document.getElementById('veMarqueeBg');
+        const color = document.getElementById('veMarqueeColor');
+        const preview = document.getElementById('veMarqueePreviewText');
+
+        if (toggle) toggle.checked = s.enabled || false;
+        if (text) text.value = s.text || '';
+        if (speed) speed.value = s.speed || 'normal';
+        if (align) align.value = s.textAlign || 'scroll';
+        if (bg) bg.value = s.bgColor || '#1a1a2e';
+        if (color) color.value = s.textColor || '#fbbf24';
+        if (preview && s.text) {
+            preview.textContent = s.text;
+            preview.style.color = s.textColor || '#fbbf24';
+            preview.parentElement.style.background = s.bgColor || '#1a1a2e';
+        }
+
+        // Khôi phục vị trí chữ
+        const posSlider = document.getElementById('veMarqueePosition');
+        const posLabel = document.getElementById('veMarqueePosLabel');
+        if (posSlider && s.textPosition !== undefined) {
+            posSlider.value = s.textPosition;
+        }
+        if (posLabel && s.textPosition !== undefined) {
+            posLabel.textContent = s.textPosition + '%';
+        }
+        // Gọi setMarqueeAlign để highlight nút + hiện/ẩn slider + cập nhật preview
+        setMarqueeAlign(s.textAlign || 'scroll');
+
+        // Khôi phục chiều dọc
+        const vSlider = document.getElementById('veMarqueeVOffset');
+        const vLabel = document.getElementById('veMarqueeVLabel');
+        if (vSlider) vSlider.value = s.vOffset || 0;
+        if (vLabel) vLabel.textContent = (s.vOffset || 0) + 'px';
+        updateMarqueeVOffset(s.vOffset || 0);
+    } catch (err) {
+        console.error('Lỗi load marquee settings:', err);
+    }
+}
+
+/**
+ * Hiển thị Marquee trên trang chủ (gi khi load trang)
+ */
+async function loadAndShowMarquee() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings').select('value').eq('key', 'marquee').single();
+        if (error || !data) return;
+
+        const s = data.value || {};
+        if (!s.enabled || !s.text) return;
+
+        const bar = document.getElementById('siteMarqueeBar');
+        const inner = document.getElementById('siteMarqueeInner');
+        if (!bar || !inner) return;
+
+        inner.textContent = s.text;
+        const bgCol = s.bgColor || '#1a1a2e';
+        bar.style.background = `linear-gradient(90deg, ${bgCol} 0%, ${adjustBrightness(bgCol, 15)} 50%, ${bgCol} 100%)`;
+        bar.style.setProperty('--marquee-bg', bgCol); /* Cho icon loa dùng cùng màu nn */
+        inner.style.color = s.textColor || '#fbbf24';
+        bar.setAttribute('data-speed', s.speed || 'normal');
+
+        // Xử lý vị trí chữ (scroll / center / left / right + position %)
+        const alignMode = s.textAlign || 'scroll';
+        const textPos = s.textPosition !== undefined ? s.textPosition : 50;
+        if (alignMode === 'scroll') {
+            // Chạy ngang — mặc định
+            inner.style.animation = '';
+            inner.style.display = 'inline-block';
+            inner.style.textAlign = '';
+            inner.style.width = '';
+            inner.style.whiteSpace = 'nowrap';
+            inner.style.transform = '';
+            inner.style.position = '';
+            inner.style.left = '';
+        } else {
+            // Căn cố định — tắt animation, dùng position tùy chỉnh
+            inner.style.animation = 'none';
+            inner.style.display = 'block';
+            inner.style.whiteSpace = 'nowrap';
+            inner.style.width = 'auto';
+            inner.style.position = 'relative';
+
+            if (alignMode === 'left') {
+                inner.style.textAlign = 'left';
+                inner.style.transform = `translateX(${textPos}%)`;
+            } else if (alignMode === 'center') {
+                inner.style.textAlign = 'center';
+                const offset = textPos - 50;
+                inner.style.transform = `translateX(${offset}%)`;
+            } else if (alignMode === 'right') {
+                inner.style.textAlign = 'right';
+                inner.style.transform = `translateX(-${100 - textPos}%)`;
+            }
+        }
+
+        bar.style.display = 'block';
+        document.body.classList.add('marquee-active');
+
+        // Áp dụng chiều dọc (vOffset)
+        if (s.vOffset && s.vOffset !== 0) {
+            inner.style.position = 'relative';
+            inner.style.top = s.vOffset + 'px';
+        }
+    } catch (err) {
+        console.error('Lỗi show marquee:', err);
+    }
+}
+
+/**
+ * óng Marquee (user click X)
+ */
+function closeSiteMarquee() {
+    const bar = document.getElementById('siteMarqueeBar');
+    if (bar) {
+        bar.style.display = 'none';
+        document.body.classList.remove('marquee-active');
+    }
+}
+
+/* ============================================
+   POPUP — THÔNG BO TOÀN SITE
+   ============================================ */
+
+/**
+ * Lưu cài đặt Popup lên Supabase
+ */
+async function savePopupSettings() {
+    if (!supabase) return;
+    try {
+        const settings = {
+            enabled: document.getElementById('vePopupEnabled')?.checked || false,
+            frequency: getSelectedFrequencies(),
+            title: document.getElementById('vePopupTitle')?.value || '',
+            content: document.getElementById('vePopupContent')?.value || '',
+            titleColor: document.getElementById('vePopupTitleColor')?.value || '#ffffff',
+            contentColor: document.getElementById('vePopupContentColor')?.value || '#d9d9d9',
+            image: document.getElementById('vePopupImage')?.value || '',
+            btnText: document.getElementById('vePopupBtnText')?.value || 'Khám phá ngay',
+            btnLink: document.getElementById('vePopupBtnLink')?.value || '',
+            btnColor: document.getElementById('vePopupBtnColor')?.value || '#ffffff'
+        };
+
+        // Upload ảnh pending lên Cloudflare R2 trước nếu có
+        if (window._pendingPopupImage) {
+            showNotification(' Đang tải ảnh lên Cloudflare R2...', 'info');
+            const file = window._pendingPopupImage;
+            const R2_URL = 'https://r2-uploader.thinhnd-2003.workers.dev';
+            const customFilename = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '')}`;
+            const formData = new FormData();
+            formData.append('file', file, customFilename);
+            formData.append('folder', 'popup-images');
+            formData.append('customFilename', customFilename);
+
+            const resp = await fetch(`${R2_URL}/upload`, { method: 'POST', body: formData });
+            if (!resp.ok) {
+                const errData = await resp.json().catch(() => ({}));
+                throw new Error('Upload ảnh thất bại: ' + (errData.error || resp.statusText));
+            }
+            const result = await resp.json();
+            settings.image = result.url;
+            document.getElementById('vePopupImage').value = result.url;
+            window._pendingPopupImage = null; // Xóa pending
+
+        }
+
+        const { data: existing } = await supabase
+            .from('site_settings').select('key').eq('key', 'popup').single();
+
+        let error;
+        if (existing) {
+            const r = await supabase.from('site_settings')
+                .update({ value: settings, updated_at: new Date().toISOString() })
+                .eq('key', 'popup');
+            error = r.error;
+        } else {
+            const r = await supabase.from('site_settings')
+                .insert({ key: 'popup', value: settings });
+            error = r.error;
+        }
+
+        if (error) throw error;
+        showNotification('✅ Đã lưu cài đặt Popup!', 'success');
+    } catch (err) {
+        console.error(' Lỗi lưu popup:', err);
+        showNotification('Lỗi khi lưu Popup!', 'error');
+    }
+}
+
+/**
+ * Load cài đặt Popup (gi khi mở tab admin)
+ */
+async function loadPopupSettings() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings').select('value').eq('key', 'popup').single();
+        if (error || !data) return;
+
+        const s = data.value || {};
+        const toggle = document.getElementById('vePopupEnabled');
+        const title = document.getElementById('vePopupTitle');
+        const content = document.getElementById('vePopupContent');
+        const image = document.getElementById('vePopupImage');
+        const btnText = document.getElementById('vePopupBtnText');
+        const btnLink = document.getElementById('vePopupBtnLink');
+
+        if (toggle) toggle.checked = s.enabled || false;
+        // Load frequency (radio - single value)
+        let freq = s.frequency || 'once_day';
+        // Tương thích dữ liệu cũ (array) → lấy phần tử đầu
+        if (Array.isArray(freq)) freq = freq[0] || 'once_day';
+        const radio = document.querySelector(`input[name="popupFrequency"][value="${freq}"]`);
+        if (radio) radio.checked = true;
+        if (title) title.value = s.title || '';
+        if (content) content.value = s.content || '';
+        const titleColor = document.getElementById('vePopupTitleColor');
+        const contentColor = document.getElementById('vePopupContentColor');
+        if (titleColor) titleColor.value = s.titleColor || '#ffffff';
+        if (contentColor) contentColor.value = s.contentColor || '#d9d9d9';
+        // Áp dụng màu xem trước vào ô tiêu đề + nội dung
+        if (title) title.style.color = s.titleColor || '#ffffff';
+        if (content) content.style.color = s.contentColor || '#d9d9d9';
+        if (image) {
+            image.value = s.image || '';
+            // Hiện preview nếu có ảnh
+            if (s.image) {
+                showPopupImagePreview(s.image);
+                const urlInput = document.getElementById('vePopupImageUrl');
+                if (urlInput) urlInput.value = s.image;
+            }
+        }
+        if (btnText) btnText.value = s.btnText || 'Khám phá ngay';
+        if (btnLink) btnLink.value = s.btnLink || '';
+        const btnColor = document.getElementById('vePopupBtnColor');
+        if (btnColor) btnColor.value = s.btnColor || '#ffffff';
+        if (btnText) btnText.style.color = s.btnColor || '#ffffff';
+    } catch (err) {
+        console.error('Lỗi load popup settings:', err);
+    }
+}
+
+/**
+ * Kiểm tra có nên hiện popup hay không (dựa vào frequency)
+ */
+function shouldShowPopup(freq) {
+    const now = Date.now();
+    // Tương thích dữ liệu cũ (array)
+    if (Array.isArray(freq)) freq = freq[0] || 'once_day';
+
+    switch (freq) {
+        case 'every_visit':
+            return !window._sitePopupShownThisLoad;
+        case '30min': {
+            const last30 = parseInt(localStorage.getItem('sitePopupLast30m') || '0');
+            return (now - last30) >= 30 * 60 * 1000;
+        }
+        case '1hour': {
+            const last1h = parseInt(localStorage.getItem('sitePopupLast1h') || '0');
+            return (now - last1h) >= 60 * 60 * 1000;
+        }
+        case 'once_day': {
+            const today = new Date().toISOString().split('T')[0];
+            return localStorage.getItem('sitePopupLastDate') !== today;
+        }
+        case 'once_week':
+            return localStorage.getItem('sitePopupLastWeek') !== getWeekNumber();
+        case 'once_only':
+            return !localStorage.getItem('sitePopupShownOnce');
+        case 'new_user':
+            return !localStorage.getItem('sitePopupNewUserSeen');
+        default:
+            return false;
+    }
+}
+
+/**
+ * ánh dấu đã hiện popup (cập nhật localStorage theo frequency)
+ */
+function markPopupShown(freq) {
+    const now = Date.now();
+    // Tương thích dữ liệu cũ (array)
+    if (Array.isArray(freq)) freq = freq[0] || 'once_day';
+
+    switch (freq) {
+        case 'every_visit':
+            window._sitePopupShownThisLoad = true;
+            break;
+        case '30min':
+            localStorage.setItem('sitePopupLast30m', now.toString());
+            break;
+        case '1hour':
+            localStorage.setItem('sitePopupLast1h', now.toString());
+            break;
+        case 'once_day':
+            localStorage.setItem('sitePopupLastDate', new Date().toISOString().split('T')[0]);
+            break;
+        case 'once_week':
+            localStorage.setItem('sitePopupLastWeek', getWeekNumber());
+            break;
+        case 'once_only':
+            localStorage.setItem('sitePopupShownOnce', '1');
+            break;
+        case 'new_user':
+            localStorage.setItem('sitePopupNewUserSeen', '1');
+            break;
+    }
+}
+
+/**
+ * Lấy danh sách frequency đã chn từ checkboxes
+ */
+/**
+ * Upload ảnh popup lên Cloudflare R2
+ */
+async function handlePopupImageUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+        showNotification('Vui lòng chn file hình ảnh!', 'error');
+        return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+        showNotification('Ảnh quá lớn! Tối đa 5MB.', 'error');
+        return;
+    }
+
+    // Chỉ preview cục bộ, KHÔNG upload ngay
+    const previewUrl = URL.createObjectURL(file);
+    window._pendingPopupImage = file; // Lưu file ch upload khi bấm Lưu
+    showPopupImagePreview(previewUrl);
+    
+    showNotification('📷 Ảnh đã sẵn sàng! Bấm "Lưu Popup" để tải lên Cloudflare R2.', 'info');
+    
+    // Reset file input
+    input.value = '';
+}
+
+/**
+ * Xóa ảnh popup (xóa trên R2 nếu là URL R2 + xóa preview)
+ */
+async function removePopupImage() {
+    // Xác nhận trước khi xóa
+    const result = await Swal.fire({
+        title: 'Xóa ảnh minh ha?',
+        text: 'Ảnh sẽ bị xóa khi Cloudflare R2 (nếu có). Bạn chắc chắn?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '🗑 Xóa',
+        cancelButtonText: 'Hủy',
+        background: 'var(--bg-secondary, #1a1a2e)',
+        color: '#fff'
+    });
+    if (!result.isConfirmed) return;
+
+    const imageInput = document.getElementById('vePopupImage');
+    const currentUrl = imageInput?.value || '';
+
+    // Xóa trên Cloudflare R2 nếu URL từ workers.dev
+    if (currentUrl && (currentUrl.includes('workers.dev') || currentUrl.includes('.r2.dev'))) {
+        try {
+            const R2_URL = 'https://r2-uploader.thinhnd-2003.workers.dev';
+            const urlObj = new URL(currentUrl);
+            const key = urlObj.pathname.substring(1); // B dấu / đầu
+
+            if (key) {
+                const resp = await fetch(`${R2_URL}/delete`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key })
+                });
+                if (resp.ok) {
+
+                } else {
+                    console.warn('⚠ Không thể xóa ảnh R2:', await resp.text());
+                }
+            }
+        } catch (err) {
+            console.error('Lỗi xóa ảnh R2:', err);
+        }
+    }
+
+    // Xóa pending image nếu có
+    window._pendingPopupImage = null;
+
+    // Xóa UI
+    if (imageInput) imageInput.value = '';
+    const preview = document.getElementById('vePopupImagePreview');
+    const uploadArea = document.getElementById('vePopupUploadArea');
+    const urlInput = document.getElementById('vePopupImageUrl');
+
+    if (preview) preview.style.display = 'none';
+    if (uploadArea) {
+        uploadArea.style.display = 'block';
+        uploadArea.innerHTML = `
+            <i class="fas fa-cloud-upload-alt" style="font-size:1.5rem; color:var(--accent-primary, #4db8ff); margin-bottom:6px;"></i>
+            <p style="margin:0; font-size:0.85rem; color:var(--text-muted);">Click để chn ảnh hoặc nhập URL</p>
+            <p style="margin:4px 0 0; font-size:0.75rem; color:rgba(255,255,255,0.3);">PNG, JPG, GIF • Tối đa 5MB • Lưu trên Cloudflare R2</p>`;
+    }
+    if (urlInput) urlInput.value = '';
+
+    showNotification('🗑 ã xóa ảnh minh ha!', 'info');
+
+    // Cập nhật Supabase: xóa URL ảnh khi DB
+    try {
+        const { data: existing } = await supabase
+            .from('site_settings').select('value').eq('key', 'popup').single();
+        if (existing && existing.value) {
+            existing.value.image = '';
+            await supabase.from('site_settings')
+                .update({ value: existing.value, updated_at: new Date().toISOString() })
+                .eq('key', 'popup');
+            console.log('✅ ã xóa URL ảnh trong Supabase');
+        }
+    } catch (err) {
+        console.error('Lỗi cập nhật DB sau xóa ảnh:', err);
+    }
+}
+
+/**
+ * Preview ảnh khi dán URL
+ */
+function previewPopupImageUrl(url) {
+    if (!url || url.length < 10) return;
+    document.getElementById('vePopupImage').value = url;
+    showPopupImagePreview(url);
+}
+
+/**
+ * Hiện preview ảnh + ẩn upload area
+ */
+function showPopupImagePreview(url) {
+    const preview = document.getElementById('vePopupImagePreview');
+    const previewImg = document.getElementById('vePopupImagePreviewImg');
+    const uploadArea = document.getElementById('vePopupUploadArea');
+
+    if (previewImg) previewImg.src = url;
+    if (preview) preview.style.display = 'block';
+    if (uploadArea) uploadArea.style.display = 'none';
+}
+
+function getSelectedFrequencies() {
+    const selected = document.querySelector('input[name="popupFrequency"]:checked');
+    return selected ? selected.value : 'once_day';
+}
+
+/**
+ * Lấy số tuần hiện tại (năm-tuần)
+ */
+function getWeekNumber() {
+    const d = new Date();
+    const start = new Date(d.getFullYear(), 0, 1);
+    const diff = d - start;
+    const oneWeek = 604800000;
+    const week = Math.ceil(diff / oneWeek);
+    return `${d.getFullYear()}-W${week}`;
+}
+
+/**
+ * Hiển thị Popup trên trang (gi khi load trang — kiểm tra frequency)
+ */
+async function loadAndShowPopup() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('site_settings').select('value').eq('key', 'popup').single();
+        
+        if (error || !data) return;
+
+        const s = data.value || {};
+
+
+        if (!s.enabled) return;
+        if (!s.title && !s.content) return;
+
+        let frequency = s.frequency || 'once_day';
+        // Tương thích dữ liệu cũ (array) → lấy phần tử đầu
+        if (Array.isArray(frequency)) frequency = frequency[0] || 'once_day';
+
+        // Kiểm tra tần suất
+        if (!shouldShowPopup(frequency)) return;
+
+
+
+        // Render popup
+        renderSitePopup(s);
+
+        // Hiện popup sau 2 giây
+        setTimeout(() => {
+            const overlay = document.getElementById('sitePopupOverlay');
+            if (overlay) overlay.style.display = 'flex';
+        }, 2000);
+
+        // ánh dấu đã hiện
+        markPopupShown(frequency);
+    } catch (err) {
+        console.error('Lỗi show popup:', err);
+    }
+}
+
+/**
+ * Render nội dung popup
+ */
+function renderSitePopup(settings) {
+    const titleEl = document.getElementById('sitePopupTitle');
+    const contentEl = document.getElementById('sitePopupContent');
+    const imageEl = document.getElementById('sitePopupImage');
+    const btnEl = document.getElementById('sitePopupBtn');
+    const card = document.querySelector('.site-popup-card');
+
+    if (titleEl) titleEl.textContent = settings.title || '';
+    if (contentEl) contentEl.textContent = settings.content || '';
+
+    // Áp dụng màu chữ tùy chỉnh
+    if (titleEl) titleEl.style.color = settings.titleColor || '#ffffff';
+    if (contentEl) contentEl.style.color = settings.contentColor || '#d9d9d9';
+
+    // Dùng ảnh làm background cho popup card
+    if (imageEl) imageEl.style.display = 'none'; // Ẩn img riêng
+    if (card) {
+        if (settings.image) {
+            card.style.backgroundImage = `linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.1) 35%, rgba(0,0,0,0.1) 55%, rgba(0,0,0,0.65) 100%), url('${settings.image}')`;
+            card.style.backgroundSize = 'cover';
+            card.style.backgroundPosition = 'center';
+            card.style.minHeight = window.innerWidth <= 768 ? '240px' : '380px';
+        } else {
+            card.style.backgroundImage = 'none';
+            card.style.minHeight = 'auto';
+        }
+    }
+
+    if (btnEl) {
+        btnEl.textContent = settings.btnText || 'Khám phá ngay';
+        btnEl.style.color = settings.btnColor || '#ffffff';
+        if (settings.btnLink) {
+            btnEl.href = settings.btnLink;
+        } else {
+            btnEl.href = '#';
+            btnEl.onclick = (e) => { e.preventDefault(); closeSitePopup(); };
+        }
+    }
+
+    // Áp dụng vị trí tùy chỉnh nếu admin đã kéo thả
+    if (card && (settings.titlePos || settings.contentPos || settings.btnPos)) {
+        card.style.position = 'relative';
+        const elPad = window.innerWidth <= 768 ? '24px' : '48px';
+        const posMap = [
+            { sel: '.site-popup-top', pos: settings.titlePos },
+            { sel: '.site-popup-middle', pos: settings.contentPos },
+            { sel: '.site-popup-bottom', pos: settings.btnPos }
+        ];
+        setTimeout(() => {
+            posMap.forEach(({ sel, pos }) => {
+                const el = card.querySelector(sel);
+                if (el && pos) {
+                    el.style.position = 'absolute';
+                    el.style.left = pos.leftPct + '%';
+                    el.style.top = pos.topPct + '%';
+                    el.style.width = `calc(100% - ${elPad})`;
+                    el.style.textAlign = 'center';
+                }
+            });
+        }, 100);
+    }
+}
+
+/**
+ * Xem trước Popup (Admin click "Xem trước")
+ */
+async function previewSitePopup() {
+    // Nếu có ảnh pending (chưa upload), dùng blob URL để preview
+    let imageUrl = document.getElementById('vePopupImage')?.value || '';
+    if (window._pendingPopupImage) {
+        imageUrl = URL.createObjectURL(window._pendingPopupImage);
+    }
+
+    const settings = {
+        title: document.getElementById('vePopupTitle')?.value || '(Chưa có tiêu đ)',
+        content: document.getElementById('vePopupContent')?.value || '(Chưa có nội dung)',
+        titleColor: document.getElementById('vePopupTitleColor')?.value || '#ffffff',
+        contentColor: document.getElementById('vePopupContentColor')?.value || '#d9d9d9',
+        image: imageUrl,
+        btnText: document.getElementById('vePopupBtnText')?.value || 'Khám phá ngay',
+        btnLink: document.getElementById('vePopupBtnLink')?.value || '',
+        btnColor: document.getElementById('vePopupBtnColor')?.value || '#ffffff'
+    };
+
+    // Load vị trí đã lưu từ Supabase
+    try {
+        const { data } = await supabase
+            .from('site_settings').select('value').eq('key', 'popup').single();
+        if (data && data.value) {
+            if (data.value.titlePos) settings.titlePos = data.value.titlePos;
+            if (data.value.contentPos) settings.contentPos = data.value.contentPos;
+            if (data.value.btnPos) settings.btnPos = data.value.btnPos;
+        }
+    } catch (err) {
+        console.warn('Không load được vị trí đã lưu:', err);
+    }
+
+    renderSitePopup(settings);
+
+    const overlay = document.getElementById('sitePopupOverlay');
+    if (overlay) overlay.style.display = 'flex';
+
+    // Sau khi layout ổn định → kích hoạt drag mode + auto-center trên mobile
+    setTimeout(() => {
+        setupPopupDragMode();
+        // Trên mobile: auto-center ngang tất cả elements để tránh lệch
+        if (window.innerWidth <= 768) {
+            setTimeout(() => alignPopupCenter(), 100);
+        }
+    }, 500);
+}
+
+/**
+ * Thiết lập chế độ kéo thả + toolbar Hủy/Cập nhật
+ */
+function setupPopupDragMode() {
+    const card = document.getElementById('sitePopupCard');
+    if (!card) return;
+
+    const sections = [
+        { sel: '.site-popup-top', name: 'titlePos' },
+        { sel: '.site-popup-middle', name: 'contentPos' },
+        { sel: '.site-popup-bottom', name: 'btnPos' }
+    ];
+
+    card.style.position = 'relative';
+    const cardRect = card.getBoundingClientRect();
+
+    // Ẩn nút X để tránh ấn nhầm
+    const closeBtn = card.querySelector('.site-popup-close');
+    if (closeBtn) closeBtn.style.display = 'none';
+
+    // Chặn click link nút khi đang kéo thả
+    const btnEl = card.querySelector('.site-popup-btn');
+    if (btnEl) {
+        btnEl._origHref = btnEl.href;
+        btnEl.href = 'javascript:void(0)';
+        btnEl.onclick = (e) => e.preventDefault();
+    }
+
+    // Ghi nhận vị trí gốc trước khi chuyển absolute
+    const origPositions = [];
+    sections.forEach(({ sel }) => {
+        const el = card.querySelector(sel);
+        if (el) {
+            const r = el.getBoundingClientRect();
+            origPositions.push({
+                el,
+                left: r.left - cardRect.left,
+                top: r.top - cardRect.top,
+                width: r.width
+            });
+        }
+    });
+
+    // Biến lưu phần tử đang chn
+    window._selectedPopupEl = null;
+    const nameMap = {
+        'site-popup-top': '📌 Tiêu đ',
+        'site-popup-middle': ' Nội dung',
+        'site-popup-bottom': '🔘 Nút bấm'
+    };
+
+    // Hàm chn phần tử
+    function selectElement(el) {
+        // B chn cũ
+        origPositions.forEach(({ el: e }) => {
+            e.style.outline = '2px dashed rgba(255,255,255,0.25)';
+            e.style.boxShadow = 'none';
+        });
+        // Chn mới
+        window._selectedPopupEl = el;
+        el.style.outline = '2px solid #4db8ff';
+        el.style.boxShadow = '0 0 12px rgba(77,184,255,0.4)';
+        // Cập nhật toolbar hiện tên
+        const badge = document.querySelector('.popup-drag-selected-name');
+        if (badge) {
+            const clsName = [...el.classList].find(c => nameMap[c]);
+            badge.textContent = nameMap[clsName] || 'ang chn';
+        }
+    }
+
+    // Chuyển sang absolute giữ nguyên vị trí gốc
+    origPositions.forEach(({ el, left, top, width }) => {
+        el.style.position = 'absolute';
+        el.style.left = left + 'px';
+        el.style.top = top + 'px';
+        el.style.width = window.innerWidth <= 768 ? 'calc(100% - 24px)' : 'calc(100% - 48px)';
+        el.style.cursor = 'grab';
+        el.style.zIndex = '10';
+        el.style.userSelect = 'none';
+        el.style.transition = 'none';
+        el.style.borderRadius = '8px';
+        el.style.outline = '2px dashed rgba(255,255,255,0.25)';
+
+        // Click để chn + bắt đầu kéo
+        let isDragging = false, startX, startY, origL, origT;
+
+        const onDown = (e) => {
+            e.preventDefault(); e.stopPropagation();
+            selectElement(el);
+            isDragging = true;
+            el.style.cursor = 'grabbing';
+            el.style.zIndex = '20';
+            const p = e.touches ? e.touches[0] : e;
+            startX = p.clientX; startY = p.clientY;
+            origL = parseInt(el.style.left) || 0;
+            origT = parseInt(el.style.top) || 0;
+        };
+        const onMove = (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const p = e.touches ? e.touches[0] : e;
+            el.style.left = (origL + p.clientX - startX) + 'px';
+            el.style.top = (origT + p.clientY - startY) + 'px';
+        };
+        const onUp = () => {
+            if (!isDragging) return;
+            isDragging = false;
+            el.style.cursor = 'grab';
+            el.style.zIndex = '10';
+        };
+
+        el.addEventListener('mousedown', onDown);
+        el.addEventListener('touchstart', onDown, { passive: false });
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('mouseup', onUp);
+        document.addEventListener('touchend', onUp);
+
+        // Lưu cleanup reference
+        el._dragCleanup = () => {
+            el.removeEventListener('mousedown', onDown);
+            el.removeEventListener('touchstart', onDown);
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.removeEventListener('touchend', onUp);
+        };
+    });
+
+    // Thêm toolbar nằm ngoài popup (dưới cùng màn hình)
+    let toolbar = document.querySelector('.popup-drag-toolbar');
+    if (toolbar) toolbar.remove();
+    toolbar = document.createElement('div');
+    toolbar.className = 'popup-drag-toolbar';
+    const isMobile = window.innerWidth <= 768;
+    toolbar.style.cssText = `position:fixed; bottom:${isMobile ? '10px' : '20px'}; left:50%; transform:translateX(-50%); display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:${isMobile ? '4px' : '8px'}; padding:${isMobile ? '8px 10px' : '12px 20px'}; background:rgba(20,20,40,0.95); backdrop-filter:blur(10px); z-index:100000; border-radius:${isMobile ? '10px' : '14px'}; box-shadow:0 4px 24px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.15); max-width:${isMobile ? '95vw' : '90vw'};`;
+    const btnStyle = `padding:${isMobile ? '5px 8px' : '6px 12px'}; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.1); color:#fff; border-radius:8px; cursor:pointer; font-size:${isMobile ? '0.7rem' : '0.8rem'};`;
+    const actionBtnStyle = `padding:${isMobile ? '5px 10px' : '6px 16px'}; border-radius:8px; cursor:pointer; font-size:${isMobile ? '0.75rem' : '0.85rem'};`;
+    toolbar.innerHTML = `
+        <span class="popup-drag-selected-name" style="font-size:${isMobile ? '0.7rem' : '0.8rem'}; color:#4db8ff; width:100%; text-align:center; margin-bottom:${isMobile ? '2px' : '4px'}; font-weight:600;">👆 Bấm chn phần tử để chỉnh</span>
+        <button onclick="alignPopupCenter()" title="Canh giữa ngang" style="${btnStyle}">↔ Giữa ngang</button>
+        <button onclick="alignPopupVertical()" title="Canh giữa dc" style="${btnStyle}">↕ Giữa dc</button>
+        <button onclick="alignPopupAll()" title="Canh giữa cả ngang lẫn dc" style="${btnStyle}">⊞ Giữa tất cả</button>
+        <button onclick="alignPopupSpreadVertical()" title="Dàn đều dọc tất cả" style="${btnStyle}">☰ u dc</button>
+        ${isMobile ? '' : '<span style="width:1px; height:24px; background:rgba(255,255,255,0.2); margin:0 4px;"></span>'}
+        <button onclick="cancelPopupDrag()" style="${actionBtnStyle} border:1px solid rgba(255,255,255,0.3); background:transparent; color:#fff;">Hủy</button>
+        <button onclick="savePopupPositions()" style="${actionBtnStyle} background:linear-gradient(135deg,#007aff,#4db8ff); border:none; color:#fff; font-weight:600;">✅ Cập nhật</button>
+    `;
+    document.body.appendChild(toolbar);
+}
+
+/**
+ * Canh giữa ngang phần đang chn (hoặc tất cả nếu chưa chn)
+ */
+function alignPopupCenter() {
+    const card = document.getElementById('sitePopupCard');
+    if (!card) return;
+    const cardW = card.offsetWidth;
+    const el = window._selectedPopupEl;
+    if (el && el.style.position === 'absolute') {
+        el.style.left = ((cardW - el.offsetWidth) / 2) + 'px';
+    } else {
+        // Chưa chn → canh tất cả
+        ['.site-popup-top', '.site-popup-middle', '.site-popup-bottom'].forEach(sel => {
+            const e = card.querySelector(sel);
+            if (e && e.style.position === 'absolute') {
+                e.style.left = ((cardW - e.offsetWidth) / 2) + 'px';
+            }
+        });
+    }
+}
+
+/**
+ * Canh giữa dc phần đang chn (hoặc tất cả)
+ */
+function alignPopupVertical() {
+    const card = document.getElementById('sitePopupCard');
+    if (!card) return;
+    const cardH = card.offsetHeight;
+    const el = window._selectedPopupEl;
+    if (el && el.style.position === 'absolute') {
+        el.style.top = ((cardH - el.offsetHeight) / 2) + 'px';
+    } else {
+        ['.site-popup-top', '.site-popup-middle', '.site-popup-bottom'].forEach(sel => {
+            const e = card.querySelector(sel);
+            if (e && e.style.position === 'absolute') {
+                e.style.top = ((cardH - e.offsetHeight) / 2) + 'px';
+            }
+        });
+    }
+}
+
+/**
+ * Canh giữa tất cả (ngang + dc) phần đang chn
+ */
+function alignPopupAll() {
+    alignPopupCenter();
+    alignPopupVertical();
+}
+
+/**
+ * Dàn đều dọc TẤT CẢ phần tử (luôn áp dụng cho cả 3)
+ */
+function alignPopupSpreadVertical() {
+    const card = document.getElementById('sitePopupCard');
+    if (!card) return;
+    const cardH = card.offsetHeight;
+    const sels = ['.site-popup-top', '.site-popup-middle', '.site-popup-bottom'];
+    const els = sels.map(s => card.querySelector(s)).filter(e => e && e.style.position === 'absolute');
+    if (els.length === 0) return;
+
+    const totalH = els.reduce((sum, el) => sum + el.offsetHeight, 0);
+    const gap = (cardH - totalH) / (els.length + 1);
+    let y = gap;
+    els.forEach(el => {
+        el.style.top = y + 'px';
+        y += el.offsetHeight + gap;
+    });
+}
+
+/**
+ * Hủy chỉnh vị trí → đóng popup, reset layout
+ */
+function cancelPopupDrag() {
+    cleanupDragMode();
+    const overlay = document.getElementById('sitePopupOverlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+/**
+ * Lưu vị trí đã kéo thả vào Supabase
+ */
+async function savePopupPositions() {
+    const card = document.getElementById('sitePopupCard');
+    if (!card) return;
+
+    const cardRect = card.getBoundingClientRect();
+    const positions = {};
+
+    ['.site-popup-top', '.site-popup-middle', '.site-popup-bottom'].forEach((sel, i) => {
+        const el = card.querySelector(sel);
+        if (el) {
+            const names = ['titlePos', 'contentPos', 'btnPos'];
+            // Lưu vị trí dạng % so với card
+            positions[names[i]] = {
+                leftPct: ((parseInt(el.style.left) || 0) / cardRect.width * 100).toFixed(1),
+                topPct: ((parseInt(el.style.top) || 0) / cardRect.height * 100).toFixed(1)
+            };
+        }
+    });
+
+    // Cập nhật vào Supabase
+    try {
+        const { data } = await supabase
+            .from('site_settings').select('value').eq('key', 'popup').single();
+        if (data && data.value) {
+            Object.assign(data.value, positions);
+            await supabase.from('site_settings')
+                .update({ value: data.value, updated_at: new Date().toISOString() })
+                .eq('key', 'popup');
+            showNotification('✅ Đã cập nhật vị trí hiển thị popup!', 'success');
+        }
+    } catch (err) {
+        console.error('Lỗi lưu vị trí popup:', err);
+        showNotification('Lỗi lưu vị trí!', 'error');
+    }
+
+    cleanupDragMode();
+    const overlay = document.getElementById('sitePopupOverlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+/**
+ * Dọn dẹp drag mode, reset styles
+ */
+function cleanupDragMode() {
+    const card = document.getElementById('sitePopupCard');
+    if (!card) return;
+
+    // Xóa toolbar (nằm ở body)
+    const toolbar = document.querySelector('.popup-drag-toolbar');
+    if (toolbar) toolbar.remove();
+    window._selectedPopupEl = null;
+
+    // Hiện lại nút X
+    const closeBtn = card.querySelector('.site-popup-close');
+    if (closeBtn) closeBtn.style.display = '';
+
+    // Reset styles
+    ['.site-popup-top', '.site-popup-middle', '.site-popup-bottom'].forEach(sel => {
+        const el = card.querySelector(sel);
+        if (el) {
+            if (el._dragCleanup) { el._dragCleanup(); el._dragCleanup = null; }
+            el.style.position = '';
+            el.style.left = '';
+            el.style.top = '';
+            el.style.width = '';
+            el.style.cursor = '';
+            el.style.zIndex = '';
+            el.style.userSelect = '';
+            el.style.outline = '';
+            el.style.transition = '';
+            el.style.borderRadius = '';
+            el.style.boxShadow = '';
+            el.onmouseenter = null;
+            el.onmouseleave = null;
+        }
+    });
+}
+
+/**
+ * Đóng Popup (user thường + click overlay)
+ */
+function closeSitePopup() {
+    cleanupDragMode();
+    const overlay = document.getElementById('sitePopupOverlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+/* ============================================================
+   API EXPLORER — Đã tách ra file riêng:
+
+ * Tải file phụ đề (.vtt, .srt) lên Supabase Storage
+ */
+async function uploadSubtitleToSupabase(input) {
+    if (!input.files || input.files.length === 0) return;
+    if (!window.supabase) {
+        showNotification("Lỗi kết nối CSDL!", "error");
+        return;
+    }
+    
+    const file = input.files[0];
+    const ext = file.name.split('.').pop().toLowerCase();
+    
+    if (ext !== 'vtt' && ext !== 'srt') {
+        showNotification("Chỉ hỗ trợ file phụ đề định dạng .vtt hoặc .srt", "warning");
+        return;
+    }
+
+    try {
+        showLoading(true, "Đang tải file phụ đề lên hệ thống...");
+        
+        // Tạo unique filename
+        const timestamp = new Date().getTime();
+        const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const filename = `subs_${timestamp}_${cleanName}`;
+        
+        // Upload file lên bucket 'subtitles' của Supabase
+        const { data, error } = await supabase.storage
+            .from('subtitles')
+            .upload(filename, file, {
+                cacheControl: '3600',
+                upsert: false
+            });
+            
+        if (error) {
+            // Check nếu bucket chưa tồn tại
+            if (error.message && error.message.includes('bucket not found')) {
+                throw new Error("Bucket 'subtitles' chưa được tạo trên Supabase Storage! Vui lòng tạo bucket public tên là 'subtitles'.");
+            }
+            throw error;
+        }
+        
+        // Lấy public URL
+        const { data: publicURLData } = supabase.storage
+            .from('subtitles')
+            .getPublicUrl(filename);
+            
+        const publicUrl = publicURLData.publicUrl;
+        
+        // --- XỬ LÝ NHẬN DIỆN THÔNG MINH NGÔN NGỮ TỪ TÊN FILE ---
+        let targetLang = "en"; // Fallback mặc định
+        const aiTargetLang = document.getElementById("aiTargetLang");
+        if (aiTargetLang) targetLang = aiTargetLang.value; // Lấy theo Dropdown
+        
+        // Auto-detect nếu tên file có chứa _vi, _en, _zh... sẽ ghi đè Dropdown (Tránh user upload lộn)
+        const fn = file.name.toLowerCase();
+        if (fn.includes('_vi.') || fn.includes('-vi.') || fn.includes('tiengviet') || fn.includes('vn')) targetLang = 'vi';
+        else if (fn.includes('_en.') || fn.includes('-en.') || fn.includes('english')) targetLang = 'en';
+        else if (fn.includes('_ko.') || fn.includes('-ko.') || fn.includes('korean') || fn.includes('kr')) targetLang = 'ko';
+        else if (fn.includes('_ja.') || fn.includes('-ja.') || fn.includes('japanese') || fn.includes('jp')) targetLang = 'ja';
+        else if (fn.includes('_zh.') || fn.includes('-zh.') || fn.includes('_cn.') || fn.includes('-cn.') || fn.includes('chinese')) targetLang = 'zh-CN';
+        
+        // Đưa ngay link vừa tải lên vào Danh sách Subtitle động
+        setDynamicSubtitleBox(targetLang, publicUrl);
+        
+        showNotification(`Tải file thành công! Tự động nhận diện ngôn ngữ: ${SUBTITLE_LANGUAGES_MAP[targetLang]?.label || targetLang}`, "success");
+    } catch (error) {
+        console.error("Lỗi upload phụ đề:", error);
+        showNotification(error.message || "Có lỗi xảy ra khi tải file lên!", "error");
+    } finally {
+        // Reset input để có thể chọn lại file cũ nếu muốn
+        input.value = "";
+        showLoading(false);
+    }
+}
+
+
+/**
+ * Cập nhật danh sách nguồn Video cho Modal AI
+ */
+function updateAISourceSelect() {
+    const select = document.getElementById("aiSourceSelect");
+    if (!select) return;
+
+    const typeSelects = document.querySelectorAll(".source-type");
+    const urlInputs = document.querySelectorAll(".source-url");
+    const labelSelects = document.querySelectorAll(".source-label");
+    
+    select.innerHTML = '';
+    let hasSelected = false;
+    
+    for (let i = 0; i < typeSelects.length; i++) {
+        const type = typeSelects[i].value;
+        if (type === "hls" || type === "mp4") {
+            const label = labelSelects[i] ? labelSelects[i].value : `Nguồn ${i+1}`;
+            const url = urlInputs[i].value;
+            
+            if (url) {
+                const opt = document.createElement("option");
+                opt.value = url;
+                opt.textContent = `[${type.toUpperCase()}] ${label}`;
+                
+                // Tự động đánh dấu chọn cho bản Vietsub HLS/MP4 đầu tiên
+                if (!hasSelected && (label.toLowerCase().includes("vietsub") || label.toLowerCase().includes("việt"))) {
+                    opt.selected = true;
+                    hasSelected = true;
+                }
+                select.appendChild(opt);
+            }
+        }
+    }
+    
+    // Nếu không có bản Vietsub nào, lấy tạm bản đầu tiên làm mặc định
+    if (!hasSelected && select.options.length > 0) {
+        select.options[0].selected = true;
+    }
+}
+
+let aiAbortController = null;
+// Lưu payload cuối cùng để có thể Resume
+let _lastAIPayload = null;
+let _lastAIUserToken = null;
+
+/**
+ * Ngắt tiến trình gọi AI giữa chừng → hiện nút Tiếp tục / Hủy
+ */
+function stopAIStream() {
+    if (aiAbortController) {
+        aiAbortController.abort();
+        aiAbortController = null;
+    }
+    
+    // Ẩn nút Dừng
+    const btnStop = document.getElementById("btnStopAI");
+    if(btnStop) btnStop.style.display = "none";
+    
+    // Hiện nhóm nút Tiếp tục + Hủy
+    const btnResume = document.getElementById("btnResumeAI");
+    const btnCancel = document.getElementById("btnCancelAI");
+    if(btnResume) btnResume.style.display = "inline-block";
+    if(btnCancel) btnCancel.style.display = "inline-block";
+    
+    const logContent = document.getElementById("aiLiveLogContent");
+    if(logContent) {
+        const pauseDiv = document.createElement("div");
+        pauseDiv.style.color = "#ffc107";
+        pauseDiv.style.fontWeight = "bold";
+        pauseDiv.innerHTML = `> ⏸️ Đã tạm dừng. Bấm <span style="color:#4aedc4">Tiếp tục</span> để chạy lại hoặc <span style="color:#dc3545">Hủy</span> để dừng hẳn.`;
+        logContent.appendChild(pauseDiv);
+        const logBox = document.getElementById("aiLiveLogBox");
+        if(logBox) logBox.scrollTop = logBox.scrollHeight;
+    }
+}
+
+/**
+ * Tiếp tục tiến trình AI (gọi lại với cùng payload)
+ */
+async function resumeAIStream() {
+    // Ẩn nút Resume/Cancel
+    const btnResume = document.getElementById("btnResumeAI");
+    const btnCancel = document.getElementById("btnCancelAI");
+    if(btnResume) btnResume.style.display = "none";
+    if(btnCancel) btnCancel.style.display = "none";
+    
+    const logContent = document.getElementById("aiLiveLogContent");
+    if(logContent) {
+        const resumeDiv = document.createElement("div");
+        resumeDiv.style.color = "#4aedc4";
+        resumeDiv.style.fontWeight = "bold";
+        resumeDiv.innerHTML = `> ▶️ Đang tiếp tục tiến trình AI...`;
+        logContent.appendChild(resumeDiv);
+        const logBox = document.getElementById("aiLiveLogBox");
+        if(logBox) logBox.scrollTop = logBox.scrollHeight;
+    }
+    
+    // Gọi lại AI translation
+    await triggerAITranslation(null, true); // isResume = true
+}
+
+/**
+ * Hủy hoàn toàn tiến trình AI
+ */
+function cancelAIStream() {
+    // Ẩn nút Resume/Cancel
+    const btnResume = document.getElementById("btnResumeAI");
+    const btnCancel = document.getElementById("btnCancelAI");
+    if(btnResume) btnResume.style.display = "none";
+    if(btnCancel) btnCancel.style.display = "none";
+    
+    // Hiện lại nút Chạy AI
+    const btnTrigger = document.getElementById("btnTriggerAI");
+    if(btnTrigger) btnTrigger.style.display = "inline-block";
+    
+    // Tắt cờ bảo vệ
+    window.__aiProcessing = false;
+    _lastAIPayload = null;
+    _lastAIUserToken = null;
+    
+    const logContent = document.getElementById("aiLiveLogContent");
+    if(logContent) {
+        const cancelDiv = document.createElement("div");
+        cancelDiv.style.color = "#dc3545";
+        cancelDiv.style.fontWeight = "bold";
+        cancelDiv.innerHTML = `> ❌ Đã hủy tiến trình AI.`;
+        logContent.appendChild(cancelDiv);
+        const logBox = document.getElementById("aiLiveLogBox");
+        if(logBox) logBox.scrollTop = logBox.scrollHeight;
+    }
+}
+
+/**
+ * Gọi AI Server Local (Dạng Streaming SSE)
+ * @param {Event} e - Event object (null nếu gọi từ resume)
+ * @param {boolean} isResume - True nếu đang tiếp tục từ trạng thái tạm dừng
+ */
+async function triggerAITranslation(e, isResume) {
+    // Chặn tuyệt đối form submit / page reload
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    
+    const movieId = selectedMovieForEpisodes || document.getElementById("selectMovieForEpisodes")?.value;
+    const epNum = document.getElementById("episodeNumber")?.value;
+    
+    if (!epNum || !movieId) {
+        showNotification("Vui lòng chọn phim và nhập Tên tập trước khi gọi AI!", "warning");
+        return;
+    }
+    
+    // Lấy config tuỳ chọn
+    const targetLang = document.getElementById("aiTargetLang")?.value || "en";
+    const isBilingual = document.getElementById("aiBilingualMode")?.checked || false;
+
+    // Lấy link video
+    const typeSelects = document.querySelectorAll(".source-type");
+    const urlInputs = document.querySelectorAll(".source-url");
+    const labelSelects = document.querySelectorAll(".source-label");
+    let videoUrl = document.getElementById("aiSourceSelect")?.value || "";
+
+    // NẾU TỰ ĐỘNG CHỌN
+    if (!videoUrl) {
+        // VÒNG 1: QUÉT TÌM BẢN VIETSUB KÈM ĐỊNH DẠNG HLS/MP4 TRƯỚC
+        for (let i = 0; i < typeSelects.length; i++) {
+            const type = typeSelects[i].value;
+            const label = labelSelects[i] ? labelSelects[i].value.toLowerCase() : "";
+            if ((type === "hls" || type === "mp4") && (label.includes("vietsub") || label.includes("việt"))) {
+                videoUrl = urlInputs[i].value; break;
+            }
+        }
+        // VÒNG 2: NẾU KHÔNG CÓ VIETSUB, LẤY ĐẠI BẢN NÀO CÓ HLS HOẶC MP4
+        if (!videoUrl) {
+            for (let i = 0; i < typeSelects.length; i++) {
+                if (typeSelects[i].value === "hls" || typeSelects[i].value === "mp4") {
+                    videoUrl = urlInputs[i].value; break;
+                }
+            }
+        }
+    }
+
+    if (!videoUrl) {
+        showNotification("Không tìm thấy link video HLS/MP4 hợp lệ.", "warning"); return;
+    }
+
+    // Chuẩn bị Giao diện
+    const btnTrigger = document.getElementById("btnTriggerAI");
+    const btnStop = document.getElementById("btnStopAI");
+    const btnResume = document.getElementById("btnResumeAI");
+    const btnCancel = document.getElementById("btnCancelAI");
+    const logBox = document.getElementById("aiLiveLogBox");
+    const logContent = document.getElementById("aiLiveLogContent");
+    const resultUrlInput = document.getElementById("episodeSubtitleUrl");
+    
+    if(btnTrigger) btnTrigger.style.display = "none";
+    if(btnStop) btnStop.style.display = "inline-block";
+    if(btnResume) btnResume.style.display = "none";
+    if(btnCancel) btnCancel.style.display = "none";
+    if(logBox) logBox.style.display = "block";
+    
+    // Nếu không phải resume → xoá log cũ
+    if (!isResume) {
+        if(logContent) logContent.innerHTML = "";
+        if(resultUrlInput) resultUrlInput.value = "";
+    }
+    
+    aiAbortController = new AbortController();
+    
+    // Bật cờ bảo vệ: chặn mọi lệnh reload từ MetaMask/Extension trong lúc AI đang chạy
+    window.__aiProcessing = true;
+
+    try {
+        let userToken = "";
+        if (typeof supabase !== "undefined") {
+            const { data: sessData, error: sessErr } = await supabase.auth.getSession();
+            if (sessData && sessData.session) userToken = sessData.session.access_token;
+        }
+
+        // Lấy tên phim để gửi cho AI có ngữ cảnh dịch tốt hơn
+        const movie = allMovies?.find(m => m.id === movieId);
+        const movieTitle = movie?.title || movie?.origin_title || '';
+        
+        // Lấy AI Engine đã chọn + Groq key (ưu tiên DB Settings > localStorage)
+        const translateEngine = document.getElementById("aiTranslateEngine")?.value || "gemini";
+        const transcribeEngine = document.getElementById("aiTranscribeEngine")?.value || "groq_cloud";
+        const groqKey = (typeof dbSettingsCache !== 'undefined' ? (dbSettingsCache['groq_api_key'] || "") : "")
+            || localStorage.getItem("groqApiKey") || "";
+        const groqModel = document.getElementById("groqModelSelect")?.value || "llama-3.3-70b-versatile";
+        
+        // Lấy danh sách API key dự phòng từ Kho khóa dự phòng đã cấu hình ở tab API Keys
+        let groqBackupKeys = [];
+        try {
+            const poolStr = typeof dbSettingsCache !== 'undefined' ? (dbSettingsCache['groq_api_key_pool'] || '[]') : '[]';
+            const pool = JSON.parse(poolStr);
+            // Loại bỏ key chính, chỉ lấy keys dự phòng
+            groqBackupKeys = pool.filter(k => k && k !== groqKey && k.length > 10);
+        } catch(e) { groqBackupKeys = []; }
+        
+        const payload = {
+            movieId: movieId,
+            movieTitle: movieTitle,
+            episodeName: epNum,
+            videoUrl: videoUrl,
+            supabaseUrl: typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : (window.SUPABASE_URL || ""),
+            supabaseKey: typeof SUPABASE_ANON_KEY !== 'undefined' ? SUPABASE_ANON_KEY : (window.SUPABASE_KEY || ""),
+            accessToken: userToken, // Cấp quyền Admin cho Python
+            targetLang: targetLang,
+            bilingual: isBilingual,
+            translateEngine: translateEngine,
+            transcribeEngine: transcribeEngine,
+            geminiKey: typeof dbSettingsCache !== 'undefined' ? (dbSettingsCache['gemini_api_key'] || "") : "",
+            groqKey: groqKey,
+            groqModel: groqModel,
+            groqBackupKeys: groqBackupKeys
+        };
+
+        const response = await fetch("http://localhost:5000/process-ai", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            signal: aiAbortController.signal
+        });
+
+        if (!response.ok) throw new Error(`Máy chủ từ chối: HTTP ${response.status}`);
+        if (!response.body) throw new Error("Chưa khởi chạy tính năng ReadableStream.");
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split("\n\n");
+            
+            for (let line of lines) {
+                if (line.startsWith("data: ")) {
+                    try {
+                        const data = JSON.parse(line.substring(6));
+                        
+                        // Bỏ qua heartbeat (chỉ dùng giữ kết nối sống)
+                        if (data.status === "heartbeat") continue;
+                        
+                        const div = document.createElement("div");
+                        
+                        if (data.status === "info") {
+                            div.style.color = "#17a2b8";
+                            div.innerHTML = `> ${data.message}`;
+                        } else if (data.status === "line") {
+                            div.style.color = "#ccc";
+                            div.innerHTML = `<span style="color:#ffc107">${data.time}</span> ${data.original} <br><span style="color:#28a745; margin-left:10px;">➔ ${data.translated}</span>`;
+                        } else if (data.status === "upload_ready") {
+                            // FIX JWT EXPIRED: Tự thao tác upload bằng Client để dùng Token Refresh (thay vì Server bị hết hạn sau 1 tiếng)
+                            div.style.color = "#17a2b8";
+                            div.innerHTML = `> [Client] Đã tiếp nhận ${data.filename}. Đang tự động đẩy lên lưu trữ Đám mây...`;
+                            
+                            // Hiển thị ngay trạng thái đang tải lên
+                            if (logContent) {
+                                logContent.appendChild(div);
+                                if (logBox) logBox.scrollTop = logBox.scrollHeight;
+                            }
+                            
+                            (async () => {
+                                try {
+                                    // 1. Đóng gói dữ liệu VTT
+                                    const fileObj = new File([data.vtt_content], data.filename, {type: "text/vtt"});
+                                    
+                                    // 2. Upload lên Supabase Storage
+                                    const { data: upData, error: upErr } = await supabase.storage.from("subtitles").upload(data.filename, fileObj, { cacheControl: "3600", upsert: true });
+                                    if (upErr) throw upErr;
+                                    
+                                    const publicUrl = supabase.storage.from("subtitles").getPublicUrl(data.filename).data.publicUrl;
+                                    
+                                    // 3. Đưa URL hiển thị ra giao diện cho Admin xem trước (Chỉ lưu vào DB khi nhấn "Lưu Tập Phim")
+                                    // Đã gỡ bỏ hành động 'supabase.from("episodes").update' theo yêu cầu của User
+                                    
+                                    // 4. Báo cáo Tương tác Thành công
+                                    const successDiv = document.createElement("div");
+                                    successDiv.style.color = "#28a745";
+                                    successDiv.style.fontWeight = "bold";
+                                    successDiv.innerHTML = `> [🎉] TRẠM PHIM AI: Đã tải file VTT lên Storage thành công. Vui lòng bấm [Lưu Tập Phim] để chốt!`;
+                                    
+                                    if (logContent) {
+                                        logContent.appendChild(successDiv);
+                                        if (logBox) logBox.scrollTop = logBox.scrollHeight;
+                                    }
+                                    // Tự động Add box Phụ đề vào Dynamic List
+                                    if(targetLang) setDynamicSubtitleBox(targetLang, publicUrl);
+                                    
+                                    const audio = new Audio('https://res.cloudinary.com/dti7tnhkg/video/upload/v1724505988/success_y8i2q3.mp3');
+                                    audio.play().catch(e => {});
+                                    
+                                } catch (clientErr) {
+                                    const errDiv = document.createElement("div");
+                                    errDiv.style.color = "#dc3545";
+                                    errDiv.innerHTML = `> [LỖI LƯU TRỮ VTT]: ${clientErr.message || JSON.stringify(clientErr)}`;
+                                    if (logContent) {
+                                        logContent.appendChild(errDiv);
+                                        if (logBox) logBox.scrollTop = logBox.scrollHeight;
+                                    }
+                                }
+                            })();
+                            
+                            continue; // Bỏ qua đoạn DOM chung bên dưới
+                            
+                        } else if (data.status === "success") {
+                            div.style.color = "#28a745";
+                            div.style.fontWeight = "bold";
+                            div.innerHTML = `> ${data.message}`;
+                            
+                            // Gán url sinh ra tức thì vào ô sub (dự phòng)
+                            if(data.url && targetLang) setDynamicSubtitleBox(targetLang, data.url);
+                            
+                            const audio = new Audio('https://res.cloudinary.com/dti7tnhkg/video/upload/v1724505988/success_y8i2q3.mp3');
+                            audio.play().catch(e => {});
+                        } else if (data.status === "error") {
+                            div.style.color = "#dc3545";
+                            div.innerHTML = `> [LỖI AI]: ${data.message}`;
+                        }
+                        
+                        if (logContent) {
+                            // Giới hạn tối đa 200 dòng log DOM để tránh tràn bộ nhớ
+                            while (logContent.children.length > 200) {
+                                logContent.removeChild(logContent.firstChild);
+                            }
+                            logContent.appendChild(div);
+                            if (logBox) logBox.scrollTop = logBox.scrollHeight;
+                        }
+                    } catch (e) {
+                         // ignore parse err
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        if (error.name === "AbortError") {
+            // Bấm Dừng → không xử lý lỗi, giữ nút Resume/Cancel (đã hiện trong stopAIStream)
+            return;
+        }
+        console.error("Lỗi dòng điện AI:", error);
+        if (logContent) {
+            const errDiv = document.createElement("div");
+            errDiv.style.color = "#dc3545";
+            errDiv.innerHTML = `> [Mất tín hiệu]: ${error.message} (Hãy chắc chắn file run.bat đang mở)`;
+            logContent.appendChild(errDiv);
+        } else {
+            alert(`Lỗi AI: ${error.message}`);
+        }
+    } finally {
+        // Tắt cờ bảo vệ khi AI xử lý xong
+        window.__aiProcessing = false;
+        if(btnTrigger) btnTrigger.style.display = "inline-block";
+        if(btnStop) btnStop.style.display = "none";
+        if(btnResume) btnResume.style.display = "none";
+        if(btnCancel) btnCancel.style.display = "none";
+        aiAbortController = null;
+    }
+}
+
+// ============================================
+// MODAL FIX: Custom Subtitle Delete Confirmation (JS Auto-Inject to bypass cached HTML)
+// ============================================
+window.deleteSubtitleUrl = function(langCode) {
+    const box = document.getElementById(`dynamic_sub_${langCode}`);
+    if (!box) return;
+    const urlInput = box.querySelector(".dynamic-sub-input");
+    if (!urlInput || !urlInput.value) {
+        showNotification("Không tìm thấy đường dẫn phụ đề để xóa!", "warning");
+        return;
+    }
+    
+    // Tự động nhúng Modal nếu chưa có (Tránh lỗi cache HTML cục bộ / Vercel)
+    if (!document.getElementById("deleteSubtitleConfirmModal")) {
+        const modalHtml = `
+            <div class="modal-overlay" id="deleteSubtitleConfirmModal" style="z-index: 100000;">
+                <div class="modal" style="max-width: 420px; width: 90%; text-align: center; padding: 30px; border: 1px solid #dc3545; box-shadow: 0 10px 30px rgba(0,0,0,0.8); background: #1a1a24;">
+                    <i class="fas fa-trash-alt" style="font-size: 50px; color: #dc3545; margin-bottom: 20px;"></i>
+                    <h3 style="margin-bottom: 12px; color: #fff; font-size: 1.5rem;">Cảnh báo dọn dẹp Đám mây!</h3>
+                    <p style="color: #bbb; font-size: 0.95rem; margin-bottom: 24px; line-height: 1.6;">Bạn có chắc chắn muốn xóa phụ đề này không?<br>Hành động này sẽ xóa hẳn file gốc khỏi hệ thống lưu trữ <strong>Supabase</strong> để giải phóng bộ nhớ. <em>(Tuyệt đối không thể hoàn tác)</em>.</p>
+                    <input type="hidden" id="pendingDeleteSubtitleLang" value="" />
+                    <div style="display: flex; gap: 12px; justify-content: center;">
+                        <button class="btn btn-secondary" onclick="closeModal('deleteSubtitleConfirmModal')" style="flex: 1; padding: 10px 0;">
+                            Thôi từ từ...
+                        </button>
+                        <button class="btn btn-danger" onclick="executeSubtitleDeletion()" style="flex: 1; padding: 10px 0; font-weight: bold; box-shadow: 0 4px 15px rgba(220,53,69,0.4);">
+                            <i class="fas fa-trash-alt"></i> Xóa vĩnh viễn
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
+    
+    document.getElementById("pendingDeleteSubtitleLang").value = langCode;
+    // Gọi modal xác nhận theo chuẩn UI của dự án
+    openModal("deleteSubtitleConfirmModal");
+};
+
+window.executeSubtitleDeletion = async function() {
+    closeModal("deleteSubtitleConfirmModal");
+    
+    const langCode = document.getElementById("pendingDeleteSubtitleLang").value;
+    const box = document.getElementById(`dynamic_sub_${langCode}`);
+    if (!box) return;
+    const urlInput = box.querySelector(".dynamic-sub-input");
+    
+    if (!urlInput || !urlInput.value) return;
+    const fileUrl = urlInput.value;
+    
+    try {
+        if (fileUrl.includes("supabase.co/storage")) {
+            showLoading(true, "Đang xóa phụ đề trên đám mây...");
+            const urlParts = fileUrl.split("/subtitles/");
+            if (urlParts.length > 1) {
+                const fileName = urlParts[1].split("?")[0];
+                const { error } = await supabase.storage.from('subtitles').remove([fileName]);
+                if (error) {
+                    console.warn("Lỗi xóa file vật lý:", error);
+                    showNotification("Lỗi xóa file từ Đám mây: " + error.message, "error");
+                } else {
+                    console.log("Gỡ file rác Storage thành công:", fileName);
+                }
+            }
+        }
+        
+        urlInput.value = "";
+        showLoading(false);
+        showNotification("Đã tháo đường dẫn phụ đề! Vui lòng nhấn LƯU (nút Lưu màu tím ở dưới) để cập nhật hoàn tất.", "success");
+    } catch (e) {
+        console.error("Lỗi quá trình xóa phụ đề:", e);
+        showLoading(false);
+        urlInput.value = "";
+        showNotification("Đã tháo phụ đề thành công. Vui lòng nhấn LƯU.", "info");
+    }
+};
+
+/**
+ * Hiện/ẩn dropdown chọn model Groq + gợi ý khi đổi engine dịch
+ */
+function toggleGroqKeyInput() {
+    const engine = document.getElementById("aiTranslateEngine")?.value;
+    const hint = document.getElementById("groqKeyHint");
+    const modelSelect = document.getElementById("groqModelSelect");
+    const isGroq = (engine === "groq");
+    
+    if (hint) {
+        hint.style.display = isGroq ? "inline" : "none";
+        
+        // Kiểm tra xem bộ nhớ đã nạp được Key chưa
+        const groqKey = (typeof dbSettingsCache !== 'undefined' ? (dbSettingsCache['groq_api_key'] || "") : "") || localStorage.getItem("groqApiKey") || "";
+        
+        if (isGroq) {
+            if (!groqKey || groqKey === "Chưa cấu hình") {
+                hint.innerHTML = `<b style="color: #ff4d4d; margin-left: 8px;"><i class="fas fa-exclamation-triangle"></i> LỖI: API KEY GROQ TRỐNG!</b>
+                <div style="font-size: 0.75rem; color: #ffb3b3; margin-top: 4px; padding: 6px; background: rgba(255,0,0,0.1); border-radius: 4px;">⛔ Cảnh báo: Hệ thống web chưa nhận được mã Groq của bạn.<br>Hãy đóng bảng sửa tập này lại -> Bấm mở thanh menu bên trái -> Bấm nút tab <b>[ 🔑 Cấu Hình API Key ]</b> ở dưới cùng -> Chờ nó tải xong và kiểm tra xem mã Groq đã được lưu chưa. Sau đó F5 tải lại trang Web này!</div>`;
+            } else {
+                const hiddenKey = groqKey.substring(0, 8) + '...' + groqKey.substring(groqKey.length - 4);
+                hint.innerHTML = `<span style="color: #4ade80; margin-left:8px;"><i class="fas fa-check-circle"></i> Đã nạp Groq Key (${hiddenKey}) từ máy chủ!</span>`;
+            }
+        } else if (engine === "gemini") {
+            // Check Gemini Key
+            const gmKey = (typeof dbSettingsCache !== 'undefined' ? (dbSettingsCache['gemini_api_key'] || "") : "");
+            if (!gmKey || gmKey === "Chưa cấu hình") {
+                hint.style.display = "inline";
+                hint.innerHTML = `<b style="color: #ff4d4d; margin-left: 8px;"><i class="fas fa-exclamation-triangle"></i> LỖI: API KEY GEMINI TRỐNG!</b>`;
+            } else {
+                hint.style.display = "inline";
+                const hiddenGKey = gmKey.substring(0, 8) + '...' + gmKey.substring(gmKey.length - 4);
+                hint.innerHTML = `<span style="color: #4ade80; margin-left:8px;"><i class="fas fa-check-circle"></i> Đã nạp Gemini Key (${hiddenGKey}) từ máy chủ!</span>`;
+            }
+        }
+    }
+    
+    if (modelSelect) modelSelect.style.display = isGroq ? "inline-block" : "none";
+}
+
+/**
+ * Phân tích quốc gia phim và tự động gợi ý model AI phù hợp
+ */
+function recommendAiModelForMovie(movie) {
+    if (!movie) return;
+    const hintBox = document.getElementById("aiRecommendHint");
+    if (!hintBox) return;
+
+    let countryStr = '';
+    if (typeof movie.country === 'string') {
+        countryStr = movie.country.toLowerCase();
+    } else if (Array.isArray(movie.country)) {
+        countryStr = movie.country.map(c => c.name || '').join(' ').toLowerCase();
+    } else if (movie.quoc_gia) {
+        countryStr = String(movie.quoc_gia).toLowerCase();
+    } else if (movie.origin_title) {
+        countryStr = String(movie.origin_title).toLowerCase();
+    }
+
+    // Các quốc gia Châu Á thường dùng tiếng Trung, Hàn, Nhật, Thái -> Hợp với Qwen
+    const asianKeywords = ['trung quốc', 'china', 'cn', 'hàn quốc', 'korea', 'kr', 'nhật bản', 'japan', 'jp', 'đài loan', 'taiwan', 'tw', 'thái lan', 'thai'];
+    const isAsian = asianKeywords.some(kw => countryStr.includes(kw));
+
+    let recModel = "llama-3.3-70b-versatile";
+    let recText = "🦙 Llama 3.3 70B (Tốt cho Âu Mỹ / Chung)";
+    
+    // Nếu phim Châu Á -> Ưu tiên Qwen vì dịch ngữ cảnh, hán việt cực tốt
+    if (isAsian) {
+        recModel = "qwen/qwen3-32b";
+        recText = "🐉 Qwen 3 32B (Chuẩn hệ Á / Hán Việt)";
+    }
+
+    // Hiển thị hint
+    hintBox.style.display = "block";
+    hintBox.innerHTML = `<span style="color: #4ade80;"><i class="fas fa-magic"></i> Hệ thống tự gợi ý cho phim này: <b>${recText}</b></span>`;
+
+    // Tự động chuyển Select Model (Nếu user chưa khóa lựa chọn, ta sẽ pre-select luôn cho họ)
+    const engineSelect = document.getElementById("aiTranslateEngine");
+    const modelSelect = document.getElementById("groqModelSelect");
+    
+    if (engineSelect && modelSelect) {
+        // Tự động chuyển qua Groq vì Groq có model xịn + free 
+        if (engineSelect.value !== "groq") {
+            engineSelect.value = "groq";
+            toggleGroqKeyInput();
+        }
+        modelSelect.value = recModel;
+    }
+}
+
+// ============================================
+// DYNAMIC SUBTITLE UI CONTROL
+// ============================================
+
+const SUBTITLE_LANGUAGES_MAP = {
+    'vi': { label: '🇻🇳 Tiếng Việt', col: 'subtitle_vi_url' },
+    'en': { label: '🇺🇸 Tiếng Anh', col: 'subtitle_en_url' },
+    'zh-CN': { label: '🇨🇳 Tiếng Trung', col: 'subtitle_zh_url' },
+    'ko': { label: '🇰🇷 Tiếng Hàn', col: 'subtitle_ko_url' },
+    'ja': { label: '🇯🇵 Tiếng Nhật', col: 'subtitle_ja_url' }
+};
+
+/**
+ * Xóa sạch container danh sách phụ đề động
+ */
+window.clearDynamicSubtitles = function() {
+    const container = document.getElementById("dynamicSubtitlesContainer");
+    if (container) container.innerHTML = "";
+};
+
+/**
+ * Hiển thị/Cập nhật link phụ đề của ngôn ngữ cụ thể vào danh sách động
+ */
+window.setDynamicSubtitleBox = function(langCode, url) {
+    const container = document.getElementById("dynamicSubtitlesContainer");
+    if (!container) return;
+    
+    // Nếu chưa có box của ngôn ngữ này thì tạo mới
+    let box = document.getElementById(`dynamic_sub_${langCode}`);
+    if (!box) {
+        box = document.createElement("div");
+        box.id = `dynamic_sub_${langCode}`;
+        box.style.display = "flex";
+        box.style.flexDirection = "column";
+        box.style.gap = "4px";
+        box.style.alignItems = "flex-start";
+        box.style.width = "100%";
+        box.style.marginBottom = "8px";
+        box.style.padding = "10px";
+        box.style.backgroundColor = "rgba(0,0,0,0.2)";
+        box.style.borderRadius = "6px";
+        box.style.border = "1px solid rgba(255,255,255,0.05)";
+        
+        box.innerHTML = `
+            <label class="form-label" style="color: #ffc107; font-size: 0.85rem; margin-bottom: 2px;">
+                <i class="fas fa-closed-captioning"></i> Ngôn ngữ: <b>${SUBTITLE_LANGUAGES_MAP[langCode]?.label || langCode}</b>
+            </label>
+            <div style="display: flex; gap: 8px; width: 100%;">
+                <input type="url" class="form-input dynamic-sub-input" data-lang="${langCode}" value="" style="flex: 1; min-width: 0;" placeholder="Nhập link file .vtt..." />
+                <button class="btn btn-outline-danger" type="button" onclick="document.querySelector('#dynamic_sub_${langCode} .dynamic-sub-input').value = '';" title="Xóa trống liên kết trong ô này">
+                    <i class="fas fa-eraser"></i>
+                </button>
+                <button class="btn btn-danger" type="button" onclick="deleteSubtitleUrl('${langCode}')" title="Xóa vĩnh viễn file phụ đề khỏi Đám mây Storage">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(box);
+    }
+    
+    // Cập nhật giá trị
+    const input = box.querySelector(".dynamic-sub-input");
+    if (input && url !== undefined) input.value = url;
+};
+
+/**
+ * Lấy tất cả giá trị đang hiển thị trong danh sách động để lưu vào Database
+ */
+window.getDynamicSubtitlesToSave = function(episodeDataToUpdate) {
+    const inputs = document.querySelectorAll(".dynamic-sub-input");
+    inputs.forEach(input => {
+        const lang = input.getAttribute("data-lang");
+        const val = input.value.trim();
+        const colMap = SUBTITLE_LANGUAGES_MAP[lang]?.col;
+        if (colMap) {
+            episodeDataToUpdate[colMap] = val || null;
+        }
+    });
+};

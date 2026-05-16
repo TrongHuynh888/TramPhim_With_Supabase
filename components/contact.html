@@ -1,0 +1,208 @@
+<div id="contactPage" class="page">
+  <div class="policy-container">
+    <!-- Header -->
+    <div class="policy-header">
+      <div class="policy-icon">
+        <i class="fas fa-headset"></i>
+      </div>
+      <h1 class="policy-title">Liên Hệ Admin</h1>
+      <p class="policy-subtitle">Hỗ trợ nhanh chóng — Chúng tôi luôn sẵn sàng lắng nghe bạn</p>
+      <div class="policy-meta">
+        <span><i class="fas fa-clock"></i> Phản hồi trong 24 giờ</span>
+        <span><i class="fas fa-check-double"></i> Hỗ trợ 7 ngày/tuần</span>
+      </div>
+    </div>
+
+    <!-- Nội dung -->
+    <div class="policy-content">
+
+      <!-- Kênh liên hệ -->
+      <section class="policy-section">
+        <div class="policy-section-header">
+          <div class="section-number"><i class="fas fa-paper-plane"></i></div>
+          <h2>Kênh Liên Hệ</h2>
+        </div>
+        <div class="policy-section-body">
+          <div class="policy-grid">
+            <div class="policy-card">
+              <div class="policy-card-icon"><i class="fas fa-envelope"></i></div>
+              <h4>Email</h4>
+              <p>support@tramphim.com</p>
+              <p class="contact-note">Phản hồi trong 24 giờ làm việc</p>
+            </div>
+            <div class="policy-card">
+              <div class="policy-card-icon"><i class="fab fa-facebook-messenger"></i></div>
+              <h4>Facebook</h4>
+              <p>fb.com/tramphim.official</p>
+              <p class="contact-note">Nhắn tin trực tiếp qua Messenger</p>
+            </div>
+            <div class="policy-card">
+              <div class="policy-card-icon"><i class="fab fa-telegram-plane"></i></div>
+              <h4>Telegram</h4>
+              <p>t.me/tramphim_support</p>
+              <p class="contact-note">Nhóm hỗ trợ cộng đồng</p>
+            </div>
+            <div class="policy-card">
+              <div class="policy-card-icon"><i class="fab fa-discord"></i></div>
+              <h4>Discord</h4>
+              <p>discord.gg/tramphim</p>
+              <p class="contact-note">Server cộng đồng Trạm Phim</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Form liên hệ -->
+      <section class="policy-section" id="contactFormSection">
+        <div class="policy-section-header">
+          <div class="section-number"><i class="fas fa-edit"></i></div>
+          <h2>Gửi Yêu Cầu Hỗ Trợ</h2>
+        </div>
+        <div class="policy-section-body">
+          <!-- Thông báo đang chờ xử lý (ẩn mặc định) -->
+          <div id="contactPendingNotice" style="display:none;">
+            <div class="policy-highlight" style="border-color: #f59e0b;">
+              <i class="fas fa-hourglass-half" style="color:#f59e0b;"></i>
+              <div>
+                <h4 style="color:#f59e0b;">Yêu cầu đang được xử lý</h4>
+                <p>Bạn đã gửi một yêu cầu liên hệ trước đó và đang chờ Admin phản hồi. Vui lòng chờ xử lý xong trước khi gửi yêu cầu mới.</p>
+                <p id="contactPendingInfo" style="font-size:0.85rem; margin-top:8px;"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Form (ẩn khi có yêu cầu pending) -->
+          <form class="contact-form" id="contactForm" onsubmit="submitContactForm(event)">
+            <!-- Tên -->
+            <div class="form-group">
+              <label for="contactName"><i class="fas fa-user"></i> Họ và tên</label>
+              <input type="text" id="contactName" placeholder="Nhập họ tên của bạn" required />
+            </div>
+
+            <!-- Email -->
+            <div class="form-group">
+              <label for="contactEmail"><i class="fas fa-envelope"></i> Email liên hệ</label>
+              <input type="email" id="contactEmail" placeholder="email@example.com" required />
+            </div>
+
+            <!-- Chủ đề -->
+            <div class="form-group">
+              <label for="contactSubject"><i class="fas fa-tag"></i> Chủ đề</label>
+              <select id="contactSubject" required>
+                <option value="">-- Chọn chủ đề --</option>
+                <option value="bug">🐛 Báo lỗi kỹ thuật</option>
+                <option value="account">👤 Vấn đề tài khoản</option>
+                <option value="vip">👑 Thanh toán / VIP</option>
+                <option value="copyright">©️ Bản quyền nội dung</option>
+                <option value="suggest">💡 Góp ý cải tiến</option>
+                <option value="other">📋 Khác</option>
+              </select>
+            </div>
+
+            <!-- Nội dung -->
+            <div class="form-group">
+              <label for="contactMessage"><i class="fas fa-comment-dots"></i> Nội dung chi tiết</label>
+              <textarea id="contactMessage" rows="5" placeholder="Mô tả chi tiết vấn đề bạn gặp phải..." required></textarea>
+            </div>
+
+            <!-- Nút gửi -->
+            <button type="submit" class="btn btn-primary contact-submit-btn" id="contactSubmitBtn">
+              <i class="fas fa-paper-plane"></i> Gửi Yêu Cầu
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="policy-section">
+        <div class="policy-section-header">
+          <div class="section-number"><i class="fas fa-question-circle"></i></div>
+          <h2>Câu Hỏi Thường Gặp</h2>
+        </div>
+        <div class="policy-section-body">
+          <div class="faq-list">
+            <details class="faq-item">
+              <summary><i class="fas fa-chevron-right"></i> Làm sao để nâng cấp VIP?</summary>
+              <div class="faq-answer">
+                Vào mục <a href="javascript:void(0)" onclick="showPage('upgrade')" class="policy-link">Gói VIP</a>,
+                chọn gói phù hợp, quét mã QR chuyển khoản và tải ảnh biên lai lên.
+                Admin sẽ kích hoạt VIP sau khi xác nhận.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary><i class="fas fa-chevron-right"></i> Phim không phát được / bị lỗi?</summary>
+              <div class="faq-answer">
+                Thử chuyển sang phiên bản "Dự phòng" nếu có. Nếu vẫn lỗi, sử dụng nút "Báo lỗi" 
+                ngay trên trang xem phim hoặc gửi yêu cầu hỗ trợ qua form ở trên.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary><i class="fas fa-chevron-right"></i> Làm sao đổi mật khẩu?</summary>
+              <div class="faq-answer">
+                Click vào avatar ở góc trên phải → chọn "Đổi mật khẩu". 
+                Nhập mật khẩu cũ và mật khẩu mới để cập nhật.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary><i class="fas fa-chevron-right"></i> Watch Party không kết nối được?</summary>
+              <div class="faq-answer">
+                Kiểm tra kết nối internet. Đảm bảo trình duyệt đã cấp quyền sử dụng microphone/camera.
+                Thử tạo phòng mới hoặc dùng trình duyệt khác (khuyến nghị Chrome, Edge).
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary><i class="fas fa-chevron-right"></i> Muốn xóa tài khoản?</summary>
+              <div class="faq-answer">
+                Gửi yêu cầu xóa tài khoản qua form hỗ trợ ở trên hoặc email chúng tôi.
+                Toàn bộ dữ liệu cá nhân sẽ được xóa trong vòng 7 ngày làm việc.
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- Thông tin bổ sung -->
+      <section class="policy-section">
+        <div class="policy-section-header">
+          <div class="section-number"><i class="fas fa-info-circle"></i></div>
+          <h2>Lưu Ý Khi Liên Hệ</h2>
+        </div>
+        <div class="policy-section-body">
+          <div class="policy-rights">
+            <div class="right-item">
+              <i class="fas fa-image"></i>
+              <span>Đính kèm ảnh chụp màn hình nếu gặp lỗi giao diện để Admin xử lý nhanh hơn</span>
+            </div>
+            <div class="right-item">
+              <i class="fas fa-info"></i>
+              <span>Cung cấp tên trình duyệt + thiết bị đang sử dụng (VD: Chrome, iPhone 15)</span>
+            </div>
+            <div class="right-item">
+              <i class="fas fa-link"></i>
+              <span>Gửi link phim bị lỗi để đội ngũ kiểm tra và khắc phục</span>
+            </div>
+            <div class="right-item">
+              <i class="fas fa-heart"></i>
+              <span>Mọi góp ý đều quý giá — giúp Trạm Phim ngày càng hoàn thiện hơn!</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="policy-footer">
+      <button class="btn btn-secondary" onclick="showPage('home')">
+        <i class="fas fa-arrow-left"></i> Quay về Trang Chủ
+      </button>
+    </div>
+  </div>
+</div>
+
+
+

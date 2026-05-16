@@ -9,6 +9,14 @@ window.startTramPhimApp = async () => {
 
   initializeUI();
   
+  // Xử lý OAuth error redirect: Dọn dẹp URL query params (?error=access_denied)
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('error')) {
+      // Xóa query params khỏi URL nhưng giữ lại hash
+      const cleanUrl = window.location.pathname + window.location.hash;
+      history.replaceState(null, '', cleanUrl);
+  }
+
   // Custom: Check URL Hash for deep linking (Fix lỗi F5)
   const hash = window.location.hash;
   if (hash) {
@@ -37,6 +45,27 @@ function handleHashRouting(hash, state = null) {
     }
 
     console.log("🛠️ Handling Hash Routing:", hash, "State:", state);
+
+    // Xử lý lỗi OAuth redirect (VD: #error=access_denied khi user hủy đăng nhập Google)
+    if (hash.includes('error=')) {
+        console.warn("⚠️ OAuth redirect error detected:", hash);
+        // Dọn dẹp URL về trang chủ
+        history.replaceState(null, '', window.location.pathname);
+        showPage('home', false);
+
+        // Hiện thông báo phù hợp
+        const isAccessDenied = hash.includes('access_denied');
+        if (isAccessDenied) {
+            if (typeof showNotification === 'function') {
+                showNotification("Bạn đã hủy đăng nhập Google.", "info");
+            }
+        } else {
+            if (typeof showNotification === 'function') {
+                showNotification("Đăng nhập thất bại. Vui lòng thử lại.", "error");
+            }
+        }
+        return;
+    }
 
     // Phân tích hash (VD: #/watch/slug-id hoặc #/movies)
     const parts = hash.replace(/^#\/?/, '').split('/');

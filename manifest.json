@@ -1,0 +1,71 @@
+{
+  "name": "Trạm Phim - Trải Nghiệm Điện Ảnh Đẳng Cấp",
+  "short_name": "Trạm Phim",
+  "description": "Nền tảng xem phim trực tuyến miễn phí chất lượng cao. Xem phim mới nhất, tạo phòng xem chung cùng bạn bè và tham gia cộng đồng yêu phim.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0a0e17",
+  "background_color": "#0a0e17",
+  "categories": ["entertainment", "social"],
+  "lang": "vi",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Xem Phim Mới",
+      "short_name": "Phim Mới",
+      "description": "Xem danh sách phim mới cập nhật",
+      "url": "/?page=movies",
+      "icons": [
+        {
+          "src": "icons/icon-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Xem Chung (Watch Party)",
+      "short_name": "Watch Party",
+      "description": "Tạo phòng xem phim chung với bạn bè",
+      "url": "/?page=watchParty",
+      "icons": [
+        {
+          "src": "icons/icon-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Cộng Đồng",
+      "short_name": "Cộng Đồng",
+      "description": "Tham gia cộng đồng yêu phim",
+      "url": "/?page=community",
+      "icons": [
+        {
+          "src": "icons/icon-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

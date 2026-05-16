@@ -1,4 +1,30 @@
 /**
+ * Đăng nhập bằng tài khoản Google (OAuth)
+ */
+async function signInWithGoogle() {
+    if (!supabase) {
+        showNotification("Supabase chưa được cấu hình!", "error");
+        return;
+    }
+
+    try {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: window.location.origin + (window.APP_BASE_PATH || '')
+            }
+        });
+
+        if (error) throw error;
+
+        // Supabase sẽ tự redirect sang Google, không cần xử lý thêm
+    } catch (err) {
+        console.error("Lỗi đăng nhập Google:", err);
+        showNotification("Đăng nhập Google thất bại: " + err.message, "error");
+    }
+}
+
+/**
  * Toggle hiện/ẩn mật khẩu
  */
 function togglePassword(inputId, iconElement) {
@@ -194,8 +220,41 @@ async function handleForgotPassword(event) {
  */
 function initAuthStateListener() {
     supabase.auth.onAuthStateChange((event, session) => {
+        console.log("🔑 Auth event:", event);
+        
+        // Bỏ qua auth state change khi AI đang xử lý phụ đề
+        // (tránh việc Supabase re-init gây reload/flicker trang)
+        if (window.__aiProcessing) {
+            console.warn("[AI Shield] Bỏ qua Auth event '" + event + "' vì AI đang xử lý phụ đề!");
+            return;
+        }
+        
         const user = session ? session.user : null;
-        handleAuthStateChange(user);
+
+        // Xử lý sự kiện đặt lại mật khẩu (khi user click link từ email)
+        if (event === 'PASSWORD_RECOVERY') {
+            console.log("🔐 PASSWORD_RECOVERY detected — Mở form đổi mật khẩu");
+            // Dọn URL sạch
+            history.replaceState(null, '', window.location.pathname);
+            // Mở modal đổi mật khẩu (ẩn trường mật khẩu cũ)
+            setTimeout(() => {
+                // Ẩn trường mật khẩu cũ vì user quên mật khẩu
+                const oldPwGroup = document.getElementById('oldPasswordGroup');
+                if (oldPwGroup) oldPwGroup.style.display = 'none';
+
+                // Đổi tiêu đề modal
+                const modalTitle = document.querySelector('#changePasswordModal .modal-title');
+                if (modalTitle) modalTitle.textContent = 'Đặt lại mật khẩu';
+
+                if (typeof openModal === 'function') {
+                    openModal('changePasswordModal');
+                    showNotification("Vui lòng nhập mật khẩu mới.", "info");
+                }
+            }, 500);
+            return;
+        }
+
+        handleAuthStateChange(user, event);
     });
 }
 
@@ -205,7 +264,7 @@ initAuthStateListener();
 /**
  * Xử lý khi trạng thái chuyển đổi
  */
-async function handleAuthStateChange(user) {
+async function handleAuthStateChange(user, authEvent) {
   currentUser = user;
 
   if (user) {
@@ -260,18 +319,43 @@ async function handleAuthStateChange(user) {
         if (typeof initNotifications === "function") {
             initNotifications(user, isAdmin);
         }
+        // [MỚI] Đăng ký thông báo tin nhắn CineChat toàn cục
+        if (typeof subscribeToMessageNotifications === "function") {
+            console.log("🔔 [Auth] Đăng ký thông báo tin nhắn CineChat toàn cục");
+            subscribeToMessageNotifications();
+        }
       }, 500);
 
-      if (isAdmin) loadAdminData();
+      if (isAdmin && typeof loadAdminData === 'function') loadAdminData();
 
       // Render lại giao diện
-      renderAllInitialMovies();
+      if (typeof renderAllInitialMovies === 'function') renderAllInitialMovies();
       
+      // Khởi tạo trạng thái online lập tức
+      if (typeof initGlobalCommunityPresence === 'function') {
+          initGlobalCommunityPresence();
+      }
+
+      // [MỚI] Tự động load Community nếu đang ở hash community
+      if (window.location.hash.includes('community') && typeof initCommunity === 'function') {
+          initCommunity();
+      }
+
       if (typeof updateAllWatchProgress === 'function') {
           setTimeout(updateAllWatchProgress, 100);
       }
 
-      if (currentMovieId) checkAndUpdateVideoAccess();
+      // CHỈ tải lại quyền xem video (có thể gây tải lại video từ đầu)
+      // NẾU người dùng thực sự Đăng nhập mới hoặc Đăng xuất. 
+      // TUYỆT ĐỐI KHÔNG làm khi Token Refresh ngầm, vì sẽ làm đứt video đang xem.
+      if (currentMovieId) {
+          if (authEvent === 'SIGNED_IN' || authEvent === 'SIGNED_OUT') {
+              console.log("🔄 Trạng thái Auth thay đổi lớn (Đăng nhập/Đăng xuất), tải lại trình phát...");
+              checkAndUpdateVideoAccess();
+          } else {
+              console.log("🔄 Bỏ qua tải lại video do chỉ là Token Refresh hoặc Event nhỏ: " + authEvent);
+          }
+      }
 
     } catch (error) {
       console.error("Lỗi handleAuthStateChange:", error);
@@ -282,6 +366,11 @@ async function handleAuthStateChange(user) {
     isAdmin = false;
     updateAuthUI(false);
     renderAllInitialMovies();
+    
+    // Nếu bị mất quyền thật (log out), lúc đó mới chặn video
+    if (currentMovieId && authEvent === 'SIGNED_OUT') {
+         checkAndUpdateVideoAccess();
+    }
   }
 }
 
@@ -401,12 +490,27 @@ async function handleChangePassword(event) {
 
     showNotification("Đổi mật khẩu thành công!", "success");
     closeModal("changePasswordModal");
+    resetChangePasswordModal();
   } catch (error) {
     console.error("Lỗi đổi mật khẩu:", error);
     showNotification("Thất bại: " + error.message, "error");
   } finally {
     showLoading(false);
   }
+}
+
+/**
+ * Khôi phục modal đổi mật khẩu về trạng thái ban đầu (hiện lại trường mật khẩu cũ)
+ */
+function resetChangePasswordModal() {
+    const oldPwGroup = document.getElementById('oldPasswordGroup');
+    if (oldPwGroup) oldPwGroup.style.display = '';
+
+    const modalTitle = document.querySelector('#changePasswordModal .modal-title');
+    if (modalTitle) modalTitle.textContent = 'Đổi mật khẩu';
+
+    const form = document.getElementById('changePasswordForm');
+    if (form) form.reset();
 }
 
 /**

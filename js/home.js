@@ -1,18 +1,164 @@
 /**
- * Render phim nổi bật
+ * Render phim nổi bật — Top 10 phim view cao nhất trong ngày
+ * Query bảng view_logs trên Supabase để lấy lượt xem theo ngày
+ * Fallback: nếu không có dữ liệu view_logs → dùng tổng views
  */
-function renderFeaturedMovies() {
+async function renderFeaturedMovies() {
   const container = document.getElementById("featuredMovies");
   if (!container) return;
 
-  // Lấy 4 phim có rating cao nhất
-  const featured = [...allMovies]
-    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-    .slice(0, 4);
+  let featured = [];
+
+  try {
+    // Tính mốc đầu ngày hôm nay (00:00:00)
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
+    // Query view_logs trong ngày hôm nay từ Supabase
+    if (typeof supabase !== 'undefined' && supabase) {
+      const { data, error } = await supabase
+        .from('view_logs')
+        .select('movie_id')
+        .gte('viewed_at', todayStart)
+        .limit(10000);
+
+      if (!error && data && data.length > 0) {
+        // Đếm lượt xem theo movie_id
+        const viewCounts = {};
+        data.forEach(log => {
+          viewCounts[log.movie_id] = (viewCounts[log.movie_id] || 0) + 1;
+        });
+
+        // Sort và lấy top 20 movie_id
+        const top20Ids = Object.entries(viewCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 20)
+          .map(([movieId]) => movieId);
+
+        // Map về object phim từ allMovies
+        featured = top20Ids
+          .map(id => allMovies.find(m => m.id === id))
+          .filter(Boolean);
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Lỗi query view_logs cho Phim Nổi Bật:', err.message);
+  }
+
+  // Fallback: nếu chưa có dữ liệu trong ngày → dùng tổng views
+  if (featured.length === 0) {
+    featured = [...allMovies]
+      .sort((a, b) => (b.views || 0) - (a.views || 0))
+      .slice(0, 20);
+  }
 
   container.innerHTML = featured
     .map((movie) => createMovieCard(movie))
     .join("");
+
+  // Đồng bộ kích thước thẻ phim với grid gốc + kích hoạt kéo cuộn
+  syncFeaturedCardWidth();
+  initFeaturedDragScroll();
+}
+
+/**
+ * Đồng bộ kích thước thẻ #featuredMovies = kích thước cột grid "Phim Mới Cập Nhật"
+ * Đọc computed grid column width từ #newMovies và set --card-width cho #featuredMovies
+ */
+function syncFeaturedCardWidth() {
+  const featured = document.getElementById('featuredMovies');
+  if (!featured) return;
+
+  // Tìm grid tham chiếu: "Phim Mới Cập Nhật" hoặc "Tất Cả Phim"
+  const refGrid = document.getElementById('newMovies') || document.getElementById('allMoviesGrid');
+
+  if (refGrid) {
+    // Đọc chiều rộng cột đầu tiên từ grid tham chiếu
+    const cols = window.getComputedStyle(refGrid).gridTemplateColumns;
+    if (cols && cols !== 'none') {
+      const firstColWidth = parseFloat(cols.split(' ')[0]);
+      if (!isNaN(firstColWidth) && firstColWidth > 0) {
+        featured.style.setProperty('--card-width', firstColWidth + 'px');
+        return;
+      }
+    }
+  }
+
+  // Fallback: tự tính dựa trên container width (giống auto-fill minmax(200px, 1fr))
+  const containerWidth = featured.parentElement ? featured.parentElement.clientWidth - 80 : 1200;
+  const gap = 24;
+  const numCols = Math.floor((containerWidth + gap) / (200 + gap));
+  const colWidth = (containerWidth - (numCols - 1) * gap) / numCols;
+  featured.style.setProperty('--card-width', Math.max(200, colWidth) + 'px');
+}
+
+// Cập nhật kích thước thẻ khi resize cửa sổ
+window.addEventListener('resize', debounce(syncFeaturedCardWidth, 200));
+
+/**
+ * Kéo chuột để cuộn ngang cho wrapper Phim Nổi Bật (PC)
+ * preventDefault trên mousedown chặn browser kéo ảnh
+ * Ngưỡng 5px phân biệt click vs drag
+ */
+function initFeaturedDragScroll() {
+  const el = document.getElementById('featuredScrollWrapper');
+  if (!el || el._dragInitialized) return;
+  el._dragInitialized = true;
+
+  let isDown = false;
+  let isDragging = false;
+  let startX = 0;
+  let scrollLeft = 0;
+
+  el.addEventListener('mousedown', (e) => {
+    isDown = true;
+    isDragging = false;
+    startX = e.pageX;
+    scrollLeft = el.scrollLeft;
+    // Chặn browser kéo ảnh mặc định — cho phép kéo cuộn từ mọi vị trí
+    e.preventDefault();
+  });
+
+  el.addEventListener('mouseleave', () => {
+    isDown = false;
+    isDragging = false;
+    el.style.cursor = 'grab';
+  });
+
+  el.addEventListener('mouseup', () => {
+    isDown = false;
+    el.style.cursor = 'grab';
+    // Giữ isDragging = true cho đến khi click handler xử lý xong
+    // Reset bằng setTimeout để click event kịp kiểm tra
+    if (isDragging) {
+      setTimeout(() => { isDragging = false; }, 0);
+    }
+  });
+
+  // Chặn click nếu vừa drag xong (tránh mở popup/chuyển trang sau khi kéo)
+  el.addEventListener('click', (e) => {
+    if (isDragging) {
+      e.preventDefault();
+      e.stopPropagation();
+      isDragging = false;
+    }
+  }, true); // capture phase — chặn trước khi onclick trên card xử lý
+
+  el.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+
+    const diff = Math.abs(e.pageX - startX);
+    if (diff > 5) {
+      isDragging = true;
+      el.style.cursor = 'grabbing';
+      e.preventDefault();
+    }
+
+    if (isDragging) {
+      const walk = (e.pageX - startX) * 1.5;
+      el.scrollLeft = scrollLeft - walk;
+    }
+  });
 }
 
 /**
@@ -22,8 +168,8 @@ function renderNewMovies() {
   const container = document.getElementById("newMovies");
   if (!container) return;
 
-  // Lấy 8 phim mới nhất
-  const newMovies = [...allMovies]
+  // Render tạm tối đa 24 thẻ để grid tính số cột thực tế
+  const sortedMovies = [...allMovies]
     .sort((a, b) => {
       const dateA = a.createdAt?.toDate
         ? a.createdAt.toDate()
@@ -33,11 +179,30 @@ function renderNewMovies() {
         : new Date(b.createdAt);
       return dateB - dateA;
     })
-    .slice(0, 8);
+    .slice(0, 30);
 
-  container.innerHTML = newMovies
+  container.innerHTML = sortedMovies
     .map((movie) => createMovieCard(movie))
     .join("");
+
+  // Cắt thẻ thừa để grid PC chỉ hiện đúng 2 hàng
+  // Double requestAnimationFrame đảm bảo grid đã layout xong
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const display = window.getComputedStyle(container).display;
+      if (display === 'grid') {
+        const cols = window.getComputedStyle(container).gridTemplateColumns;
+        if (cols && cols !== 'none') {
+          const numCols = cols.split(' ').length;
+          const maxCards = numCols * 2;
+          const cards = container.querySelectorAll(':scope > .movie-card-wrapper');
+          cards.forEach((card, i) => {
+            if (i >= maxCards) card.remove();
+          });
+        }
+      }
+    });
+  });
 }
 
 /**
@@ -84,6 +249,11 @@ function createMovieCard(movie, matchedTags = []) {
     ? `<span style="background: var(--accent-primary); color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; text-transform: uppercase; vertical-align: middle;">${displayPart}</span>`
     : "";
 
+  // Badge phần hiển thị trên ảnh nền popup (góc phải dưới)
+  const partBadgeOnImage = movie.part
+    ? `<span class="popup-part-badge">${displayPart}</span>`
+    : "";
+
   let isLiked = false;
   if (
     typeof currentUser !== "undefined" &&
@@ -96,20 +266,37 @@ function createMovieCard(movie, matchedTags = []) {
   const likeClass = isLiked ? "liked" : "";
   const fallbackImage =
     "https://placehold.co/300x450/2a2a3a/FFFFFF?text=NO+POSTER";
-  const matchScore = movie.rating ? Math.round(movie.rating * 10) : 95;
+  const matchScore = movie.rating ? Math.round(movie.rating * 20) : 95;
 
-  // Tính badge trạng thái tập (chỉ cho phim bộ)
+  // Tính badge trạng thái tập
   let episodeBadgeHtml = "";
   if (movie.type === "series") {
     const currentEps = movie._episodeCount || (movie.episodes || []).length;
     const totalEps = movie.totalEpisodes || 0;
     if (totalEps > 0 && currentEps >= totalEps) {
-      episodeBadgeHtml = `<span class="episode-badge episode-badge-full">Hoàn Tất (${currentEps}/${totalEps})</span>`;
+      episodeBadgeHtml = `<span class="episode-badge episode-badge-completed">Hoàn Tất (${currentEps}/${totalEps})</span>`;
     } else if (totalEps > 0) {
-      episodeBadgeHtml = `<span class="episode-badge">Tập ${currentEps}/${totalEps}</span>`;
+      episodeBadgeHtml = `<span class="episode-badge episode-badge-ongoing">Tập ${currentEps}/${totalEps}</span>`;
     } else if (currentEps > 0) {
-      episodeBadgeHtml = `<span class="episode-badge">Tập ${currentEps}</span>`;
+      episodeBadgeHtml = `<span class="episode-badge episode-badge-ongoing">Tập ${currentEps}</span>`;
     }
+  } else {
+    // Phim lẻ (single) → hiện badge "Full"
+    episodeBadgeHtml = `<span class="episode-badge episode-badge-full">Full</span>`;
+  }
+
+  // Tính text hiển thị tập cho popup
+  let popupEpisodeText = '';
+  if (movie.type === 'series') {
+    const currentEps = movie._episodeCount || (movie.episodes || []).length;
+    if (currentEps > 0) {
+      popupEpisodeText = `Tập ${currentEps}`;
+    } else {
+      popupEpisodeText = 'Đang cập nhật';
+    }
+  } else {
+    // Phim lẻ: không hiện text tập trong popup
+    popupEpisodeText = '';
   }
 
   // Logic hiển thị nhãn khớp (Match Badges) - CHI HIÊN KHI LỌC
@@ -152,9 +339,10 @@ function createMovieCard(movie, matchedTags = []) {
             </div>
         </div>
 
-        <div class="movie-popup-nfx" onclick="viewMovieDetail('${movie.id}')">
+        <div class="movie-popup-nfx" onclick="event.stopPropagation()">
             <div class="popup-header-img">
                 <img src="${movie.backgroundUrl || movie.posterUrl}" onerror="this.onerror=null; this.src='${fallbackImage}';">
+                ${partBadgeOnImage}
             </div>
             <div class="popup-body">
                 <div class="popup-actions">
@@ -168,7 +356,7 @@ function createMovieCard(movie, matchedTags = []) {
                         <i class="fas fa-chevron-down"></i>
                     </button>
                 </div>
-                <h3 class="popup-title-new">${movie.title} ${partHtml}</h3>
+                <h3 class="popup-title-new">${movie.title}</h3>
                 ${movie.originTitle ? `<p style="font-size: 0.85em; color: #555; margin: -5px 0 5px; font-style: italic; font-weight: 500;">${movie.originTitle}</p>` : ''}
                 <div class="popup-meta-row">
                     <!-- Khối thông tin gốc -->
@@ -176,7 +364,8 @@ function createMovieCard(movie, matchedTags = []) {
                         <span class="meta-match">${matchScore}% Phù hợp</span>
                         <span class="meta-age">${movie.ageLimit || "T13"}</span>
                         <span>${movie.year || "2026"}</span>
-                        <span>${movie.duration || "90p"}</span>
+                        <span>${(movie.duration || '90p').replace(/\s*\/\s*tập/gi, '')}</span>
+                        ${popupEpisodeText ? `<span>${popupEpisodeText}</span>` : ''}
                         <span class="meta-quality">${movie.quality || "HD"}</span>
                     </div>
                     <!-- Bản sao chỉ dành cho hiệu ứng cuộn Marquee trên điện thoại -->
@@ -184,7 +373,8 @@ function createMovieCard(movie, matchedTags = []) {
                         <span class="meta-match">${matchScore}% Phù hợp</span>
                         <span class="meta-age">${movie.ageLimit || "T13"}</span>
                         <span>${movie.year || "2026"}</span>
-                        <span>${movie.duration || "90p"}</span>
+                        <span>${(movie.duration || '90p').replace(/\s*\/\s*tập/gi, '')}</span>
+                        ${popupEpisodeText ? `<span>${popupEpisodeText}</span>` : ''}
                         <span class="meta-quality">${movie.quality || "HD"}</span>
                     </div>
                 </div>
@@ -262,28 +452,123 @@ function handleMovieClick(event, movieId) {
     // Reset các class định vị cũ
     currentWrapper.classList.remove("popup-align-left", "popup-align-right");
 
-    // CHỈ áp dụng Smart Positioning (thụt lề) cho các hàng phim cuộn ngang (landscape row) 
-    // và KHÔNG áp dụng khi đang ở giao diện dọc (Portrait) hoặc trong lưới movie-grid thông thường
-    const isHorizontalRow = currentWrapper.closest(".country-movies-row");
+    // Phân biệt tablet để tính popup width
+    const isTabletCheck = screenWidth > 768 && screenWidth <= 1366;
+    const isLandscapeCard = currentWrapper.classList.contains('movie-card-landscape');
     
-    if (isHorizontalRow && !isPortrait) {
-        // Nếu mép trái thẻ < 10% màn hình -> Đang ở lề TRÁI -> Mở sang phải
-        if (rect.left < screenWidth * 0.1) {
-            currentWrapper.classList.add("popup-align-left");
+    // Ước tính popup width theo thiết bị
+    const estPopupW = isTabletCheck
+        ? (isLandscapeCard ? 340 : 330)
+        : (isLandscapeCard ? 250 : 220);
+
+    // Tính tâm thẻ phim
+    const cardCenterX = rect.left + rect.width / 2;
+    const safeMargin = 10; // Margin an toàn cách lề viewport
+
+    // Smart Positioning: kiểm tra popup có bị tràn viewport không
+    // Áp dụng cho: tablet (tất cả), mobile landscape row
+    const isHorizontalRow = currentWrapper.closest(".country-movies-row");
+    const shouldSmartPosition = isTabletCheck || (isHorizontalRow && !isPortrait);
+
+    if (shouldSmartPosition) {
+        // Popup sẽ tràn trái nếu: tâm card - nửa popup < margin
+        if (cardCenterX - estPopupW / 2 < safeMargin) {
+            currentWrapper.classList.add("popup-align-left"); // Mở sang phải
         } 
-        // Nếu mép phải thẻ > 90% màn hình -> Đang ở lề PHẢI -> Mở sang trái
-        else if (rect.right > screenWidth * 0.9) {
-            currentWrapper.classList.add("popup-align-right");
+        // Popup sẽ tràn phải nếu: tâm card + nửa popup > viewport - margin
+        else if (cardCenterX + estPopupW / 2 > screenWidth - safeMargin) {
+            currentWrapper.classList.add("popup-align-right"); // Mở sang trái
         }
     }
-    // Mặc định: CENTER cho Portrait hoặc movie-grid thông thường (Không cần add class gì)
+    // Mặc định: CENTER (Không cần add class gì)
 
     currentWrapper.classList.add("active-mobile");
 
-    // FIX STACKING CONTEXT: Nâng section cha lên cao, nhưng dưới Navbar (Navbar=2000)
-    const parentSection = currentWrapper.closest(".country-section") || currentWrapper.closest(".section");
-    if (parentSection) {
-        parentSection.classList.add("section-active-popup");
+    // Phân biệt tablet vs mobile
+    // Mobile xoay ngang: innerWidth > 768 nhưng innerHeight <= 500 → phải xử lý như mobile
+    const isMobileLandscape = window.innerWidth > 768 && window.innerHeight <= 500
+                           && window.matchMedia('(orientation: landscape)').matches;
+    const isTabletDevice = !isMobileLandscape
+                        && (window.matchMedia('(min-width: 769px) and (max-width: 1366px)').matches
+                         || (window.innerWidth > 768 && window.innerWidth <= 1366));
+
+    // TABLET: Popup giữ trong wrapper gốc, CSS tablet (position: absolute) xử lý — giống PC
+    // MOBILE + MOBILE LANDSCAPE: Di chuyển popup ra <body> với position: fixed để thoát overflow container
+    if (!isTabletDevice) {
+        // === MOBILE & MOBILE LANDSCAPE ===
+        const popup = currentWrapper.querySelector('.movie-popup-nfx');
+        if (popup) {
+            const cardRect = currentWrapper.getBoundingClientRect();
+            const isLandscapeCard = currentWrapper.classList.contains('movie-card-landscape');
+            const viewW = window.innerWidth;
+            const viewH = window.innerHeight;
+            const margin = 8;
+
+            // Mobile landscape: màn hình thấp → popup vừa phải
+            const isSmallHeight = viewH <= 500; // Nhận diện landscape mobile
+            const popupW = isSmallHeight
+                ? (isLandscapeCard ? 250 : 230)   // Landscape: tăng size
+                : (isLandscapeCard ? 250 : 220);  // Portrait mobile: size bình thường
+            const navbarH = isSmallHeight ? 55 : 70;
+            const maxH = isSmallHeight
+                ? Math.floor(viewH * 0.85)  // Landscape: chiếm 85% chiều cao
+                : Math.floor(viewH * 0.65); // Portrait: chiếm 65%
+            // Ước tính chiều cao popup để tính vị trí top
+            const estPopupH = isSmallHeight ? 230 : 260;
+
+            let centerX = cardRect.left + cardRect.width / 2;
+
+            // CLAMP NGANG
+            centerX = Math.max(margin + popupW / 2, Math.min(viewW - margin - popupW / 2, centerX));
+
+            // TÍNH TOP trực tiếp (KHÔNG dùng translateY nữa - tránh nhảy lên)
+            // Canh giữa popup theo tâm thẻ phim
+            let topPos = cardRect.top + cardRect.height / 2 - estPopupH / 2;
+            // Clamp: không vượt quá navbar trên, không tràn dưới viewport
+            topPos = Math.max(navbarH + margin, topPos);
+            topPos = Math.min(viewH - estPopupH - margin, topPos);
+
+            popup._originalParent = currentWrapper;
+            popup._originalNextSibling = popup.nextSibling;
+            document.body.appendChild(popup);
+
+            popup.classList.add('popup-body-level');
+            if (isLandscapeCard) popup.classList.add('popup-body-landscape');
+            if (isSmallHeight) popup.classList.add('popup-landscape-mobile'); // Class nhận diện landscape
+
+            popup.style.cssText = `
+              position: fixed !important;
+              top: ${topPos}px !important;
+              left: ${centerX}px !important;
+              transform: translateX(-50%) !important;
+              z-index: 2500 !important;
+              width: ${popupW}px !important;
+              height: auto !important;
+              min-height: unset !important;
+              max-height: ${maxH}px !important;
+              overflow-y: auto !important;
+              overflow-x: hidden !important;
+              display: flex !important;
+              flex-direction: column !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+              pointer-events: auto !important;
+              border-radius: 10px !important;
+              background: #1f1f2e !important;
+              color: #fff !important;
+              box-shadow: 0 8px 40px rgba(0, 0, 0, 0.95) !important;
+              border: 1px solid var(--accent-primary) !important;
+            `;
+        }
+    }
+    // TABLET: CSS responsive.css tablet rules xử lý (popup giữ trong wrapper, position: absolute)
+
+    // Thêm section-active-popup cho trường hợp không phải scroll container
+    if (!currentWrapper.closest('.featured-scroll-wrapper') && !currentWrapper.closest('#newMovies') && !currentWrapper.closest('.country-movies-row')) {
+        const parentSection = currentWrapper.closest(".country-section") || currentWrapper.closest(".section");
+        if (parentSection) {
+            parentSection.classList.add("section-active-popup");
+        }
     }
   }
 
@@ -292,6 +577,29 @@ function handleMovieClick(event, movieId) {
 }
 
 function closeAllPopups() {
+  // Trả popup đã di chuyển ra body về vị trí gốc trong wrapper
+  document.querySelectorAll('.popup-body-level').forEach(p => {
+    p.classList.remove('popup-body-level', 'popup-body-landscape', 'popup-landscape-mobile');
+    p.style.cssText = ''; // Xóa inline styles
+    // Trả popup về wrapper gốc
+    if (p._originalParent) {
+      if (p._originalNextSibling) {
+        p._originalParent.insertBefore(p, p._originalNextSibling);
+      } else {
+        p._originalParent.appendChild(p);
+      }
+      delete p._originalParent;
+      delete p._originalNextSibling;
+    }
+  });
+
+  // Dọn dẹp popup fixed position (fallback cũ)
+  document.querySelectorAll('.popup-fixed-position').forEach(p => {
+    p.classList.remove('popup-fixed-position');
+    p.style.removeProperty('--popup-fixed-top');
+    p.style.removeProperty('--popup-fixed-left');
+  });
+
   document.querySelectorAll(".movie-card-wrapper").forEach((el) => {
     el.classList.remove("active-mobile", "popup-align-left", "popup-align-right");
   });
@@ -310,6 +618,27 @@ document.addEventListener("click", function (event) {
     }
 });
 
+// Đóng mọi popup khi cuộn trang dọc
+window.addEventListener("scroll", function () {
+    if (document.querySelector('.movie-card-wrapper.active-mobile')) {
+        closeAllPopups();
+    }
+}, { passive: true });
+
+// Đóng mọi popup khi cuộn ngang scroll containers
+document.addEventListener("scroll", function () {
+    if (document.querySelector('.movie-card-wrapper.active-mobile')) {
+        closeAllPopups();
+    }
+}, { capture: true, passive: true });
+
+// Đóng mọi popup khi swipe (touchmove)
+document.addEventListener("touchmove", function () {
+    if (document.querySelector('.movie-card-wrapper.active-mobile')) {
+        closeAllPopups();
+    }
+}, { passive: true });
+
 /**
  * Search movies
  */
@@ -317,7 +646,7 @@ document.addEventListener("click", function (event) {
  * Search movies (Đã tối ưu hóa với Debounce)
  */
 const searchMovies = debounce(function () {
-  const query = document.getElementById("searchMovies").value.toLowerCase();
+  const query = removeDiacritics(document.getElementById("searchMovies").value);
   filterMovies(query);
 }, 300);
 /**
@@ -327,7 +656,7 @@ function filterMovies(searchQuery = null) {
   const query =
     searchQuery !== null
       ? searchQuery
-      : document.getElementById("searchMovies")?.value.toLowerCase() || "";
+      : removeDiacritics(document.getElementById("searchMovies")?.value || "");
       
   const categoryStr = document.getElementById("inputFilterCategory")?.value.trim() || "";
   const countryStr = document.getElementById("inputFilterCountry")?.value.trim() || "";
@@ -341,8 +670,8 @@ function filterMovies(searchQuery = null) {
   console.log("🔍 [Tất cả Phim] Đang lọc với:", { categories, countries, years, query });
 
   let filteredData = allMovies.map((movie) => {
-    // 1. Ô tìm kiếm (Luôn là AND)
-    const matchQuery = !query || movie.title.toLowerCase().includes(query) || (movie.originTitle && movie.originTitle.toLowerCase().includes(query));
+    // 1. Ô tìm kiếm (Luôn là AND) - hỗ trợ không dấu
+    const matchQuery = !query || removeDiacritics(movie.title).includes(query) || (movie.originTitle && removeDiacritics(movie.originTitle).includes(query));
     if (!matchQuery) return null;
 
     let matchedTags = [];
@@ -392,21 +721,116 @@ function filterMovies(searchQuery = null) {
 
   console.log(`✅ [Tất cả Phim] Tìm thấy ${filteredData.length} phim thỏa mãn.`);
 
-  // Render kết quả
-  const container = document.getElementById("allMoviesGrid");
-  if (container) {
-    if (filteredData.length === 0) {
-      container.innerHTML = '<div class="text-center w-100">Không tìm thấy phim phù hợp.</div>';
-    } else {
-      container.innerHTML = filteredData.map(item => createMovieCard(item.movie, item.matchedTags)).join("");
-    }
-  }
+  // Lưu vào biến global để dùng khi chuyển trang (không filter lại)
+  allMoviesFilteredData = filteredData;
+
+  // Reset về trang 1 khi filter mới
+  allMoviesCurrentPage = 1;
+
+  // Render trang đầu tiên
+  _renderAllMoviesPage();
   
   // Hiển thị tóm tắt kết quả (Categories, Countries, Years)
   if (typeof updateFilterSummary === 'function') {
     updateFilterSummary(categories, countries, years, allMovies, "homeFilterResultSummary");
   }
 }
+
+// --- STATE PHÂN TRANG TRANG TẤT CẢ PHIM ---
+const ALL_MOVIES_PER_PAGE = 60;
+let allMoviesCurrentPage = 1;
+let allMoviesFilteredData = [];
+
+/** Render phim theo trang hiện tại và vẽ pagination */
+function _renderAllMoviesPage() {
+  const container = document.getElementById("allMoviesGrid");
+  if (!container) return;
+
+  const total = allMoviesFilteredData.length;
+  const totalPages = Math.ceil(total / ALL_MOVIES_PER_PAGE) || 1;
+
+  if (allMoviesCurrentPage < 1) allMoviesCurrentPage = 1;
+  if (allMoviesCurrentPage > totalPages) allMoviesCurrentPage = totalPages;
+
+  const start = (allMoviesCurrentPage - 1) * ALL_MOVIES_PER_PAGE;
+  const end = start + ALL_MOVIES_PER_PAGE;
+  const pageData = allMoviesFilteredData.slice(start, end);
+
+  // Render grid
+  if (total === 0) {
+    container.innerHTML = '<div class="text-center w-100">Không tìm thấy phim phù hợp.</div>';
+  } else {
+    container.innerHTML = pageData.map(item => createMovieCard(item.movie, item.matchedTags)).join("");
+  }
+
+  // Render UI phân trang
+  _renderAllMoviesPagination(total, totalPages);
+
+  // Cuộn lên grid khi chuyển trang (bỏ qua trang 1)
+  if (allMoviesCurrentPage > 1) {
+    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+/** Vẽ UI phân trang cho Tất Cả Phim */
+function _renderAllMoviesPagination(total, totalPages) {
+  const paginationEl = document.getElementById("allMoviesPagination");
+  if (!paginationEl) return;
+
+  if (total === 0 || totalPages <= 1) {
+    paginationEl.innerHTML = '';
+    paginationEl.style.display = 'none';
+    return;
+  }
+
+  paginationEl.style.display = 'flex';
+
+  const page = allMoviesCurrentPage;
+  const start = (page - 1) * ALL_MOVIES_PER_PAGE + 1;
+  const end = Math.min(page * ALL_MOVIES_PER_PAGE, total);
+
+  // Số trang hiển thị: tối đa 5 trang xung quanh trang hiện tại
+  let pages = [];
+  for (let i = Math.max(1, page - 2); i <= Math.min(totalPages, page + 2); i++) {
+    pages.push(i);
+  }
+
+  paginationEl.innerHTML = `
+    <span class="pagination-info">Hiển thị ${start}–${end} / ${total} phim</span>
+    <div class="pagination-controls">
+      <button class="btn-page" onclick="changeAllMoviesPage(1)" ${page === 1 ? 'disabled' : ''} title="Trang đầu">
+        <i class="fas fa-angle-double-left"></i>
+      </button>
+      <button class="btn-page" onclick="changeAllMoviesPage(${page - 1})" ${page === 1 ? 'disabled' : ''} title="Trang trước">
+        <i class="fas fa-angle-left"></i>
+      </button>
+      ${pages.map(p => `
+        <button class="btn-page ${p === page ? 'active' : ''}" onclick="changeAllMoviesPage(${p})">${p}</button>
+      `).join('')}
+      <button class="btn-page" onclick="changeAllMoviesPage(${page + 1})" ${page === totalPages ? 'disabled' : ''} title="Trang sau">
+        <i class="fas fa-angle-right"></i>
+      </button>
+      <button class="btn-page" onclick="changeAllMoviesPage(${totalPages})" ${page === totalPages ? 'disabled' : ''} title="Trang cuối">
+        <i class="fas fa-angle-double-right"></i>
+      </button>
+    </div>
+    <div class="pagination-jump">
+      <span>Đến trang</span>
+      <input type="number" min="1" max="${totalPages}" value="${page}" id="allMoviesPaginationJump" class="jump-input"
+        onkeydown="if(event.key==='Enter') changeAllMoviesPage(parseInt(this.value))">
+      <button class="btn-jump" onclick="changeAllMoviesPage(parseInt(document.getElementById('allMoviesPaginationJump').value))">→</button>
+    </div>
+  `;
+}
+
+/** Chuyển trang Tất Cả Phim */
+window.changeAllMoviesPage = function(page) {
+  const totalPages = Math.ceil(allMoviesFilteredData.length / ALL_MOVIES_PER_PAGE) || 1;
+  if (isNaN(page) || page < 1 || page > totalPages) return;
+  allMoviesCurrentPage = page;
+  _renderAllMoviesPage();
+};
+
 /**
  * Lọc phim theo Loại (Lẻ / Bộ)
  */
@@ -422,14 +846,8 @@ function filterByMovieType(type) {
   document.querySelector("#moviesPage .section-title").textContent =
     titleMap[type] || "Tất cả Phim";
 
-  // 3. Lọc danh sách
-  const filtered = allMovies.filter((m) => m.type === type);
-
-  // 4. Hiển thị ra màn hình
-  renderAllMovies(filtered);
-
-  // 5. Active menu (optional)
-  // Nếu bạn muốn làm nút menu sáng lên thì cần thêm code xử lý class active ở đây
+  // 3. Lọc danh sách (dùng filterMovies để có pagination)
+  filterMovies();
 }
 // ============================================
 // LOGIC YÊU THÍCH & LỊCH SỬ (USER LIBRARY)
@@ -504,10 +922,10 @@ function initFilterBox(boxId, input, list, data, filterFunctionId = 'filterMovie
         
         // Tách từ khóa tìm kiếm (chỉ lấy phần sau dấu phẩy cuối cùng)
         const parts = inputValue.split(',');
-        const filterText = parts[parts.length - 1].trim().toLowerCase();
+        const filterText = removeDiacritics(parts[parts.length - 1].trim());
         
         let filtered = data.filter(item => 
-            item.toString().toLowerCase().includes(filterText)
+            removeDiacritics(item.toString()).includes(filterText)
         );
 
         list.innerHTML = filtered.map(item => {
@@ -631,12 +1049,34 @@ function renderCategoriesList() {
     "linear-gradient(135deg, #30cfd0 0%, #330867 100%)", // Tím than
   ];
 
-  // Icon tương ứng (nếu muốn mapping, ở đây để random cho đơn giản hoặc lấy icon mặc định)
   const defaultIcon = "fa-film";
 
-  container.innerHTML = allCategories
-    .map((cat, index) => {
-      // Chọn màu xoay vòng
+  // Lọc: chỉ giữ thể loại có ít nhất 1 phim trong allMovies
+  const movies = (typeof allMovies !== 'undefined' && allMovies) ? allMovies : [];
+
+  const categoriesWithMovies = allCategories
+    .map(cat => {
+      // Đếm số phim thuộc thể loại này (so sánh theo id hoặc name)
+      const count = movies.filter(m => {
+        const ids = m.category_ids || m.categories || [];
+        return ids.some(cid => {
+          const s = String(cid).trim().toLowerCase();
+          return s === cat.id.toLowerCase() || s === cat.name.toLowerCase();
+        });
+      }).length;
+      return { cat, count };
+    })
+    .filter(item => item.count > 0); // Chỉ lấy thể loại có phim
+
+  if (categoriesWithMovies.length === 0) {
+    container.innerHTML =
+      '<p class="text-center text-muted">Chưa có thể loại nào có phim.</p>';
+    return;
+  }
+
+  container.innerHTML = categoriesWithMovies
+    .map((item, index) => {
+      const { cat, count } = item;
       const bgStyle = gradients[index % gradients.length];
 
       return `
@@ -651,7 +1091,7 @@ function renderCategoriesList() {
                     <i class="fas ${cat.icon || defaultIcon}"></i>
                 </div>
                 <h3 class="cat-title">${cat.name}</h3>
-                <span class="cat-subtitle">Khám phá ngay <i class="fas fa-arrow-right"></i></span>
+                <span class="cat-subtitle">${count} phim &nbsp;<i class="fas fa-arrow-right"></i></span>
             </div>
         </div>
     `;
@@ -898,18 +1338,23 @@ function createLandscapeMovieCard(movie) {
   }
   const likeIcon = isLiked ? "fas fa-heart" : "far fa-heart";
   const likeClass = isLiked ? "liked" : "";
-  const matchScore = movie.rating ? Math.round(movie.rating * 10) : 95;
+  const matchScore = movie.rating ? Math.round(movie.rating * 20) : 95;
 
-  // Tính badge trạng thái tập (chỉ cho phim bộ)
+  // Tính badge trạng thái tập (phim bộ: Tập X/Y, phim lẻ: Full)
   let lsEpisodeBadge = "";
   if (movie.type === "series") {
-    const currentEps = (movie.episodes || []).length;
+    const currentEps = movie._episodeCount || (movie.episodes || []).length;
     const totalEps = movie.totalEpisodes || 0;
     if (totalEps > 0 && currentEps >= totalEps) {
-      lsEpisodeBadge = `<div class="landscape-badge" style="left: 10px; right: auto; top: 10px; bottom: auto; background: rgba(81,207,102,0.9);">FULL</div>`;
+      lsEpisodeBadge = `<div class="landscape-badge landscape-badge-completed" style="left: 10px; right: auto; top: 10px; bottom: auto;">Hoàn Tất (${currentEps}/${totalEps})</div>`;
     } else if (totalEps > 0) {
-      lsEpisodeBadge = `<div class="landscape-badge" style="left: 10px; right: auto; top: 10px; bottom: auto; background: rgba(255,193,7,0.85); color: #000;">Tập ${currentEps}/${totalEps}</div>`;
+      lsEpisodeBadge = `<div class="landscape-badge landscape-badge-ongoing" style="left: 10px; right: auto; top: 10px; bottom: auto;">Tập ${currentEps}/${totalEps}</div>`;
+    } else if (currentEps > 0) {
+      lsEpisodeBadge = `<div class="landscape-badge landscape-badge-ongoing" style="left: 10px; right: auto; top: 10px; bottom: auto;">Tập ${currentEps}</div>`;
     }
+  } else {
+    // Phim lẻ (single) → hiện badge "Full"
+    lsEpisodeBadge = `<div class="landscape-badge" style="left: 10px; right: auto; top: 10px; bottom: auto; background: rgba(81,207,102,0.9);">Full</div>`;
   }
 
   return `
@@ -938,7 +1383,7 @@ function createLandscapeMovieCard(movie) {
             </div>
 
             <!-- Popup khi rê chuột (Giao diện nâng cấp theo mẫu) -->
-            <div class="movie-popup-nfx">
+            <div class="movie-popup-nfx" onclick="event.stopPropagation()">
                 <div class="popup-header-img">
                     <img src="${imageUrl}" onerror="this.src='${fallbackImage}';">
                 </div>
@@ -959,10 +1404,16 @@ function createLandscapeMovieCard(movie) {
                     </div>
 
                     <div class="meta-badges-row">
-                        <span class="badge-item imdb">IMDb ${movie.rating || "7.0"}</span>
+                        ${movie.imdbRating ? `<span class="badge-item imdb">IMDb ${movie.imdbRating}</span>` : ''}
                         <span class="badge-item year">${movie.year || "2026"}</span>
                         ${movie.part ? `<span class="badge-item">${displayPart}</span>` : ""}
-                        ${movie.totalEpisodes ? `<span class="badge-item">Tập ${movie.totalEpisodes}</span>` : ""}
+                        ${(() => {
+                          if (movie.type === 'series') {
+                            const curEps = movie._episodeCount || (movie.episodes || []).length;
+                            return curEps > 0 ? `<span class="badge-item">Tập ${curEps}</span>` : '';
+                          }
+                          return '<span class="badge-item">Full</span>';
+                        })()}
                         <span class="badge-item">${movie.quality || "HD"}</span>
                     </div>
 
@@ -984,3 +1435,106 @@ function createLandscapeMovieCard(movie) {
     `;
 }
 
+// ============================================
+// NAV TÌM KIẾM TRỰC TIẾP (HEADER)
+// ============================================
+document.addEventListener("DOMContentLoaded", () => {
+    const navSearchInput = document.getElementById("navSearchInput");
+    const clearNavSearch = document.getElementById("clearNavSearch");
+    const navSearchDropdown = document.getElementById("navSearchDropdown");
+    const navSearchList = document.getElementById("navSearchList");
+
+    if (!navSearchInput) return;
+
+    // Sử dụng hàm debounce có sẵn nếu có, không thì fallback
+    const debounceNavSearch = typeof debounce === 'function' ? debounce : (func, wait) => {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    };
+
+    const renderNavSearchDebounced = debounceNavSearch(function(query) {
+        renderNavSearchResults(query);
+    }, 300);
+
+    navSearchInput.addEventListener("input", function() {
+        const query = (typeof removeDiacritics === 'function' ? removeDiacritics(this.value.trim()) : this.value.trim().toLowerCase());
+        
+        if (query.length > 0) {
+            clearNavSearch.classList.remove("hidden");
+            navSearchDropdown.classList.remove("hidden");
+            renderNavSearchDebounced(query);
+        } else {
+            clearNavSearch.classList.add("hidden");
+            navSearchDropdown.classList.add("hidden");
+        }
+    });
+
+    // Đóng dropdown khi click ra ngoài
+    document.addEventListener("click", function(e) {
+        const container = document.getElementById("navSearchContainer");
+        if (container && !container.contains(e.target) && navSearchDropdown) {
+            navSearchDropdown.classList.add("hidden");
+        }
+    });
+    
+    // Mở lại dropdown nếu click vào input mà đã có chữ
+    navSearchInput.addEventListener("focus", function() {
+        if (this.value.trim().length > 0) {
+            navSearchDropdown.classList.remove("hidden");
+        }
+    });
+});
+
+// Xóa nội dung thanh tìm kiếm header
+window.clearNavSearchInput = function() {
+    const navSearchInput = document.getElementById("navSearchInput");
+    if (navSearchInput) {
+        navSearchInput.value = "";
+        navSearchInput.dispatchEvent(new Event("input"));
+        navSearchInput.focus();
+    }
+};
+
+// Render kết quả dropdown tìm kiếm
+function renderNavSearchResults(query) {
+    const navSearchList = document.getElementById("navSearchList");
+    if (!navSearchList) return;
+
+    if (typeof allMovies === 'undefined' || !allMovies || allMovies.length === 0) {
+        navSearchList.innerHTML = "<li class='nav-search-noresult'>Đang tải dữ liệu...</li>";
+        return;
+    }
+
+    const filtered = allMovies.filter(movie => {
+        const q = query.toLowerCase();
+        let match = false;
+        if (typeof removeDiacritics === 'function') {
+            match = removeDiacritics(movie.title).includes(query) || (movie.originTitle && removeDiacritics(movie.originTitle).includes(query));
+        } else {
+            match = movie.title.toLowerCase().includes(q) || (movie.originTitle && movie.originTitle.toLowerCase().includes(q));
+        }
+        return match;
+    }).slice(0, 5); // Lấy top 5
+
+    if (filtered.length === 0) {
+        navSearchList.innerHTML = "<li class='nav-search-noresult'>Không tìm thấy phim phù hợp</li>";
+        return;
+    }
+
+    const dfImage = "https://placehold.co/300x450/2a2a3a/FFFFFF?text=NO+POSTER";
+    
+    navSearchList.innerHTML = filtered.map(movie => `
+        <li>
+            <a href="javascript:void(0)" class="nav-search-item" onclick="document.getElementById('navSearchDropdown').classList.add('hidden'); viewMovieIntro('${movie.id}')">
+                <img src="${movie.posterUrl}" onerror="this.onerror=null; this.src='${dfImage}'">
+                <div class="nav-search-info">
+                    <h4>${movie.title}</h4>
+                    <p>${movie.originTitle || movie.year || "Đang cập nhật"}</p>
+                </div>
+            </a>
+        </li>
+    `).join("");
+}

@@ -41,7 +41,7 @@ function renderBannerSlider() {
     const bannerBgImage = movie.backgroundUrl || movie.posterUrl || fallbackImage;
     // Cắt mô tả ngắn gọn (~120 ký tự)
     const shortDesc = (movie.description || 'Đang cập nhật mô tả...').substring(0, 120) + '...';
-    const ratingDisplay = movie.rating ? `IMDb ${movie.rating}` : '';
+    const ratingDisplay = movie.imdbRating ? `IMDb ${movie.imdbRating}` : '';
     const categories = (() => {
       if (movie.categories && movie.categories.length > 0) {
         return movie.categories.slice(0, 3).map(catId => {

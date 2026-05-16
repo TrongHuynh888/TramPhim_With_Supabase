@@ -7,6 +7,50 @@
 // 0. HÀM TỐI ƯU HIỆU NĂNG (CORE OPTIMIZATION)
 // ============================================
 
+// --- LAZY LOAD SCRIPTS ---
+// Danh sách các script đã được tải (tránh tải trùng)
+const _loadedScripts = new Set();
+
+/**
+ * Tải một file JS theo yêu cầu (lazy load)
+ * Trả về Promise resolve khi script đã load xong
+ */
+function lazyLoadScript(src) {
+    if (_loadedScripts.has(src)) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = () => { _loadedScripts.add(src); resolve(); };
+        s.onerror = () => reject(new Error('Không thể tải: ' + src));
+        document.body.appendChild(s);
+    });
+}
+
+/**
+ * Tải nhiều scripts tuần tự (giữ đúng thứ tự dependency) rồi gọi callback
+ */
+async function lazyLoadScriptBundle(scripts, callback) {
+    try {
+        for (const src of scripts) {
+            await lazyLoadScript(src);
+        }
+        if (typeof callback === 'function') callback();
+    } catch (e) {
+        console.error('❌ Lỗi lazy load bundle:', e);
+    }
+}
+
+/**
+ * Bỏ dấu tiếng Việt (dùng cho tìm kiếm không dấu)
+ * VD: "Người Nhện" → "nguoi nhen"
+ */
+function removeDiacritics(str) {
+    if (!str) return '';
+    return str.normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[đĐ]/g, 'd')
+        .toLowerCase();
+}
 /**
  * Debounce: Trì hoãn thực thi hàm cho đến khi ngừng kích hoạt trong một khoảng thời gian
  */
@@ -227,6 +271,12 @@ function escapeHtml(text) {
 // ============================================
 
 function showPage(pageName, addToHistory = true) {
+  // Bỏ qua điều hướng trang khi AI đang xử lý phụ đề
+  if (window.__aiProcessing && pageName !== 'admin') {
+    console.warn("[AI Shield] Bỏ qua showPage('" + pageName + "') vì AI đang xử lý phụ đề!");
+    return;
+  }
+  
   // 0. Cập nhật URL (Sử dụng Hash Routing để fix lỗi F5)
   if (addToHistory) {
       let basePath = window.APP_BASE_PATH || "";
@@ -242,7 +292,7 @@ function showPage(pageName, addToHistory = true) {
           updatePageMetadata(
               "Trạm Phim - Trải Nghiệm Điện Ảnh Đẳng Cấp",
               "Trạm Phim - Nền tảng xem phim Web3 tiên phong. Trải nghiệm điện ảnh đỉnh cao, bảo mật và tích hợp thanh toán Crypto.",
-              "https://public-frontend-cos.metadl.com/mgx/img/favicon_atoms.ico",
+              "icons/icon-512x512.png",
               window.location.href
           );
       }
@@ -276,6 +326,9 @@ function showPage(pageName, addToHistory = true) {
     page.classList.remove("active");
   });
 
+  // [FIX] Khôi phục cuộn trang (Xóa sạch các class gây khóa body từ các tính năng khác)
+  document.body.classList.remove("comm-chat-active", "watch-party-active", "has-pseudo-fullscreen", "modal-open");
+
   // 2. Hiện trang cần đến
   const targetPage = document.getElementById(`${pageName}Page`);
   if (targetPage) {
@@ -304,8 +357,49 @@ function showPage(pageName, addToHistory = true) {
   const footer = document.getElementById("footer");
   if (pageName === "admin") {
     if (footer) footer.style.display = "none";
-    // Load data admin nếu cần
-    if (typeof loadAdminData === "function") loadAdminData();
+    // LAZY LOAD: Tải Admin scripts khi vào trang Admin lần đầu
+    if (!window._adminScriptsLoaded) {
+        window._adminScriptsLoaded = true;
+        lazyLoadScriptBundle([
+            'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js',
+            'js/admin.js?v=17',
+            'js/admin-api-explorer.js?v=3',
+            'js/admin-api-import.js?v=3',
+            'js/admin-trailers.js?v=1'
+        ], () => {
+            console.log('✅ Admin scripts loaded!');
+            if (typeof loadAdminData === 'function') {
+                window._adminDataLoaded = true;
+                loadAdminData();
+            }
+        });
+    } else {
+      // Load data admin nếu cần — CHỈ gọi đầy đủ lần đầu, giữ trang khi quay lại
+      if (typeof loadAdminData === "function") {
+        if (!window._adminDataLoaded) {
+          window._adminDataLoaded = true;
+          loadAdminData();
+        } else {
+          // Lần sau chỉ refresh phim, giữ nguyên trang hiện tại
+          if (typeof loadAdminMovies === 'function') loadAdminMovies(true);
+        }
+      }
+    }
+  } else if (pageName === "community") {
+    // LAZY LOAD: Tải community.js khi vào Cộng Đồng lần đầu
+    if (!window._communityScriptLoaded) {
+        window._communityScriptLoaded = true;
+        lazyLoadScript('js/community.js?v=7.2').then(() => {
+            console.log('✅ Community script loaded!');
+            if (typeof initCommunity === 'function') initCommunity();
+        });
+    }
+    // Ẩn footer nếu đang ở tab Chat
+    if (typeof currentCommView !== 'undefined' && currentCommView === 'chat') {
+        if (footer) footer.style.display = "none";
+    } else {
+        if (footer) footer.style.display = "block";
+    }
   } else {
     if (footer) footer.style.display = "block";
   }
@@ -333,6 +427,27 @@ function showPage(pageName, addToHistory = true) {
   // 👉 THÊM ĐOẠN NÀY CHO DIỄN VIÊN:
   if (pageName === "actors" && typeof renderActorsPage === "function") {
     renderActorsPage();
+  }
+  // 👉 THÊM TRIGGER CHO WATCH PARTY: Load danh sách phòng khi vào trang Xem Chung
+  if (pageName === "watchParty") {
+    // LAZY LOAD: Tải watch-party.js khi vào Xem Chung lần đầu
+    if (!window._watchPartyScriptLoaded) {
+        window._watchPartyScriptLoaded = true;
+        lazyLoadScript('js/watch-party.js?v=7').then(() => {
+            console.log('✅ Watch Party script loaded!');
+            if (typeof loadRooms === 'function') loadRooms();
+        });
+    } else if (typeof loadRooms === 'function') {
+        loadRooms();
+    }
+  }
+  // 👉 Load hiệu ứng visual (tuyết, sao, pháo hoa) khi vào trang chủ
+  if (pageName === "home" && typeof loadAndApplyHomeEffects === "function") {
+    setTimeout(() => {
+      loadAndApplyHomeEffects();
+      if (typeof loadAndShowMarquee === 'function') loadAndShowMarquee();
+      if (typeof loadAndShowPopup === 'function') loadAndShowPopup();
+    }, 500);
   }
   // Cuộn lên đầu
   window.scrollTo(0, 0);
@@ -370,6 +485,13 @@ function closeModal(modalId) {
     } else {
       modal.classList.remove("active");
     }
+    
+    // Dọn dẹp hàng đợi upload nếu đóng movieModal
+    if (modalId === "movieModal") {
+        if (window.pendingUploads) window.pendingUploads = {};
+        if (window.pendingR2Uploads) window.pendingR2Uploads = {};
+    }
+
     // Kiểm tra xem còn modal nào mở không trước khi gỡ class modal-open
     setTimeout(() => {
         const anyActiveModal = document.querySelector(".modal-overlay.active, .custom-popup-overlay.active");
@@ -596,9 +718,9 @@ function initializeRatingStars() {
 
   if (!container) return; // Nếu không có chỗ chứa sao thì thôi
 
-  // Tạo 10 ngôi sao
+  // Tạo 5 ngôi sao
   let html = "";
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 5; i++) {
     html += `<i class="far fa-star star-item" data-value="${i}" style="cursor: pointer; margin: 0 2px; font-size: 1.2rem; transition: color 0.2s;"></i>`;
   }
   container.innerHTML = html;
@@ -610,7 +732,7 @@ function initializeRatingStars() {
     star.addEventListener("click", () => {
       const value = parseInt(star.dataset.value);
       selectedRating = value; // Cập nhật biến toàn cục
-      if (valueDisplay) valueDisplay.textContent = `${value}/10`;
+      if (valueDisplay) valueDisplay.textContent = `${value}/5`;
 
       // Tô màu các sao đã chọn
       updateRatingStars(value);
@@ -710,6 +832,16 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+});
+
+// Áp dụng cài đặt giao diện + hiệu ứng + marquee + popup từ Supabase khi load trang
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    if (typeof applyAppearanceOnLoad === 'function') applyAppearanceOnLoad();
+    if (typeof loadAndApplyHomeEffects === 'function') loadAndApplyHomeEffects();
+    if (typeof loadAndShowMarquee === 'function') loadAndShowMarquee();
+    if (typeof loadAndShowPopup === 'function') loadAndShowPopup();
+  }, 1500);
 });
 
 // ============================================
@@ -1235,3 +1367,158 @@ function getCacheTimestamp(key) {
 function setCacheTimestamp(key, timestamp) {
     localStorage.setItem(`cache_sync_${key}`, timestamp.toString());
 }
+
+// ============================================
+// OMDB API — Tra cứu điểm IMDb thật (Luôn khả dụng)
+// ============================================
+
+/** OMDB API Key (Khóa mặc định) */
+let _OMDB_KEY = '461430ce';
+let _OMDB_POOL = [];
+let _OMDB_AUTOSWITCH = false;
+
+// Đọc cấu hình động từ system_settings khi vừa load trang
+document.addEventListener('DOMContentLoaded', async () => {
+    if (typeof window.supabase === 'undefined') return;
+    try {
+        const { data, error } = await window.supabase.from('system_settings').select('key_name, key_value');
+        if (!error && data) {
+            window.SYSTEM_SETTINGS = {};
+            data.forEach(item => {
+                window.SYSTEM_SETTINGS[item.key_name] = item.key_value;
+            });
+            // Ghi đè khóa OMDB nếu có dưới Database
+            if (window.SYSTEM_SETTINGS.omdb_api_key) _OMDB_KEY = window.SYSTEM_SETTINGS.omdb_api_key;
+            if (window.SYSTEM_SETTINGS.omdb_api_key_autoswitch === 'true') _OMDB_AUTOSWITCH = true;
+            if (window.SYSTEM_SETTINGS.omdb_api_key_pool) {
+                try { _OMDB_POOL = JSON.parse(window.SYSTEM_SETTINGS.omdb_api_key_pool); } catch(e){}
+            }
+        }
+    } catch(e) {
+        console.warn("Không thể nạp system_settings cho Frontend:", e);
+    }
+});
+
+async function _fetchImdbRatingGlobal(title, year) {
+    if (!title || !_OMDB_KEY) return null;
+    
+    // Tạo danh sách Khóa OMDB để thử (Ưu tiên khóa chính trước, dự phòng sau)
+    let keysToTry = [_OMDB_KEY];
+    if (_OMDB_AUTOSWITCH && Array.isArray(_OMDB_POOL) && _OMDB_POOL.length > 0) {
+        keysToTry = keysToTry.concat(_OMDB_POOL.filter(k => k !== _OMDB_KEY));
+    }
+    
+    try {
+        const cleanTitle = title.replace(/\s*\(.*\)\s*$/, '').trim();
+        if (!cleanTitle) return null;
+
+        for (let key of keysToTry) {
+            if (!key) continue;
+            try {
+                let url = `https://www.omdbapi.com/?t=${encodeURIComponent(cleanTitle)}&apikey=${key}`;
+                if (year) url += `&y=${year}`;
+                let res = await fetch(url);
+                let data = await res.json();
+                
+                const checkLimit = (d) => d.Response === 'False' && (d.Error === 'Request limit reached!' || d.Error === 'Invalid API key!');
+
+                if (checkLimit(data)) {
+                    console.warn(`[OMDB] Khóa ${key} quá tải! Tự động xoay vòng khóa...`);
+                    continue; 
+                }
+
+                // Thử lại không có year nếu không tìm thấy
+                if (data.Response === 'False' && year) {
+                    res = await fetch(`https://www.omdbapi.com/?t=${encodeURIComponent(cleanTitle)}&apikey=${key}`);
+                    data = await res.json();
+                    if (checkLimit(data)) continue;
+                }
+
+                // Thử search nếu vẫn không thấy
+                if (data.Response === 'False') {
+                    res = await fetch(`https://www.omdbapi.com/?s=${encodeURIComponent(cleanTitle)}&apikey=${key}${year ? `&y=${year}` : ''}`);
+                    const searchData = await res.json();
+                    if (checkLimit(searchData)) continue;
+                    
+                    if (searchData.Search && searchData.Search.length > 0) {
+                        res = await fetch(`https://www.omdbapi.com/?i=${searchData.Search[0].imdbID}&apikey=${key}`);
+                        data = await res.json();
+                        if (checkLimit(data)) continue;
+                    }
+                }
+
+                if (data.Response === 'True' && data.imdbRating && data.imdbRating !== 'N/A') {
+                    const rating = parseFloat(data.imdbRating);
+                    console.log(`🎬 [OMDB] "${cleanTitle}" → IMDb ${rating} (Bởi mã: ${key.substring(0,4)}...)`);
+                    return isNaN(rating) ? null : rating;
+                }
+                
+                // Nếu chạy qua hết phim không có, thì khỏi thử khóa khác
+                return null;
+
+            } catch(e) {
+                console.warn(`[OMDB] Lỗi mạng với khóa ${key}. Thử khóa sau..`);
+                continue;
+            }
+        }
+        
+        return null;
+    } catch (err) {
+        console.warn('[OMDB] Lỗi:', err.message);
+        return null;
+    }
+}
+
+/**
+ * Batch update điểm IMDb cho tất cả phim chưa có imdb_rating
+ * Gọi từ Console: batchUpdateImdbRatings()
+ */
+async function batchUpdateImdbRatings(forceAll = false) {
+    if (typeof supabase === 'undefined' || typeof allMovies === 'undefined') {
+        console.error('[IMDb] Supabase hoặc allMovies chưa sẵn sàng');
+        return;
+    }
+
+    const movies = forceAll
+        ? allMovies
+        : allMovies.filter(m => !m.imdbRating && !m.imdb_rating);
+
+    if (movies.length === 0) {
+        console.log('✅ Tất cả phim đã có điểm IMDb!');
+        if (typeof showNotification === 'function') showNotification('Tất cả phim đã có điểm IMDb!', 'success');
+        return;
+    }
+
+    console.log(`🎬 Bắt đầu cập nhật IMDb cho ${movies.length} phim...`);
+    if (typeof showNotification === 'function') showNotification(`Đang cập nhật IMDb cho ${movies.length} phim...`, 'info');
+
+    let updated = 0, skipped = 0, failed = 0;
+
+    for (const movie of movies) {
+        const title = movie.originTitle || movie.origin_title || movie.title || '';
+        if (!title) { skipped++; continue; }
+
+        try {
+            const imdbRating = await _fetchImdbRatingGlobal(title, movie.year);
+            if (imdbRating !== null) {
+                const { error } = await supabase.from('movies').update({ imdb_rating: imdbRating }).eq('id', movie.id);
+                if (!error) {
+                    movie.imdbRating = imdbRating;
+                    movie.imdb_rating = imdbRating;
+                    updated++;
+                } else { failed++; }
+            } else { skipped++; }
+        } catch (e) { failed++; }
+
+        // Delay 500ms để không spam API
+        await new Promise(r => setTimeout(r, 500));
+    }
+
+    const msg = `✅ IMDb: ${updated} cập nhật · ${skipped} bỏ qua · ${failed} lỗi`;
+    console.log(msg);
+    if (typeof showNotification === 'function') showNotification(msg, 'success');
+    if (typeof saveToCache === 'function') saveToCache('movies', allMovies);
+}
+
+// Gắn global để gọi từ Console
+window.batchUpdateImdbRatings = batchUpdateImdbRatings;

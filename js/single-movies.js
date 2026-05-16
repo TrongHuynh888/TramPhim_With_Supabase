@@ -1,7 +1,15 @@
 /**
  * SINGLE MOVIES PAGE LOGIC
  * Overrides standard functions to filter for single movies only.
+ * Có phân trang: 60 phim/trang
  */
+
+// Số phim mỗi trang và trang hiện tại
+const SINGLE_PER_PAGE = 60;
+let singleCurrentPage = 1;
+
+// Lưu dữ liệu đã lọc để dùng khi chuyển trang (không cần filter lại)
+let singleFilteredData = [];
 
 window.renderSingleMoviesPage = function() {
     console.log("🎬 Rendering Single Movies Page...");
@@ -15,7 +23,8 @@ window.renderSingleMoviesPage = function() {
     // 1. Populate filters if empty
     populateSingleFilters(source);
 
-    // 2. Apply filters (Initial render)
+    // 2. Apply filters (Initial render) - reset về trang 1
+    singleCurrentPage = 1;
     filterSingleMovies();
 };
 
@@ -76,7 +85,7 @@ window.filterSingleMovies = function() {
     const genreStr = document.getElementById("inputSingleCategory")?.value.trim() || "";
     const countryStr = document.getElementById("inputSingleCountry")?.value.trim() || "";
     const yearStr = document.getElementById("inputSingleYear")?.value.trim() || "";
-    const searchVal = document.getElementById("searchSingleMovies")?.value.toLowerCase().trim() || "";
+    const searchVal = removeDiacritics(document.getElementById("searchSingleMovies")?.value || "");
 
     // Chuẩn hóa bộ lọc: Loại bỏ "Tất cả..."
     const genres = genreStr.split(',').map(s => s.trim()).filter(s => s && !s.includes("Tất cả"));
@@ -88,15 +97,15 @@ window.filterSingleMovies = function() {
     let source = (typeof allMovies !== 'undefined') ? allMovies : [];
     if (!Array.isArray(source)) source = [];
     
-    // Filter
-    const filteredData = source.map(m => {
+    // Filter toàn bộ
+    singleFilteredData = source.map(m => {
         // 1. Phải là Phim Lẻ
         if (m.type !== 'single') return null;
 
         // 2. Ô tìm kiếm (Luôn là AND)
         if (searchVal) {
-            const titleMatch = (m.title || "").toLowerCase().includes(searchVal);
-            const castMatch = m.cast && m.cast.toLowerCase().includes(searchVal);
+            const titleMatch = removeDiacritics(m.title || "").includes(searchVal);
+            const castMatch = m.cast && removeDiacritics(m.cast).includes(searchVal);
             if (!(titleMatch || castMatch)) return null;
         }
 
@@ -145,19 +154,107 @@ window.filterSingleMovies = function() {
         return { movie: m, matchedTags };
     }).filter(Boolean);
 
-    console.log(`✅ [Phim Lẻ] Tìm thấy ${filteredData.length} phim thỏa mãn.`);
+    console.log(`✅ [Phim Lẻ] Tìm thấy ${singleFilteredData.length} phim thỏa mãn.`);
 
-    // Render
-    if (filteredData.length === 0) {
-        container.innerHTML = '<p class="text-center text-muted">Không tìm thấy phim phù hợp.</p>';
-    } else {
-        container.innerHTML = filteredData.map(item => createMovieCard(item.movie, item.matchedTags)).join("");
-    }
-    
-    // Hiển thị tóm tắt kết quả (Categories, Countries, Years)
+    // Khi filter mới -> reset về trang 1
+    singleCurrentPage = 1;
+
+    // Render trang hiện tại
+    _renderSinglePage();
+
+    // Hiển thị tóm tắt kết quả
     if (typeof updateFilterSummary === 'function') {
         updateFilterSummary(genres, countries, years, source.filter(m => m.type === 'single'), "singleFilterResultSummary");
     }
+};
+
+/** Render phim theo trang hiện tại và vẽ lại pagination */
+function _renderSinglePage() {
+    const container = document.getElementById("singleMoviesGrid");
+    if (!container) return;
+
+    const total = singleFilteredData.length;
+    const totalPages = Math.ceil(total / SINGLE_PER_PAGE);
+
+    // Đảm bảo trang hợp lệ
+    if (singleCurrentPage < 1) singleCurrentPage = 1;
+    if (singleCurrentPage > totalPages) singleCurrentPage = totalPages || 1;
+
+    const start = (singleCurrentPage - 1) * SINGLE_PER_PAGE;
+    const end = start + SINGLE_PER_PAGE;
+    const pageData = singleFilteredData.slice(start, end);
+
+    // Render grid
+    if (total === 0) {
+        container.innerHTML = '<p class="text-center text-muted">Không tìm thấy phim phù hợp.</p>';
+    } else {
+        container.innerHTML = pageData.map(item => createMovieCard(item.movie, item.matchedTags)).join("");
+    }
+
+    // Render pagination UI
+    _renderSinglePagination(total, totalPages);
+
+    // Cuộn lên đầu grid khi chuyển trang
+    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/** Vẽ UI phân trang cho Phim Lẻ */
+function _renderSinglePagination(total, totalPages) {
+    let paginationEl = document.getElementById("singleMoviesPagination");
+    if (!paginationEl) return;
+
+    if (total === 0 || totalPages <= 1) {
+        paginationEl.innerHTML = '';
+        paginationEl.style.display = 'none';
+        return;
+    }
+
+    paginationEl.style.display = 'flex';
+
+    const page = singleCurrentPage;
+    const start = (page - 1) * SINGLE_PER_PAGE + 1;
+    const end = Math.min(page * SINGLE_PER_PAGE, total);
+
+    // Tạo danh sách số trang hiển thị (tối đa 5 trang xung quanh trang hiện tại)
+    let pages = [];
+    for (let i = Math.max(1, page - 2); i <= Math.min(totalPages, page + 2); i++) {
+        pages.push(i);
+    }
+
+    paginationEl.innerHTML = `
+        <span class="pagination-info">Hiển thị ${start}–${end} / ${total} phim lẻ</span>
+        <div class="pagination-controls">
+            <button class="btn-page" onclick="changeSinglePage(1)" ${page === 1 ? 'disabled' : ''} title="Trang đầu">
+                <i class="fas fa-angle-double-left"></i>
+            </button>
+            <button class="btn-page" onclick="changeSinglePage(${page - 1})" ${page === 1 ? 'disabled' : ''} title="Trang trước">
+                <i class="fas fa-angle-left"></i>
+            </button>
+            ${pages.map(p => `
+                <button class="btn-page ${p === page ? 'active' : ''}" onclick="changeSinglePage(${p})">${p}</button>
+            `).join('')}
+            <button class="btn-page" onclick="changeSinglePage(${page + 1})" ${page === totalPages ? 'disabled' : ''} title="Trang sau">
+                <i class="fas fa-angle-right"></i>
+            </button>
+            <button class="btn-page" onclick="changeSinglePage(${totalPages})" ${page === totalPages ? 'disabled' : ''} title="Trang cuối">
+                <i class="fas fa-angle-double-right"></i>
+            </button>
+        </div>
+        <div class="pagination-jump">
+            <span>Đến trang</span>
+            <input type="number" min="1" max="${totalPages}" value="${page}" id="singlePaginationJump" class="jump-input"
+                onkeydown="if(event.key==='Enter') changeSinglePage(parseInt(this.value))">
+            <button class="btn-jump" onclick="changeSinglePage(parseInt(document.getElementById('singlePaginationJump').value))">→</button>
+        </div>
+    `;
+}
+
+/** Chuyển trang Phim Lẻ */
+window.changeSinglePage = function(page) {
+    const totalPages = Math.ceil(singleFilteredData.length / SINGLE_PER_PAGE);
+    if (isNaN(page) || page < 1 || page > totalPages) return;
+    singleCurrentPage = page;
+    _renderSinglePage();
 };
 
 // Deprecated wrapper

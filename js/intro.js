@@ -127,12 +127,12 @@ async function viewMovieIntro(movieId, updateHistory = true) {
     }
     setTextContent("introCategory", categoryNames);
     
-    setTextContent("introRating", movie.rating || "N/A");
+    setTextContent("introRating", movie.imdbRating ? `IMDb ${movie.imdbRating}` : (movie.rating ? `${movie.rating}/5 ⭐` : "N/A"));
     
     // -- Info New Fields (Cast, Version) — Render dạng avatar chips
     renderIntroCastChips(movie.cast);
     
-    // -- Versions (Dynamic Buttons)
+    // -- Versions (Dynamic Buttons) - Gom nhóm label duy nhất
     const versionContainer = document.getElementById("introVersionList");
     if (versionContainer) {
         versionContainer.innerHTML = "";
@@ -152,25 +152,48 @@ async function viewMovieIntro(movieId, updateHistory = true) {
         if (sources.length === 0) {
              versionContainer.innerHTML = '<span class="info-value">Đang cập nhật...</span>';
         } else {
+            // Gom nhóm label duy nhất - bỏ suffix "dự phòng"
+            const uniqueLabels = [...new Set(sources.map(s => {
+                return (s.label || '').replace(/\s*dự phòng$/i, '').trim() || s.label;
+            }))];
+            
+            // Đếm số server cho mỗi label
+            const serverCountMap = {};
+            uniqueLabels.forEach(label => {
+                const servers = new Set();
+                sources.forEach(s => {
+                    const baseLabel = (s.label || '').replace(/\s*dự phòng$/i, '').trim();
+                    if (baseLabel === label) {
+                        servers.add(s.server || 'Unknown');
+                    }
+                });
+                serverCountMap[label] = servers.size;
+            });
+            
             // Render buttons
-            sources.forEach((src, index) => {
+            const savedLabel = localStorage.getItem("preferredSourceLabel");
+            let defaultLabel = savedLabel ? savedLabel.replace(/\s*dự phòng$/i, '').trim() : null;
+            if (!defaultLabel || !uniqueLabels.includes(defaultLabel)) {
+                defaultLabel = uniqueLabels[0];
+            }
+            
+            uniqueLabels.forEach((label) => {
                 const btn = document.createElement("button");
                 btn.className = "btn btn-sm version-btn";
-                btn.style.cssText = "margin-right: 5px; margin-bottom: 5px; background: #2a2a3a; color: #fff; border: 2px solid #3a3a4a; border-radius: 20px; padding: 6px 16px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.3s;";
-                btn.textContent = src.label;
-                btn.onclick = () => selectIntroVersion(src.label, index);
+                const serverCount = serverCountMap[label] || 0;
+                const serverInfo = serverCount > 1 ? ` (${serverCount} server)` : '';
+                btn.textContent = label + serverInfo;
+                btn.onclick = () => selectIntroVersion(label, 0);
+                
+                // Đánh dấu active
+                if (label === defaultLabel) {
+                    btn.classList.add("active");
+                }
                 versionContainer.appendChild(btn);
             });
             
-            // Chọn mặc định (ưu tiên cái đã lưu)
-            const savedLabel = localStorage.getItem("preferredSourceLabel");
-            let defaultIndex = sources.findIndex(s => s.label === savedLabel);
-            if (defaultIndex === -1) defaultIndex = 0;
-            
-            // Delay 1 chút để đảm bảo DOM đã render
-            setTimeout(() => {
-                selectIntroVersion(sources[defaultIndex].label, defaultIndex);
-            }, 50);
+            // Lưu label mặc định
+            localStorage.setItem("preferredSourceLabel", defaultLabel);
         }
     }
     
@@ -219,7 +242,7 @@ async function viewMovieIntro(movieId, updateHistory = true) {
         updatePageMetadata(
             movie.title + " - Trạm Phim", 
             movie.description || "Xem phim " + movie.title + " trực tuyến, thanh toán bằng CRO Token", 
-            movie.posterUrl || movie.backgroundUrl || "https://public-frontend-cos.metadl.com/mgx/img/favicon_atoms.ico", 
+            movie.posterUrl || movie.backgroundUrl || "icons/icon-512x512.png", 
             window.location.origin + window.location.pathname + newUrl.substring(newUrl.indexOf("#"))
         );
     }
@@ -231,6 +254,67 @@ async function viewMovieIntro(movieId, updateHistory = true) {
     
     // Cuộn lên đầu
     window.scrollTo(0, 0);
+
+    // Bổ sung dữ liệu TMDb (bất đồng bộ, không block render)
+    if (typeof enrichMovieWithTmdb === 'function') {
+        enrichMovieWithTmdb(movie).then(enriched => {
+            applyTmdbDataToIntroPage(enriched);
+        }).catch(e => console.warn('[TMDb] Lỗi enrich intro:', e));
+    }
+}
+
+/**
+ * Áp dụng dữ liệu TMDb vào trang giới thiệu phim
+ * Poster/Backdrop chỉ fallback khi ảnh gốc lỗi, thêm nút Xem Trailer nếu có
+ */
+function applyTmdbDataToIntroPage(movie) {
+    if (!movie) return;
+
+    // --- Poster fallback ---
+    if (movie._tmdbPosterUrl && typeof applyTmdbPosterFallback === 'function') {
+        const posterEl = document.getElementById('introPoster');
+        if (posterEl) applyTmdbPosterFallback(posterEl, movie._tmdbPosterUrl, movie.id);
+    }
+
+    // --- Backdrop fallback ---
+    if (movie._tmdbBackdropUrl && typeof applyTmdbBackdropFallback === 'function') {
+        const bgEl = document.getElementById('introBgImage');
+        if (bgEl) {
+            applyTmdbBackdropFallback(bgEl, movie._tmdbBackdropUrl, movie.id);
+        }
+    }
+
+    // --- Nút Xem Trailer trên Intro ---
+    const oldBtn = document.getElementById('btnIntroTrailer');
+    if (oldBtn) oldBtn.remove();
+
+    console.log('[TMDb Intro] _tmdbTrailerKey:', movie._tmdbTrailerKey);
+
+    if (movie._tmdbTrailerKey) {
+        // Container chứa "Xem Ngay", "Yêu thích", "Chia sẻ" trong intro.html
+        const actionBtns = document.querySelector('.intro-actions');
+        console.log('[TMDb Intro] .intro-actions found:', !!actionBtns);
+
+        if (actionBtns && !document.getElementById('btnIntroTrailer')) {
+            const trailerBtn = document.createElement('button');
+            trailerBtn.id = 'btnIntroTrailer';
+            trailerBtn.className = 'btn btn-secondary btn-lg btn-icon-text btn-trailer-tmdb';
+            trailerBtn.innerHTML = '<i class="fab fa-youtube"></i> Xem Trailer';
+            trailerBtn.onclick = () => showTrailerModal(movie._tmdbTrailerKey, movie.title);
+            // Chèn sau nút "Xem Ngay" (con đầu tiên)
+            const playBtn = actionBtns.querySelector('.btn-play-intro');
+            if (playBtn && playBtn.nextSibling) {
+                actionBtns.insertBefore(trailerBtn, playBtn.nextSibling);
+            } else {
+                actionBtns.appendChild(trailerBtn);
+            }
+            console.log('[TMDb Intro] ✅ Đã thêm nút Xem Trailer');
+        } else if (!actionBtns) {
+            console.warn('[TMDb Intro] ⚠️ Không tìm thấy .intro-actions trong DOM');
+        }
+    } else {
+        console.log('[TMDb Intro] ℹ️ Không có trailer (phim quá mới hoặc TMDb không có)');
+    }
 }
 
 /**
@@ -318,15 +402,10 @@ function selectIntroVersion(label, index) {
     buttons.forEach(btn => {
         if (btn.textContent === mapLabel) {
             btn.classList.add("active");
-            btn.style.background = "var(--accent-primary, #e50914)";
-            btn.style.borderColor = "var(--accent-primary, #e50914)";
-            btn.style.color = "#fff";
         } else {
             btn.classList.remove("active");
-            btn.style.background = "#2a2a3a";
-            btn.style.borderColor = "#3a3a4a";
-            btn.style.color = "#fff";
         }
+        /* Styles handled by CSS class .version-btn / .version-btn.active trong intro.css */
     });
     
     console.log("🎬 Đã chọn phiên bản:", mapLabel);
@@ -413,13 +492,8 @@ async function loadIntroComments(movieId) {
                     <i class="fas fa-star" data-value="3"></i>
                     <i class="fas fa-star" data-value="4"></i>
                     <i class="fas fa-star" data-value="5"></i>
-                    <i class="fas fa-star" data-value="6"></i>
-                    <i class="fas fa-star" data-value="7"></i>
-                    <i class="fas fa-star" data-value="8"></i>
-                    <i class="fas fa-star" data-value="9"></i>
-                    <i class="fas fa-star" data-value="10"></i>
                 </div>
-                <span class="rating-value" id="introRatingValue" style="margin-left: 10px; font-weight: bold; color: var(--accent-secondary);">0/10</span>
+                <span class="rating-value" id="introRatingValue" style="margin-left: 10px; font-weight: bold; color: var(--accent-secondary);">0/5</span>
             </div>
             <textarea class="form-textarea" id="introCommentContent" placeholder="Viết cảm nghĩ của bạn về phim này..."></textarea>
             <button class="btn btn-primary" style="margin-top:10px;" onclick="submitIntroComment()">Gửi bình luận</button>
@@ -449,7 +523,7 @@ async function loadCommentsToContainer(movieId, targetId) {
         let comments = [];
         const { data, error } = await supabase
             .from("comments")
-            .select("*")
+            .select("*, profiles(display_name, avatar)")
             .eq("movie_id", movieId)
             .order("created_at", { ascending: false })
             .limit(50);
@@ -465,11 +539,12 @@ async function loadCommentsToContainer(movieId, targetId) {
             id: item.id,
             movieId: item.movie_id,
             userId: item.user_id,
-            userName: item.user_name,
-            userAvatar: item.user_avatar,
+            userName: item.profiles?.display_name || "Người dùng",
+            userAvatar: item.profiles?.avatar || "",
             content: item.content,
             rating: item.rating,
             parentId: item.parent_id,
+            reactions: item.reactions || {},
             createdAt: item.created_at ? { toDate: () => new Date(item.created_at) } : null,
             reactionSummary: item.reaction_summary || {}
         }));
@@ -530,10 +605,10 @@ function createIntroCommentHtml(comment) {
         : `<div class="comment-avatar">${initial}</div>`;
 
     // Stars & Rating Text
-    const stars = Array(10).fill(0).map((_, i) => 
+    const stars = Array(5).fill(0).map((_, i) => 
         `<i class="fas fa-star ${i < comment.rating ? 'text-warning' : 'text-muted'}" style="font-size: 12px;"></i>`
     ).join("");
-    const ratingText = comment.rating ? `<span class="comment-rating-text" style="margin-left: 5px; font-weight: bold; color: var(--accent-secondary); font-size: 13px;">${comment.rating}/10</span>` : "";
+    const ratingText = comment.rating ? `<span class="comment-rating-text" style="margin-left: 5px; font-weight: bold; color: var(--accent-secondary); font-size: 13px;">${comment.rating}/5</span>` : "";
 
     // Replies logic
     let childrenHtml = "";
@@ -638,9 +713,7 @@ async function submitIntroComment() {
         
         const { error } = await supabase.from("comments").insert([{
             movie_id: currentIntroMovieId,
-            user_id: currentUser.uid,
-            user_name: currentUser.displayName || currentUser.email.split("@")[0],
-            user_avatar: currentUser.photoURL || "",
+            user_id: currentUser.id,
             content: content,
             rating: rating
         }]);
@@ -652,7 +725,7 @@ async function submitIntroComment() {
         const starsEl = document.querySelectorAll("#introRatingStars .fa-star");
         starsEl.forEach(s => s.classList.remove("active", "text-warning"));
         const valText = document.getElementById("introRatingValue");
-        if (valText) valText.textContent = "0/10";
+        if (valText) valText.textContent = "0/5";
         
         // Reload
         await loadCommentsToContainer(currentIntroMovieId, "introCommentsList");
@@ -695,9 +768,7 @@ async function submitIntroReply(parentId) {
         const { error } = await supabase.from("comments").insert([{
             movie_id: currentIntroMovieId,
             parent_id: parentId,
-            user_id: currentUser.uid,
-            user_name: currentUser.displayName || currentUser.email.split("@")[0],
-            user_avatar: currentUser.photoURL || "",
+            user_id: currentUser.id,
             content: content,
             rating: 0
         }]);
@@ -844,7 +915,7 @@ function initStarRating(containerId) {
             }
             // Cập nhật text value
             if (valText) {
-                valText.textContent = `${ratingValue}/10`;
+                valText.textContent = `${ratingValue}/5`;
             }
         };
     });

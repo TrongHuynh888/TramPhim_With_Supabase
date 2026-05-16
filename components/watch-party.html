@@ -29,27 +29,51 @@
   <div id="partyRoom" class="hidden">
     <div class="room-layout">
       <div class="room-main">
+        <!-- ═══ HEADER BAR ═══ -->
         <div class="room-header-bar">
-          <button class="btn btn-secondary btn-sm" onclick="leaveRoom()">
-            <i class="fas fa-arrow-left"></i> Rời phòng
-          </button>
-          <h3 id="roomTitleDisplay">Tên Phòng</h3>
-          <div class="room-meta">
-            <button
-              id="roomInviteBtn"
-              class="btn btn-sm btn-neon"
-              onclick="copyRoomLink()"
-              title="Sao chép liên kết chia sẻ"
-            >
-              <i class="fas fa-link"></i> Mời bạn bè
-            </button>
 
-            <span class="live-badge">LIVE</span>
+          <!-- ZONE TRÁI: Voice controls (JS inject mic/deafen/vol vào đây) + Leave -->
+          <div class="rh-left" id="rhLeft">
+            <button class="rh-leave-btn" onclick="leaveRoom()" title="Rời phòng">
+              <i class="fas fa-arrow-left"></i>
+              <span>Rời</span>
+            </button>
+            <div class="rh-divider"></div>
+            <!-- Mic, Deafen, Volume được JS insertBefore vào #rhVoiceSlot -->
+            <div id="rhVoiceSlot" class="rh-voice-slot"></div>
           </div>
+
+          <!-- ZONE GIỮA: Tên phòng + subtitle phim -->
+          <div class="rh-center">
+            <h3 class="rh-room-name" id="roomTitleDisplay">Tên Phòng</h3>
+            <p class="rh-room-subtitle hidden" id="roomSubtitleDisplay"></p>
+          </div>
+
+          <!-- ZONE PHẢI: Status badges + Invite -->
+          <div class="rh-right">
+            <span class="rh-member-count" id="rhMemberCount">
+              <i class="fas fa-users"></i>
+              <span id="memberCount">0</span>
+            </span>
+            <span class="live-badge">LIVE</span>
+            <span class="source-label-badge hidden" id="sourceLabelBadge"></span>
+            <button id="roomInviteBtn" class="rh-invite-btn"
+                    onclick="copyRoomLink()" title="Sao chép liên kết chia sẻ">
+              <i class="fas fa-link"></i>
+              <span>Mời</span>
+            </button>
+          </div>
+
         </div>
 
         <div class="video-container room-player-wrapper" id="wpVideoContainer">
           <div id="floatingEmojis" class="floating-emojis"></div>
+
+          <!-- Nhãn tên phim góc trên trái -->
+          <div class="wp-movie-label" id="wpMovieLabel">
+            <span class="wp-movie-label-title" id="wpMovieLabelTitle"></span>
+            <span class="wp-movie-label-ep" id="wpMovieLabelEp"></span>
+          </div>
 
           <div id="partyPlayer"></div>
 
@@ -139,11 +163,6 @@
                                   <span class="settings-value" id="wpQualityVal">Tự động</span>
                                   <i class="fas fa-chevron-right"></i>
                               </div>
-                              <div class="settings-item" onclick="wpShowSubMenu('color')">
-                                  <span>Màu phụ đề</span>
-                                  <span class="settings-value" id="wpColorVal">White</span>
-                                  <i class="fas fa-chevron-right"></i>
-                              </div>
                           </div>
                           <div class="settings-submenu" id="wpSpeedMenu" style="display:none;">
                               <div class="submenu-header" onclick="wpHideSubMenu()"><i class="fas fa-chevron-left"></i> Tốc độ</div>
@@ -157,14 +176,6 @@
                           <div class="settings-submenu" id="wpQualityMenu" style="display:none;">
                               <div class="submenu-header" onclick="wpHideSubMenu()"><i class="fas fa-chevron-left"></i> Chất lượng</div>
                               <div class="submenu-item active" data-level="-1" onclick="wpSetQuality(-1)">Tự động</div>
-                          </div>
-                          <!-- Color Submenu -->
-                          <div class="settings-submenu" id="wpColorMenu" style="display:none;">
-                              <div class="submenu-header" onclick="wpHideSubMenu()"><i class="fas fa-chevron-left"></i> Màu phụ đề</div>
-                              <div class="submenu-item active" data-color="white" onclick="wpSetSubtitleColor('white')">TRẮNG</div>
-                              <div class="submenu-item" data-color="yellow" onclick="wpSetSubtitleColor('yellow')" style="color: yellow;">VÀNG</div>
-                              <div class="submenu-item" data-color="cyan" onclick="wpSetSubtitleColor('cyan')" style="color: cyan;">XANH DƯƠNG</div>
-                              <div class="submenu-item" data-color="green" onclick="wpSetSubtitleColor('green')" style="color: #4caf50;">XANH LÁ</div>
                           </div>
                       </div>
                       <!-- Fullscreen (All users) -->
@@ -185,7 +196,7 @@
             Chat
           </button>
           <button class="room-tab" onclick="switchRoomTab('members')">
-            Thành viên (<span id="memberCount">0</span>)
+            Thành viên (<span id="memberTabCount">0</span>)
           </button>
         </div>
 
@@ -201,7 +212,15 @@
             <span onclick="sendReaction('😡')">😡</span>
             <span onclick="sendReaction('🎉')">🎉</span>
           </div>
+          <!-- Emoji Picker Container cho Watch Party (inline, nằm ngoài form) -->
+          <div id="wpEmojiPicker" class="wp-emoji-picker"></div>
           <form class="chat-input-area" onsubmit="sendChatMessage(event)">
+            <!-- Nút mở kho icon emoji -->
+            <button type="button" class="wp-emoji-trigger-btn btn-wp-emoji-trigger"
+                    title="Biểu tượng cảm xúc"
+                    onclick="toggleWpEmojiPicker(true)">
+              <i class="far fa-smile"></i>
+            </button>
             <input
               type="text"
               id="chatInput"
@@ -220,131 +239,170 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="createWatchPartyModal">
-  <div class="modal wp-modal-premium-container">
-    <form onsubmit="handleCreateRoom(event)" class="wp-create-main-form">
-      <!-- HEADER -->
-      <div class="wp-modal-header">
-        <div class="wp-header-title">
-          <i class="fas fa-plus-circle" style="color: #00d4ff; font-size: 22px;"></i>
-          <h3>Tạo Phòng Xem Chung</h3>
+  <!-- ============================================================
+       TẠO PHÒNG XEM CHUNG — INLINE VIEW (thay cho popup)
+       ============================================================ -->
+  <div id="createRoomView" class="party-container hidden">
+    <form onsubmit="handleCreateRoom(event)" id="crForm">
+
+      <!-- ▸ HEADER: Quay lại + Tiêu đề -->
+      <div class="cr-inline-header">
+        <button type="button" class="cr-back-btn" onclick="backToRoomList()">
+          <i class="fas fa-arrow-left"></i>
+          <span>Quay lại</span>
+        </button>
+        <div class="cr-inline-title-group">
+          <div class="cr-header-icon">
+            <i class="fas fa-film"></i>
+          </div>
+          <div>
+            <h2 class="cr-title">Tạo Phòng Xem Chung</h2>
+            <p class="cr-subtitle">Chọn phim, đặt tên và mời bạn bè cùng xem</p>
+          </div>
         </div>
-        <button type="button" class="wp-close-btn" onclick="closeModal('createWatchPartyModal')">
-          <i class="fas fa-times"></i>
-        </button>
       </div>
 
-      <!-- BODY (SCROLLABLE) -->
-      <div class="wp-modal-body-scroll">
-          <!-- Bước 1: Chọn Phim -->
-          <section class="wp-form-step">
-            <div class="wp-step-header">
-              <span class="step-num">1</span>
-              <label>Chọn phim muốn xem</label>
-            </div>
-            
-            <div class="wp-movie-selection-area">
-              <div class="wp-search-wrapper">
-                <i class="fas fa-search"></i>
-                <input type="text" id="wpMovieSearchInput" placeholder="Tìm tên phim..." oninput="filterWPMovies()">
-              </div>
-              
-              <div class="wp-movie-grid-container" id="wpMovieGridContainer">
-                <div class="wp-movie-items" id="wpMovieGrid">
-                  <!-- JS render list phim -->
-                </div>
-              </div>
-            </div>
-            
-            <div id="wpSelectedPreview" class="wp-selected-preview hidden">
-              <!-- Hiện phim đang chọn -->
-            </div>
-            
-            <input type="hidden" id="roomMovieId" required />
-          </section>
+      <!-- ▸ BODY: Layout 2 cột (PC) / 1 cột (Mobile) -->
+      <div class="cr-inline-body">
 
-          <!-- Bước 2: Chọn Tập (Nếu là series) -->
-          <section class="wp-form-step hidden" id="roomEpisodeGroup">
-             <div class="wp-step-header">
-              <span class="step-num">2</span>
-              <label>Chọn tập phim</label>
+        <!-- ═══ CỘT TRÁI: Chọn phim ═══ -->
+        <div class="cr-left-panel">
+          <div class="cr-panel-title">
+            <span class="cr-step-badge">1</span>
+            <span>Chọn Phim</span>
+            <i class="fas fa-info-circle" style="margin-left: 8px; font-size: 0.85rem; color: var(--text-muted); cursor: help;" title="Gợi ý sẵn 10 phim. Gõ vào ô tìm kiếm để tìm phim khác."></i>
+          </div>
+
+          <!-- Tìm kiếm -->
+          <div class="cr-search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="wpMovieSearchInput"
+                   placeholder="Tìm tên phim..." oninput="filterWPMovies()">
+          </div>
+
+          <!-- Danh sách phim (scroll riêng) -->
+          <div class="wp-movie-grid-container" id="wpMovieGridContainer">
+            <div class="wp-movie-items" id="wpMovieGrid">
+              <!-- JS render -->
             </div>
-            <div class="wp-episode-grid" id="wpEpisodeGrid">
-              <!-- JS render tập -->
+          </div>
+
+          <!-- Preview phim đã chọn -->
+          <div id="wpSelectedPreview" class="cr-selected-preview hidden">
+            <!-- JS render -->
+          </div>
+
+          <input type="hidden" id="roomMovieId" required />
+
+          <!-- Chọn tập (series) -->
+          <div class="cr-episode-section hidden" id="roomEpisodeGroup">
+            <div class="cr-panel-subtitle">
+              <span class="cr-step-badge cr-step-badge--ep">2</span>
+              <span>Chọn Tập</span>
             </div>
+            <div class="wp-episode-grid" id="wpEpisodeGrid"></div>
             <input type="hidden" id="roomEpisodeIndex" value="0" />
-          </section>
+          </div>
+        </div><!-- end cr-left-panel -->
 
-          <!-- Bước 3: Cấu hình phòng & Lên lịch chiếu -->
-          <section class="wp-form-step" id="roomConfigStep">
-            <!-- Cấu hình Thông Tin Phòng -->
-            <div class="wp-step-header">
-              <span class="step-num">3</span>
-              <label>Thông tin phòng</label>
+        <!-- ═══ CỘT PHẢI: Cài đặt phòng ═══ -->
+        <div class="cr-right-panel">
+          <!-- Tên phòng -->
+          <div class="cr-field-group">
+            <label class="cr-label">
+              <i class="fas fa-door-open"></i> Tên phòng
+            </label>
+            <input type="text" class="cr-input" id="roomNameInput" required
+                   placeholder="Ví dụ: Phim đêm khuya cùng tụi mình...">
+          </div>
+
+          <!-- Loại phòng -->
+          <div class="cr-field-group">
+            <label class="cr-label">
+              <i class="fas fa-globe"></i> Loại phòng
+            </label>
+            <div class="cr-room-type-cards">
+              <div class="cr-type-card active" data-value="public"
+                   onclick="selectRoomType('public', this)">
+                <i class="fas fa-globe-asia"></i>
+                <span>Công khai</span>
+                <small>Ai cũng vào được</small>
+              </div>
+              <div class="cr-type-card" data-value="private"
+                   onclick="selectRoomType('private', this)">
+                <i class="fas fa-lock"></i>
+                <span>Riêng tư</span>
+                <small>Cần mật khẩu</small>
+              </div>
             </div>
-            
-            <div class="wp-inputs-stack">
-              <div class="wp-input-group">
-                <label>Tên phòng</label>
-                <input type="text" class="wp-super-input" id="roomNameInput" required placeholder="Ví dụ: Phim đêm khuya...">
-              </div>
-              
-              <div class="wp-input-group">
-                <label>Loại phòng</label>
-                <select class="wp-super-input" id="roomType" onchange="toggleRoomPass()">
-                  <option value="public">Công khai 🌍</option>
-                  <option value="private">Có Mật khẩu 🔒</option>
-                </select>
-              </div>
+            <select id="roomType" onchange="toggleRoomPass()" style="display:none;">
+              <option value="public">Công khai</option>
+              <option value="private">Riêng tư</option>
+            </select>
+          </div>
 
-              <div id="roomPassGroup" class="wp-input-group hidden">
-                <label>Mật khẩu phòng</label>
-                <div class="password-input-wrapper" style="position: relative; width: 100%;">
-                  <input type="password" class="wp-super-input" id="roomPassword" placeholder="Nhập mật khẩu..." autocomplete="new-password">
-                  <i class="fas fa-eye password-toggle-icon" onclick="togglePassword('roomPassword', this)" style="position: absolute; right: 20px; top: 50%; transform: translateY(-50%); cursor: pointer; color: rgba(255,255,255,0.5);"></i>
+          <!-- Mật khẩu (ẩn mặc định) -->
+          <div id="roomPassGroup" class="cr-field-group hidden">
+            <label class="cr-label">
+              <i class="fas fa-key"></i> Mật khẩu phòng
+            </label>
+            <div class="cr-input-icon-wrapper">
+              <input type="password" class="cr-input" id="roomPassword"
+                     placeholder="Nhập mật khẩu..." autocomplete="new-password">
+              <i class="fas fa-eye cr-eye-icon"
+                 onclick="togglePassword('roomPassword', this)"></i>
+            </div>
+          </div>
+
+          <!-- Bản chiếu (ẩn khi chưa chọn phim) -->
+          <div class="cr-field-group hidden" id="wpSourceSelectGroup">
+            <label class="cr-label">
+              <i class="fas fa-language"></i> Bản chiếu
+            </label>
+            <div class="cr-source-pills" id="crSourcePills"></div>
+            <select id="roomSourceLabel" style="display:none;"></select>
+          </div>
+
+          <!-- Hẹn giờ chiếu -->
+          <div class="cr-field-group">
+            <div class="cr-toggle-row">
+              <div class="cr-toggle-info">
+                <i class="fas fa-clock cr-toggle-icon"></i>
+                <div>
+                  <span class="cr-toggle-label">Hẹn giờ chiếu</span>
+                  <small class="cr-toggle-hint">Tự động bắt đầu theo lịch đã đặt</small>
                 </div>
               </div>
+              <label class="cr-switch">
+                <input type="checkbox" id="roomScheduleToggle"
+                       onchange="toggleScheduleInput()">
+                <span class="cr-switch-slider"></span>
+              </label>
             </div>
-
-            <!-- Cài Đặt Thời Gian Chiếu -->
-            <div class="wp-step-header" style="margin-top: 25px;">
-              <span class="step-num" style="background: rgba(255,255,255,0.1); color: #fff;">
-                <i class="fas fa-clock" style="font-size: 14px;"></i>
-              </span>
-              <label>Cài đặt thời gian chiếu</label>
+            <div id="roomScheduleInputGroup" class="cr-schedule-input hidden">
+              <label class="cr-label" style="margin-bottom: 8px;">
+                <i class="fas fa-calendar-alt"></i> Thời gian chiếu
+              </label>
+              <input type="datetime-local" class="cr-input" id="roomScheduledTime">
             </div>
-            <p class="text-muted" style="margin-bottom: 15px; font-size: 0.9rem;">
-              Có thể bắt đầu thủ công hoặc tự động theo thời gian cài đặt.
-            </p>
+          </div>
 
-            <div class="wp-schedule-wrapper">
-              <div class="wp-toggle-group">
-                <label class="wp-toggle-switch">
-                  <input type="checkbox" id="roomScheduleToggle" onchange="toggleScheduleInput()">
-                  <span class="wp-slider round"></span>
-                </label>
-                <span style="color: #fff; opacity: 0.9;">Tôi muốn hẹn giờ chiếu (tùy chọn)</span>
-              </div>
+        </div><!-- end cr-right-panel -->
+      </div><!-- end cr-inline-body -->
 
-              <div id="roomScheduleInputGroup" class="wp-input-group hidden" style="margin-top: 15px;">
-                <label>Thời gian chiếu (Ngày - Giờ)</label>
-                <div class="datetime-input-wrapper">
-                  <input type="datetime-local" class="wp-super-input" id="roomScheduledTime">
-                </div>
-              </div>
-            </div>
-          </section>
-      </div>
-
-      <!-- FOOTER (FIXED) -->
-      <div class="wp-modal-footer-sticky">
-        <button type="button" class="btn btn-ghost" onclick="closeModal('createWatchPartyModal')" style="border: 1px solid rgba(255,255,255,0.1); color: #ccc;">Hủy bỏ</button>
-        <button type="submit" class="wp-submit-btn-premium">
-          <span>Tạo &amp; Vào Ngay</span>
+      <!-- ▸ FOOTER: Nút hành động -->
+      <div class="cr-inline-footer">
+        <button type="button" class="cr-btn-cancel" onclick="backToRoomList()">
+          Hủy bỏ
+        </button>
+        <button type="submit" class="cr-btn-submit">
           <i class="fas fa-rocket"></i>
+          <span>Tạo &amp; Vào Ngay</span>
         </button>
       </div>
+
     </form>
-  </div>
+  </div><!-- end #createRoomView -->
+
 </div>
-<!-- Updated: 2026-03-01 16:46:10 -->
+

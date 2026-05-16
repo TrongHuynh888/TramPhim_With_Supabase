@@ -348,14 +348,14 @@ if (typeof window.ethereum !== "undefined") {
     } else {
       isConnected = false;
       userAddress = null;
-      location.reload();
+      if (!window.__aiProcessing) location.reload();
     }
   });
 
   // Khi user đổi mạng
   window.ethereum.on("chainChanged", (chainId) => {
     console.log("🔄 Đã đổi mạng:", chainId);
-    location.reload();
+    if (!window.__aiProcessing) location.reload();
   });
 }
 
